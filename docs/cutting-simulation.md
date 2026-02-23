@@ -325,21 +325,25 @@ The optimizer can recommend a spindle speed adjustment to move into the center
 of a stable lobe — often allowing a *higher* depth of cut safely than the
 current setting.
 
-**The tab mark problem (tool runout and exit/entry):**
+**The tab mark problem (zero-load oscillation at tab transitions):**
 
-When a tool exits material (full slot or edge exit), the cutting forces drop
-to zero instantly. The tool springs from its deflected position back toward
-its centerline. On re-entry, there is a micro-impact as forces rebuild.
+When cutting an outer profile in slotting passes, holding tabs are formed by
+raising the tool in Z at the tab boundary, traversing over the tab, and
+plunging on the far side. During slotting, the cutting engagement provides
+damping that suppresses tool oscillation. As the tool ascends in Z at the tab
+boundary, cutting engagement drops to zero and that damping disappears. The
+tool is briefly free to oscillate at or near the tool-spindle natural
+frequency. This oscillation temporarily enlarges the effective cutting radius
+beyond the nominal tool diameter, leaving a blemish in the finished workpiece
+wall at the elevation of the tab transition.
 
-At tabs (bridges left to hold a part), this exit-then-entry happens at every
-tab. The tool's unloaded position differs from its loaded position by the
-deflection amount δ. This imprints a small step on the tab face.
-
-The simulation predicts this step height: `step ≈ 2δ` (the full swing of
-the tool from full-load to no-load). The optimizer can mitigate by:
-- Reducing feed rate in the approach to and departure from each tab
-- Adjusting tab geometry (longer ramp onto the tab, not a sharp corner)
-- Recommending a lower finishing pass over the tab faces
+The simulation predicts this effect from the tool-spindle frequency response
+function and the engagement conditions at the transition point. The primary
+mitigation is to offset the tool outward (away from the finished surface) in
+XY during the Z ascent and descent at each tab transition, so any oscillation-
+enlarged cutting affects only the tab region rather than the finished wall.
+Feed rate reduction in the approach to each tab is a secondary measure that
+reduces the abruptness of the load drop.
 
 ---
 
@@ -541,7 +545,7 @@ pub enum SuggestedAction {
     ReversePassOrder      { operation_id: OperationId },
     SplitAtDepth          { depth_mm: f64 },
     AddSupportStock       { region: BoundingBox },
-    ChangeTabGeometry     { ramp_length_mm: f64 },
+    OffsetTabTransition   { outward_offset_mm: f64 },         // XY offset during Z ascent/descent at tabs
     ReduceTabFeedRate     { approach_mm: f64, to_mmpm: f64 },
 }
 ```
@@ -624,10 +628,13 @@ Flag the cut direction relative to grain angle. Recommend:
 - Reducing feed rate at crossing points
 
 **TabMark:**
-Reduce feed rate in the `ramp_length_mm` before and after each tab to
-reduce the tool's deflected position, thereby reducing the step size on
-re-entry. Typical reduction: to 30–50% of cutting feed over the last
-5–10mm before each tab.
+Offset the tool outward from the finished surface in XY during each Z ascent
+and descent at tab transitions. The outward offset moves the tool's effective
+cutting circle into the tab region so that any zero-load oscillation enlargement
+does not blemish the finished wall. The offset magnitude is derived from the
+predicted oscillation amplitude (from the tool-spindle FRF). As a secondary
+measure, reduce feed rate in the `approach_mm` before each tab to soften
+the load transition.
 
 ---
 
