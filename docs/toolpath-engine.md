@@ -44,7 +44,17 @@ Operation Definition
 └────────┬──────────┘
          │
          ▼
-       Toolpath
+   Toolpath (geometric)
+         │
+         │  ┌──────────────────────────────────────────────────┐
+         └─►│  Simulation Engine  (see cutting-simulation.md)  │
+            │  • per-point physics prediction                   │
+            │  • violation detection and classification         │
+            │  • feed scaling / spring pass injection           │
+            └─────────────────────┬────────────────────────────┘
+                                  │
+                                  ▼
+                     Toolpath (physics-optimized)
 ```
 
 ---
@@ -93,6 +103,7 @@ pub enum PassKind {
     Roughing,
     SemiFinishing,
     Finishing,
+    SpringPass,   // light finishing pass to remove deflection error (inserted by simulation optimizer)
     LeadIn,
     LeadOut,
     Link,         // rapid move connecting passes
@@ -525,6 +536,12 @@ feed = base_feed × (target_engagement / θ_e)
 
 Clamped to [0.2×, 1.5×] of base feed. This maintains constant chip load
 across changing path geometry.
+
+> **Note:** Feed and speed values assigned by this stage are *initial* values based
+> on geometry and material lookup. The simulation optimizer (see `cutting-simulation.md`)
+> may override per-point feed rates and insert `SpringPass` entries after running the
+> physics simulation. The optimizer produces a new `Toolpath` struct; the geometric
+> cache key is not affected by optimizer changes.
 
 ---
 

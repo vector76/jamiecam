@@ -26,9 +26,12 @@ project.jcam  (ZIP archive)
 ├── project.json              human-readable project definition
 ├── model/                    optional: embedded copy of source model
 │   └── source.step
-└── toolpaths/                computed toolpath cache (binary)
-    ├── <operation-uuid>.bin
-    ├── <operation-uuid>.bin
+├── toolpaths/                computed toolpath cache (binary)
+│   ├── <operation-uuid>.bin
+│   ├── <operation-uuid>.bin
+│   └── ...
+└── simdata/                  computed physics simulation cache (binary)
+    ├── <operation-uuid>.sim.bin
     └── ...
 ```
 
@@ -43,6 +46,7 @@ only when at least one toolpath has been computed and cached.
 | `project.json` | Deflate |
 | `model/source.step` | Deflate (STEP files are text-based, compress well) |
 | `toolpaths/*.bin` | Deflate (position deltas compress well) |
+| `simdata/*.sim.bin` | Deflate (repetitive float data compresses well) |
 
 ---
 
@@ -63,7 +67,9 @@ only when at least one toolpath has been computed and cached.
   "active_wcs": 0,
   "tools": [ ... ],
   "operations": [ ... ],
-  "post_processor": { ... }
+  "post_processor": { ... },
+  "machine": { ... },
+  "physics_limits": { ... }
 }
 ```
 
@@ -466,6 +472,16 @@ Records the cached toolpath state for this operation.
     "rapid_length_mm":     451.3,
     "estimated_duration_s": 284,
     "max_scallop_mm":      0.009
+  },
+  "simulation_key":  "sha256:b2f71c3...",
+  "sim_valid":       true,
+  "sim_binary_file": "simdata/9a2f4c.sim.bin",
+  "sim_optimized":   true,
+  "violations_summary": {
+    "total":      3,
+    "force":      1,
+    "deflection": 2,
+    "chatter":    0
   }
 }
 ```
@@ -492,6 +508,61 @@ result (indicating the cache can be trusted again without running the algorithm)
 `custom_path` is set when using a user-defined post-processor file.
 `overrides` is a flat map of `section.field` → value for post-processor
 TOML fields that are overridden for this project without modifying the file.
+
+---
+
+### `machine`
+
+Optional reference to a machine model file describing the physical characteristics
+of the CNC machine used in this project. Used by the simulation engine. `null`
+disables machine-aware simulation features (chatter prediction, travel limit checks).
+
+```json
+"machine": {
+  "id":          "haas-vf2",
+  "custom_path": null
+}
+```
+
+The machine model file (format described in `cutting-simulation.md`) specifies spindle
+power, feed rate limits, structural stiffness, and axis travel envelopes.
+
+---
+
+### `physics_limits`
+
+Project-level thresholds for the physics simulation. Operations may define per-operation
+overrides in their own `physics_limits` block.
+
+```json
+"physics_limits": {
+  "max_cutting_force_n":         200.0,
+  "max_spindle_power_fraction":  0.80,
+  "max_surface_error_mm":        0.05,
+  "max_tool_deflection_mm":      0.02,
+  "max_tool_temp_c":             600.0,
+  "max_workpiece_temp_c":        150.0,
+  "max_workpiece_deflection_mm": 0.03,
+  "min_feature_safety_factor":   2.0,
+  "max_chatter_risk":            0.3,
+  "max_tab_mark_height_mm":      0.02,
+  "enabled_layers":              [1, 2, 3]
+}
+```
+
+| Field | Description |
+|---|---|
+| `max_cutting_force_n` | Total resultant cutting force threshold (Newtons) |
+| `max_spindle_power_fraction` | Max fraction of rated spindle power (0–1) |
+| `max_surface_error_mm` | Total allowable surface deviation — tool + workpiece deflection |
+| `max_tool_deflection_mm` | Tool-only deflection limit (stricter, for finishing passes) |
+| `max_tool_temp_c` | Tool temperature limit (°C); lower for uncoated HSS |
+| `max_workpiece_temp_c` | Workpiece surface temperature limit (°C) |
+| `max_workpiece_deflection_mm` | Workpiece deflection limit for thin-feature analysis |
+| `min_feature_safety_factor` | Ratio of yield strength to predicted stress; < 2.0 triggers breakage risk |
+| `max_chatter_risk` | Chatter risk index threshold (0–1 scale) |
+| `max_tab_mark_height_mm` | Maximum acceptable step height at tab exit/entry points |
+| `enabled_layers` | Which simulation layers to run: 1=chip load, 2=forces, 3=deflection, 4=thermal, 5=structural FEA, 6=chatter |
 
 ---
 
@@ -525,18 +596,22 @@ to ensure key stability regardless of serialization order.
 
 **What invalidates the cache:**
 
-| Change | Invalidates? |
-|---|---|
-| Model file content | Yes (model SHA-256 changes) |
-| Stock dimensions or position | Yes |
-| Tool geometry (diameter, length) | Yes |
-| Tool cutting data | No — feeds/speeds are post-computation |
-| Operation strategy params | Yes |
-| Linking params | Yes |
-| Feeds/speeds overrides | No — annotated after toolpath geometry is fixed |
-| Operation name or color | No |
-| Post-processor selection | No |
-| Engine version | Yes (algorithm may have changed) |
+| Change | Invalidates toolpath? | Invalidates simulation? |
+|---|---|---|
+| Model file content | Yes (model SHA-256 changes) | Yes |
+| Stock dimensions or position | Yes | Yes |
+| Tool geometry (diameter, length) | Yes | Yes |
+| Tool cutting data | No — feeds/speeds are post-computation | Yes (changes chip load) |
+| Operation strategy params | Yes | Yes |
+| Linking params | Yes | Yes |
+| Feeds/speeds overrides | No | Yes |
+| Operation name or color | No | No |
+| Post-processor selection | No | No |
+| Engine version | Yes (algorithm may have changed) | Yes |
+| Physics limits (thresholds) | No | Yes — limits are part of the sim cache key; different limits produce different violations and a different optimized toolpath |
+| Material version (cutting-simulation.md) | No | Yes |
+| Machine model | No | Yes (affects chatter calculation) |
+| Simulation layer toggle | No | Yes (layer set changes output) |
 
 **On invalidation:**
 
@@ -671,6 +746,121 @@ const _: () = assert!(std::mem::size_of::<ToolpathPoint>()  == 32);
 
 ---
 
+## Binary Simulation Data Format
+
+Each `simdata/<uuid>.sim.bin` file stores the per-point physics simulation results
+for one operation, referenced by `cache.sim_binary_file` in `project.json`.
+
+### File Layout
+
+```
+Offset   Size   Field
+──────────────────────────────────────────────────────────
+0        8      magic:           b"JCAMSIM\0"
+8        2      version:         u16 = 1
+10       2      flags:           u16  (reserved, must be zero)
+12       16     operation_id:    UUID bytes (big-endian)
+28       4      point_count:     u32
+32       4      violation_count: u32
+36       4      reserved:        [u8; 4]
+──────────────────────────────────────────────────────────
+40       V×32   violation array  (see Violation layout below)
+next     N×32   point sim data   (see PointSimData layout below)
+──────────────────────────────────────────────────────────
+```
+
+Header is 40 bytes, followed immediately by the violation array, then the
+per-point simulation data array.
+
+### PointSimData Layout (32 bytes)
+
+```
+Offset   Size   Field
+──────────────────────────────────────────────────────────
+0        4      force_n:        f32   total cutting force magnitude (N)
+4        4      surface_err_mm: f32   predicted surface error from deflection (mm)
+8        4      temperature_c:  f32   estimated cutting zone temperature (°C)
+12       4      mrr_cm3min:     f32   material removal rate (cm³/min)
+16       1      breakage_risk:  u8    0–255 mapped to 0.0–1.0
+17       1      chatter_risk:   u8    0–255 mapped to 0.0–1.0
+18       2      reserved:       u16
+20       4      optimized_feed: f32   optimizer-adjusted feed (mm/min); 0 = unchanged
+24       8      reserved:       [u8; 8]
+──────────────────────────────────────────────────────────
+```
+
+### Violation Layout (32 bytes)
+
+```
+Offset   Size   Field
+──────────────────────────────────────────────────────────
+0        4      point_index:    u32   index into the PointSimData array
+4        1      kind:           u8    0=ExcessiveCuttingForce
+                                      1=SpindlePowerExceeded
+                                      2=ToolDeflectionHigh
+                                      3=SurfaceAccuracyRisk
+                                      4=ThermalDamageRisk
+                                      5=WorkpieceDeflectionHigh
+                                      6=BreakageRisk
+                                      7=ChatterRisk
+                                      8=CrossGrainTearOut
+                                      9=TabMark
+5        1      severity:       u8    0=Warning, 1=Error, 2=Critical
+6        2      reserved:       u16
+8        4      value:          f32   measured value that triggered violation
+12       4      threshold:      f32   threshold that was exceeded
+16       1      action_taken:   u8    0=None, 1=FeedScaled, 2=SpringPassAdded,
+                                      3=PassReordered, 4=SpindleShifted
+17       15     reserved:       [u8; 15]
+──────────────────────────────────────────────────────────
+```
+
+### Reading in Rust
+
+```rust
+#[repr(C, packed)]
+struct SimHeader {
+    magic:           [u8; 8],
+    version:         u16,
+    flags:           u16,
+    operation_id:    [u8; 16],
+    point_count:     u32,
+    violation_count: u32,
+    reserved:        [u8; 4],
+}
+
+#[repr(C, packed)]
+struct PointSimData {
+    force_n:        f32,
+    surface_err_mm: f32,
+    temperature_c:  f32,
+    mrr_cm3min:     f32,
+    breakage_risk:  u8,
+    chatter_risk:   u8,
+    reserved_u16:   u16,
+    optimized_feed: f32,
+    reserved_tail:  [u8; 8],
+}
+
+#[repr(C, packed)]
+struct SimViolationRecord {
+    point_index:   u32,
+    kind:          u8,
+    severity:      u8,
+    reserved_u16:  u16,
+    value:         f32,
+    threshold:     f32,
+    action_taken:  u8,
+    reserved_tail: [u8; 15],
+}
+
+const _: () = assert!(std::mem::size_of::<SimHeader>()          == 40);
+const _: () = assert!(std::mem::size_of::<PointSimData>()       == 32);
+const _: () = assert!(std::mem::size_of::<SimViolationRecord>() == 32);
+```
+
+---
+
 ## Schema Versioning and Migration
 
 ### Version History
@@ -726,7 +916,9 @@ If `schema_version > current` (file was created by a newer version of JamieCam):
    a. Write project.json
    b. Copy unchanged toolpath .bin files from the existing archive
    c. Write any newly computed toolpath .bin files
-   d. Write embedded model if present
+   d. Copy unchanged simulation .sim.bin files from the existing archive
+   e. Write any newly computed simulation .sim.bin files
+   f. Write embedded model if present
 5. Flush and sync the temp file to disk (fsync)
 6. Rename temp file over the target file
    (rename() is atomic on POSIX; MoveFileExW with MOVEFILE_REPLACE_EXISTING on Windows)
@@ -819,6 +1011,20 @@ pub struct CacheState {
     pub engine_version: Option<String>,
     pub binary_file:    Option<String>,   // ZIP-internal path
     pub stats:          Option<ToolpathStats>,
+    // Physics simulation cache
+    pub simulation_key:  Option<String>,         // None if never simulated
+    pub sim_valid:       bool,
+    pub sim_binary_file: Option<String>,         // ZIP-internal path to .sim.bin
+    pub sim_optimized:   bool,                   // true if optimizer modified the toolpath
+    pub violations_summary: Option<ViolationsSummary>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct ViolationsSummary {
+    pub total:      u32,
+    pub force:      u32,
+    pub deflection: u32,
+    pub chatter:    u32,
 }
 ```
 

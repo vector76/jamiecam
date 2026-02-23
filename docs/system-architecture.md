@@ -40,6 +40,11 @@ and computation. This separation is strict — the frontend holds no canonical s
 │ File I/O  Project          Geometry       Toolpath      Post-      │
 │ & Parse   State (RwLock)   Kernel FFI     Engine        Processor  │
 │           (truth)          (OCCT)         (Rayon)       (TOML)     │
+│                                               │                    │
+│                                               ▼                    │
+│                                     Simulation Engine              │
+│                                     (Rayon, physics                │
+│                                      optimizer loop)               │
 │                                                                     │
 │            ┌────────────────────────────────────────────────┐      │
 │            │  Tokio async runtime  /  Rayon thread pool     │      │
@@ -68,7 +73,10 @@ AppState
 │   ├── wcs: WorkCoordinateSystem
 │   ├── tool_library: Vec<Tool>
 │   ├── operations: Vec<Operation>   ← ordered list
-│   └── toolpaths: HashMap<OperationId, Toolpath>
+│   ├── toolpaths: HashMap<OperationId, Toolpath>
+│   ├── sim_results: HashMap<OperationId, SimResult>  ← physics sim output
+│   ├── machine_model: Option<MachineModel>  ← spindle, stiffness, travel limits
+│   └── physics_limits: PhysicsLimits  ← project-level force/deflection thresholds
 └── preferences: UserPreferences
     ├── recent_files
     ├── default_post_processor
@@ -140,6 +148,15 @@ Commands return `Promise<T>` on the frontend; `Result<T, AppError>` in Rust.
 | `get_gcode_preview` | `OperationId, PostProcessorId` | `string` | Raw G-code text |
 | `list_post_processors` | — | `PostProcessor[]` | — |
 
+### Simulation Commands
+
+| Command | Arguments | Returns | Notes |
+|---|---|---|---|
+| `run_simulation` | `OperationId` | `JobId` | Returns immediately; physics sim is async |
+| `get_simulation_data` | `OperationId` | `SimResultSummary` | Statistics + violation list |
+| `get_simulation_heatmap` | `OperationId, HeatmapMode` | `HeatmapData` | Per-point color values for viewport overlay |
+| `apply_optimization` | `OperationId` | — | Applies optimizer suggestions; invalidates G-code cache |
+
 ### Display Commands
 
 | Command | Arguments | Returns | Notes |
@@ -160,6 +177,10 @@ The frontend registers listeners at app startup and never removes them.
 | `toolpath:progress` | `{ job_id, operation_id, percent, message }` | During computation |
 | `toolpath:complete` | `{ job_id, operation_id }` | Computation finished |
 | `toolpath:error` | `{ job_id, operation_id, error }` | Computation failed |
+| `simulation:progress` | `{ job_id, operation_id, percent, layer }` | During simulation |
+| `simulation:complete` | `{ job_id, operation_id, violation_count }` | Simulation finished |
+| `simulation:violation` | `{ job_id, operation_id, violation }` | Critical violation detected |
+| `simulation:error` | `{ job_id, operation_id, error }` | Simulation failed |
 | `project:modified` | `{ change_type }` | Any backend mutation |
 | `job:cancelled` | `{ job_id }` | Cancellation confirmed |
 
@@ -334,6 +355,7 @@ src-tauri/src/
 │   ├── tools.rs             # add_tool, update_tool, remove_tool, list_tools
 │   ├── operations.rs        # add_operation, update_operation, remove_operation
 │   ├── toolpath.rs          # calculate_toolpath, cancel_job, get_toolpath_geometry
+│   ├── simulation.rs        # run_simulation, get_simulation_data, get_simulation_heatmap, apply_optimization
 │   └── display.rs           # get_mesh_data, get_simulation_frames
 │
 ├── geometry/                # Geometry kernel integration
@@ -354,6 +376,22 @@ src-tauri/src/
 │       ├── drill.rs         # Drilling cycles
 │       ├── surface.rs       # 3D surface machining (scallop, flowline)
 │       └── five_axis.rs     # 5-axis swarf, flank, and point milling
+│
+├── simulation/              # Physics-based cutting simulation
+│   ├── mod.rs               # public API: run_simulation(), OptimizationResult
+│   ├── engine.rs            # top-level simulation pipeline orchestration
+│   ├── geometry_tracker.rs  # as-machined geometry (dexel model, MRR, engagement)
+│   ├── cutting_force.rs     # mechanistic force model (Kt, Kr, Ka) — Layer 2
+│   ├── deflection.rs        # tool beam model, surface error — Layer 3
+│   ├── thermal.rs           # heat partition, temperature accumulation — Layer 4
+│   ├── structural.rs        # thin feature detection, workpiece FEA — Layer 5
+│   ├── chatter.rs           # stability lobe diagram computation — Layer 6
+│   ├── optimizer.rs         # violation → toolpath modification loop
+│   ├── material_db.rs       # material property loading from TOML
+│   ├── machine_model.rs     # machine property loading from TOML
+│   ├── limits.rs            # PhysicsLimits struct, violation checking
+│   ├── cache.rs             # .sim.bin read/write
+│   └── visualization.rs     # serialize per-point data for viewport heatmaps
 │
 ├── postprocessor/
 │   ├── mod.rs
@@ -387,12 +425,14 @@ src/
 │   ├── tools.ts
 │   ├── operations.ts
 │   ├── toolpath.ts
+│   ├── simulation.ts        # run_simulation, get_simulation_data, get_simulation_heatmap
 │   └── types.ts             # Shared TypeScript types mirroring Rust structs
 │
 ├── store/                   # Zustand state
 │   ├── projectStore.ts      # Project summary, selection state
-│   ├── viewportStore.ts     # Camera, display modes, visibility
-│   └── jobStore.ts          # Active computation jobs and progress
+│   ├── viewportStore.ts     # Camera, display modes, visibility, heatmap mode
+│   ├── jobStore.ts          # Active computation jobs and progress
+│   └── simulationStore.ts   # Simulation results, violation list, heatmap selection
 │
 ├── viewport/                # Three.js integration
 │   ├── Viewport.tsx         # React component hosting the canvas
@@ -401,14 +441,16 @@ src/
 │   ├── toolpathLines.ts     # Building geometry from LineGeometryData
 │   ├── stockMesh.ts
 │   ├── simulation.ts        # Tool animation along toolpath
+│   ├── simulationOverlay.ts # Heatmap color layer, violation markers
 │   └── controls.ts          # OrbitControls, selection raycasting
 │
 └── components/
     ├── layout/              # App shell, panel layout, splitters
-    ├── toolbar/             # Top toolbar, view controls
+    ├── toolbar/             # Top toolbar, view controls, heatmap selector
     ├── operations/          # Operation list, operation editor forms
     ├── tools/               # Tool library panel
     ├── gcode/               # G-code preview panel
+    ├── simulation/          # Simulation panel, violation list, physics limits editor
     └── common/              # Notifications, dialogs, progress indicators
 ```
 

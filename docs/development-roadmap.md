@@ -30,21 +30,24 @@ Phase 1 ── 2D Operations (MVP)
    │        Profile, pocket, drill, basic linking, Fanuc + LinuxCNC output
    │        User value: machine flat 2D parts and panels
    │
-Phase 2 ── 2.5D Operations
-   │        Z-level roughing, adaptive clearing, step-down, better linking
-   │        User value: rough and finish prismatic 3D parts
-   │
-Phase 3 ── 3D Surface Machining
-   │        Parallel, scallop, flowline, pencil, gouge detection
-   │        User value: finish freeform surfaces, molds, organic shapes
-   │
-Phase 4 ── 5-Axis
-   │        Tool orientation, point milling, swarf, 5-axis kinematics
-   │        User value: undercuts, blades, complex multi-axis parts
-   │
+Phase 2 ── 2.5D Operations          ╔═══ Sim Phase 1 (parallel track) ════╗
+   │        Z-level roughing,        ║ Force + deflection model             ║
+   │        adaptive clearing        ║ Material DB, machine model           ║
+   │        step-down, arc linking   ║ Physics limits schema, .sim.bin I/O  ║
+   │                                 ╚═════════════════════════════════════╝
+Phase 3 ── 3D Surface Machining      ╔═══ Sim Phase 2 ══════════════════════╗
+   │        Parallel, scallop        ║ Thermal model (Layer 4)              ║
+   │        flowline, pencil         ║ Structural FEA — thin features (L5)  ║
+   │                                 ║ Pass sequence optimizer              ║
+   │                                 ╚═════════════════════════════════════╝
+Phase 4 ── 5-Axis                    ╔═══ Sim Phase 3 ══════════════════════╗
+   │        Point milling, swarf     ║ Chatter / stability lobes (Layer 6)  ║
+   │        5-axis kinematics        ║ Spindle speed optimizer              ║
+   │                                 ║ Voxel as-machined geometry           ║
+   │                                 ╚═════════════════════════════════════╝
 Phase 5 ── Production Polish
-            Simulation, performance, packaging, extended post-processors
-            User value: confidence before cutting, distribution to end users
+            Performance, packaging, extended post-processors
+            User value: distribution to end users
 ```
 
 ---
@@ -184,6 +187,33 @@ stepped parts, parts with varying depth features.
 - Arc moves appear as G2/G3 in Fanuc output (not thousands of tiny linears)
 - GRBL output: all drilling operations expanded to explicit moves (no G83)
 
+### Simulation Track — Phase 1 (runs in parallel with Phase 2)
+
+The simulation engine begins development alongside Phase 2 toolpath work.
+Physics layers are added progressively and do not block toolpath delivery.
+
+- [ ] **Material database** — TOML material files with Kt/Kr/Ka cutting force coefficients;
+  bundled materials: `aluminum-6061`, `steel-mild`, `wood-hardwood`, `plastic-abs`
+- [ ] **Machine model** — TOML machine model files; bundled model: `generic-3axis`
+- [ ] **As-machined geometry tracker** — dexel model updated per pass; provides engagement
+  angle and radial depth for each toolpath point (prerequisite for all physics layers)
+- [ ] **Chip load and MRR** — Layer 1: instantaneous chip thickness and MRR per point
+- [ ] **Mechanistic force model** — Layer 2: predict cutting force using Kt/Kr/Ka
+  coefficients; emit `simulation:progress` events per layer
+- [ ] **Tool deflection model** — Layer 3: cantilever beam model; predict surface error
+  at each toolpath point
+- [ ] **Violation detection** — force, spindle power, tool deflection, surface accuracy
+- [ ] **Feed rate optimizer** — per-point feed scaling at force/deflection violations,
+  with smoothing window to avoid abrupt feed changes
+- [ ] **Spring pass generator** — insert `SpringPass` after finishing passes with
+  surface error above `max_surface_error_mm`
+- [ ] **Heatmap viewport overlay** — Force, Surface Error, MRR modes; per-vertex color buffer
+- [ ] **Violation markers** — yellow/red spheres at violation locations; clickable for detail
+- [ ] **IPC commands**: `run_simulation`, `get_simulation_data`, `get_simulation_heatmap`
+- [ ] **Physics limits schema** — `physics_limits` block in project.json; per-operation override
+- [ ] **`simdata/*.sim.bin` format** — write and read simulation result cache
+- [ ] **Simulation status badge** — HUD indicator: "Sim: OK / N violations / outdated"
+
 ---
 
 ## Phase 3: 3D Surface Machining
@@ -288,10 +318,10 @@ on large parts; installable on customer machines.
 
 ### Items
 
-- [ ] **Material removal simulation** — render stock being progressively removed
-  as tool moves (dexel or mesh-boolean approach — significant engineering work)
 - [ ] **Machine envelope simulation** — define machine travel limits;
   visualize and flag out-of-travel moves
+- [ ] **Dexel material removal visualization** — render stock being progressively
+  removed as tool moves (3D display layer over the dexel model from Sim Phase 1)
 - [ ] **Inverse kinematics per machine config** — A/C, B/C, A/B table configs;
   machine-specific offset geometry
 - [ ] **Minimal retract linking** — compute minimum clearance per rapid move
@@ -380,6 +410,9 @@ user-facing guides. Architecture docs are for contributors.
 | Heidenhain format complexity | High | Low | Scoped to Phase 5; flag as requiring engine extension; not blocking |
 | `.jcam` format migration burden | Low | Medium | Schema version from day one; migration tests in CI |
 | Tauri WebView CSS inconsistency | Low | Low | Use a component library with cross-platform testing; avoid cutting-edge CSS |
+| Cutting force model accuracy (Kt/Kr/Ka) | Medium | Medium | Validate against published data for common materials; expose material DB for user tuning |
+| Simulation performance on long toolpaths | Medium | Medium | Profile on 500K+ point paths; gate expensive layers (L4, L5) behind risk threshold check |
+| Optimizer changes invalidate downstream tests | Medium | Low | Keep geometric and optimized toolpaths as separate structs; maintain golden tests for both |
 
 ---
 
@@ -405,6 +438,10 @@ navigable cross-reference.
 | Rayon for toolpath parallelism | CPU-bound work; natural data-parallel structure; Tokio for async shell | `system-architecture.md` |
 | IJK arc format over R | R-format cannot represent 180° arcs; IJK is unambiguous | `gcode-postprocessor.md` |
 | Clipper2 (not custom) | Robust handling of self-intersecting offsets; battle-tested | `geometry-kernel.md` |
+| Simulation as parallel track (not Phase 5) | Early physics feedback improves toolpath quality before 5-axis is needed | `cutting-simulation.md` |
+| Geometric and optimized toolpaths as separate structs | Prevents optimizer from polluting the geometric cache key | `cutting-simulation.md` |
+| `.sim.bin` cache format | Avoids recomputing expensive physics simulation on project load; invalidated separately from toolpath cache | `project-file-format.md` |
+| Mechanistic force model (Kt/Kr/Ka) | Industry-standard approach; compatible with published material databases | `cutting-simulation.md` |
 
 ---
 

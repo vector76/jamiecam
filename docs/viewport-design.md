@@ -76,10 +76,15 @@ THREE.Scene
 │   │   ├── OperationPath[1]
 │   │   └── ...  (one entry per operation, toggled by visibility)
 │   │
-│   └── SimulationGroup
-│       ├── ToolMesh          (procedural endmill/ballnose geometry)
-│       ├── ToolHolderMesh    (optional, for gouge checking visualization)
-│       └── ToolAxisLine      (line showing current tool axis for 5-axis)
+│   ├── SimulationGroup
+│   │   ├── ToolMesh          (procedural endmill/ballnose geometry)
+│   │   ├── ToolHolderMesh    (optional, for gouge checking visualization)
+│   │   └── ToolAxisLine      (line showing current tool axis for 5-axis)
+│   │
+│   └── SimulationOverlay     (physics simulation visualization; hidden until sim run)
+│       ├── HeatmapColorLayer (toolpath lines recolored by selected physics metric)
+│       ├── ViolationMarkers  (InstancedMesh spheres at violation point locations)
+│       └── ViolationPanel    (CSS2DObject — detail label for the selected violation)
 │
 └── OverlayGroup              (rendered last, no depth test)
     ├── MeasurementLabels     (CSS2DObject — HTML labels for dimensions)
@@ -345,12 +350,42 @@ using `THREE.Vector3.lerp` and `THREE.Quaternion.slerp`.
 **Playback controls:**
 - Play / Pause
 - Speed: 0.25×, 0.5×, 1×, 2×, 10×, 100× (realtime relative to feed rate)
-- Scrub bar: drag to any point in the path
+- Scrub bar: drag to any point in the path; when physics simulation data is available,
+  violation tick marks appear as colored dots above the scrub timeline
 - Single-step forward / backward
+- Jump to next / previous violation (when simulation data is present)
 
 During simulation, the toolpath line behind the tool is rendered in a
 "completed" color (desaturated) while the remaining path retains its
-operation color.
+operation color. When a heatmap overlay is active, the toolpath retains
+heatmap coloring regardless of playback position.
+
+### Physics Heatmap Overlays
+
+When a physics simulation result is available, the toolpath lines can be recolored
+by a selected physics metric. Six heatmap modes are available, toggled from the
+viewport toolbar:
+
+| Mode | What it shows | Color scale |
+|---|---|---|
+| Off | Standard operation color coding | — |
+| Force | Predicted cutting force magnitude (N) | Blue → yellow → red |
+| Surface Error | Predicted surface error from deflection (mm, signed) | Blue (undersize) → green (nominal) → red (oversize) |
+| Temperature | Estimated cutting zone temperature (°C) | Blue → orange → red |
+| Breakage Risk | Workpiece feature breakage risk index (0–1) | Green → yellow → red |
+| Chatter Risk | Chatter onset proximity (stability margin) | Green → yellow → red |
+| MRR | Material removal rate (cm³/min) | Blue → cyan → white |
+
+Heatmap colors are computed per-point from `PointSimData` values and uploaded to
+the GPU as a vertex color buffer. The `HeatmapColorLayer` shares geometry positions
+with `ToolpathGroup` but renders on top with a custom shader that substitutes heatmap
+colors when the overlay mode is active.
+
+Violation locations are marked with small spheres (`ViolationMarkers`) rendered as
+`THREE.InstancedMesh`. Spheres are yellow for `Warning` severity and red for `Error`
+or `Critical`. Clicking a violation sphere opens the `ViolationPanel` CSS2D label
+showing the violation type, actual vs. limit values, and suggested actions as
+clickable buttons that immediately apply the optimization to the toolpath.
 
 ---
 
@@ -402,11 +437,19 @@ Target: 60fps on a mid-range laptop GPU.
 ## Viewport Toolbar Layout
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ [Shaded▼] [Edges] [Stock] [Rapids]  │  [Top][Front][Right][Iso]  [Fit]   │
-│ display modes          visibility   │  standard views            frame   │
-└──────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ [Shaded▼] [Edges] [Stock] [Rapids]  │  [Heatmap: Off▼] [Violations]             │
+│ display modes          visibility   │  simulation overlay                        │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│ [Top] [Front] [Right] [Iso]   [Fit]                                              │
+│ standard views                frame                                              │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+The **[Heatmap: Off▼]** dropdown selects the active physics overlay mode (Off, Force,
+Surface Error, Temperature, Breakage Risk, Chatter Risk, MRR). It is grayed out when
+no simulation result is available for the selected operation. **[Violations]** toggles
+the violation sphere markers and scrub-bar tick marks.
 
 Toolbar lives above the canvas inside the React layout, not rendered in WebGL.
 Icons are from the chosen UI component library's icon set.
@@ -450,6 +493,7 @@ Rendered as WebGL geometry overlaid on the scene (no depth test):
 | View label | Current standard view name ("TOP", "FRONT", etc.) fades in/out |
 | Scale bar | Bottom of viewport, updates with zoom level |
 | WCS indicator | Origin arrows at WCS location in world space |
+| Simulation status | Top-right badge: "Sim: OK", "Sim: 3 violations", or "Sim: outdated" |
 
 ---
 
