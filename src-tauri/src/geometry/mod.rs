@@ -4,15 +4,19 @@
 //!
 //! ```text
 //! geometry/
-//! ├── ffi.rs   — raw bindgen-generated extern "C" declarations (unsafe)
-//! └── safe.rs  — (future) safe Rust wrappers with RAII and Result<T, E>
+//! ├── ffi.rs   — raw bindgen-generated extern "C" declarations (private)
+//! └── safe.rs  — safe Rust wrappers with RAII and Result<T, E> (public API)
 //! ```
 //!
-//! The `ffi` sub-module is `pub` so that safe wrapper code in sibling modules
-//! can reference the raw types (e.g. `geometry::ffi::CgShapeId`).  External
-//! callers should use the safe wrappers once they exist.
+//! All `unsafe` code lives in `safe.rs`. Code outside the `geometry` module
+//! should only use the types re-exported from here.
 
-pub mod ffi;
+// Raw bindings are private — callers use the safe wrappers below.
+mod ffi;
+
+pub mod safe;
+
+pub use safe::{GeometryError, MeshData, OcctMesh, OcctShape};
 
 #[cfg(test)]
 #[cfg(cam_geometry_bindings)]
