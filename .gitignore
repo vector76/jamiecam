@@ -12,8 +12,8 @@ Cargo.lock
 # Keep Cargo.lock for binaries (Tauri app); uncomment next line only for libraries
 # src-tauri/Cargo.lock
 
-# Generated bindings
-src-tauri/src/geometry/ffi.rs
+# Generated FFI bindings live in $OUT_DIR/ffi_generated.rs (inside target/) — not committed.
+# src-tauri/src/geometry/ffi.rs is the hand-written include!() wrapper and IS committed.
 
 # ===== Node / pnpm =====
 node_modules/

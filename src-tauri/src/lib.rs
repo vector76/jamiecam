@@ -1,3 +1,5 @@
+pub mod geometry;
+
 /// JamieCam Tauri application library entry point.
 ///
 /// All Tauri builder setup lives here so it can be tested and referenced
