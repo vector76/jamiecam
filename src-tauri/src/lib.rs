@@ -1,3 +1,4 @@
+pub mod commands;
 pub mod error;
 pub mod geometry;
 pub mod project;
@@ -53,8 +54,13 @@ pub fn run() {
         .manage(state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        // Phase 0 command handlers — populated by the IPC bead.
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![
+            commands::file::open_model,
+            commands::file::save_project,
+            commands::file::load_project,
+            commands::file::new_project,
+            commands::project::get_project_snapshot,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

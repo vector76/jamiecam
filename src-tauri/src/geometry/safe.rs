@@ -322,7 +322,7 @@ pub enum GeometryError {
 /// Buffers use `f32` vertices/normals (sufficient precision for Three.js
 /// rendering) and `u32` indices. All geometry computation in Rust uses `f64`;
 /// the downcast to `f32` happens only at the IPC boundary.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MeshData {
     /// XYZ interleaved vertex positions — 3 `f32` values per vertex.
     pub vertices: Vec<f32>,
