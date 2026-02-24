@@ -6,13 +6,18 @@
  */
 
 import { useEffect, useRef } from 'react'
+import type React from 'react'
 import * as THREE from 'three'
 import { SceneManager } from './scene'
 import { buildModelMesh } from './modelMesh'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 
-export function Viewport() {
+interface ViewportProps {
+  style?: React.CSSProperties
+}
+
+export function Viewport({ style }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
@@ -62,5 +67,5 @@ export function Viewport() {
     }
   }, [meshData])
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+  return <div ref={containerRef} style={{ width: '100%', height: '100%', ...style }} />
 }

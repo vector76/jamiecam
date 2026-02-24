@@ -1,14 +1,20 @@
+/**
+ * Smoke test for App.tsx.
+ *
+ * AppShell (and therefore Viewport + SceneManager) is mocked so these tests
+ * stay fast and avoid WebGL dependencies.
+ */
+
 import { render, screen } from '@testing-library/react'
 import App from './App'
 
-describe('App', () => {
-  it('renders the application title', () => {
-    render(<App />)
-    expect(screen.getByRole('heading', { name: /jamiecam/i })).toBeInTheDocument()
-  })
+vi.mock('./components/layout/AppShell', () => ({
+  AppShell: () => <div data-testid="app-shell">AppShell</div>,
+}))
 
-  it('renders the placeholder description', () => {
+describe('App', () => {
+  it('renders the AppShell', () => {
     render(<App />)
-    expect(screen.getByText(/scaffold placeholder/i)).toBeInTheDocument()
+    expect(screen.getByTestId('app-shell')).toBeInTheDocument()
   })
 })
