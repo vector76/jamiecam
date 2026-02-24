@@ -4,8 +4,9 @@
 //!
 //! ```text
 //! geometry/
-//! ├── ffi.rs   — raw bindgen-generated extern "C" declarations (private)
-//! └── safe.rs  — safe Rust wrappers with RAII and Result<T, E> (public API)
+//! ├── ffi.rs      — raw bindgen-generated extern "C" declarations (private)
+//! ├── safe.rs     — safe Rust wrappers with RAII and Result<T, E> (public API)
+//! └── importer.rs — high-level import dispatcher (STEP/IGES/STL → MeshData)
 //! ```
 //!
 //! All `unsafe` code lives in `safe.rs`. Code outside the `geometry` module
@@ -14,8 +15,10 @@
 // Raw bindings are private — callers use the safe wrappers below.
 mod ffi;
 
+pub mod importer;
 pub mod safe;
 
+pub use importer::import;
 pub use safe::{GeometryError, MeshData, OcctMesh, OcctShape};
 
 #[cfg(test)]
