@@ -41,8 +41,10 @@ src-tauri/cpp/build/
 *.so
 *.dylib
 *.dll
-# Compiled C++ test binaries (no extension)
+# Compiled C++ test binaries (no extension); keep source files
 src-tauri/cpp/tests/test_*
+!src-tauri/cpp/tests/test_*.cpp
+!src-tauri/cpp/tests/test_*.sh
 
 # ===== Test / coverage artifacts =====
 tarpaulin-report.html
