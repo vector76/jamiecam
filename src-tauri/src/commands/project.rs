@@ -72,8 +72,7 @@ mod tests {
     #[test]
     fn snapshot_of_default_project_has_no_model() {
         let state = AppState::default();
-        let snap =
-            get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
         assert!(snap.model_path.is_none());
         assert!(snap.model_checksum.is_none());
         assert_eq!(snap.project_name, "");
@@ -88,8 +87,7 @@ mod tests {
             p.name = "My Project".to_string();
             p.modified_at = "2026-01-01T00:00:00Z".to_string();
         }
-        let snap =
-            get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
         assert_eq!(snap.project_name, "My Project");
         assert_eq!(snap.modified_at, "2026-01-01T00:00:00Z");
     }
@@ -113,8 +111,7 @@ mod tests {
                 },
             });
         }
-        let snap =
-            get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
         assert_eq!(snap.model_path.as_deref(), Some("/home/user/part.step"));
         assert_eq!(snap.model_checksum.as_deref(), Some("deadbeef"));
     }
@@ -128,9 +125,21 @@ mod tests {
             modified_at: "2026-01-01T00:00:00Z".to_string(),
         };
         let value = serde_json::to_value(&snap).expect("serialize");
-        assert!(value.get("modelPath").is_some(), "expected camelCase modelPath");
-        assert!(value.get("modelChecksum").is_some(), "expected camelCase modelChecksum");
-        assert!(value.get("projectName").is_some(), "expected camelCase projectName");
-        assert!(value.get("modifiedAt").is_some(), "expected camelCase modifiedAt");
+        assert!(
+            value.get("modelPath").is_some(),
+            "expected camelCase modelPath"
+        );
+        assert!(
+            value.get("modelChecksum").is_some(),
+            "expected camelCase modelChecksum"
+        );
+        assert!(
+            value.get("projectName").is_some(),
+            "expected camelCase projectName"
+        );
+        assert!(
+            value.get("modifiedAt").is_some(),
+            "expected camelCase modifiedAt"
+        );
     }
 }

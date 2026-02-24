@@ -42,8 +42,7 @@ pub(crate) async fn open_model_inner(
     let path_clone = path_buf.clone();
     let blocking_result = tokio::task::spawn_blocking(move || {
         let mesh = crate::geometry::import(&path_clone).map_err(AppError::from)?;
-        let bytes =
-            std::fs::read(&path_clone).map_err(|e| AppError::Io(e.to_string()))?;
+        let bytes = std::fs::read(&path_clone).map_err(|e| AppError::Io(e.to_string()))?;
         let digest = sha2::Sha256::digest(&bytes);
         Ok::<(MeshData, String), AppError>((mesh, format!("{digest:x}")))
     })
@@ -136,10 +135,7 @@ pub async fn open_model(
 
 /// Serialize the active project to a `.jcam` file at `path`.
 #[tauri::command]
-pub async fn save_project(
-    path: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), AppError> {
+pub async fn save_project(path: String, state: tauri::State<'_, AppState>) -> Result<(), AppError> {
     save_project_inner(&path, &state.project)
 }
 
@@ -158,9 +154,7 @@ pub async fn load_project(
 ///
 /// Returns a [`ProjectSnapshot`] for immediate display in the frontend.
 #[tauri::command]
-pub async fn new_project(
-    state: tauri::State<'_, AppState>,
-) -> Result<ProjectSnapshot, AppError> {
+pub async fn new_project(state: tauri::State<'_, AppState>) -> Result<ProjectSnapshot, AppError> {
     new_project_inner(&state.project)
 }
 
@@ -202,8 +196,7 @@ mod tests {
         }
 
         let tmp = std::env::temp_dir().join("jcam_cmd_test_round_trip.jcam");
-        save_project_inner(&tmp.to_string_lossy(), &state.project)
-            .expect("save should succeed");
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
 
         // Reset state, then load the saved file.
         new_project_inner(&state.project).expect("new_project should succeed");
@@ -221,16 +214,14 @@ mod tests {
     #[test]
     fn load_project_returns_err_for_missing_file() {
         let state = AppState::default();
-        let result =
-            load_project_inner("/nonexistent/path/project.jcam", &state.project);
+        let result = load_project_inner("/nonexistent/path/project.jcam", &state.project);
         assert!(matches!(result, Err(AppError::ProjectLoad(_))));
     }
 
     #[test]
     fn save_project_to_invalid_path_returns_err() {
         let state = AppState::default();
-        let result =
-            save_project_inner("/nonexistent_dir_jamiecam/project.jcam", &state.project);
+        let result = save_project_inner("/nonexistent_dir_jamiecam/project.jcam", &state.project);
         assert!(matches!(result, Err(AppError::ProjectSave(_))));
     }
 
@@ -239,8 +230,7 @@ mod tests {
     #[tokio::test]
     async fn open_model_returns_file_not_found_for_missing_path() {
         let state = AppState::default();
-        let result =
-            open_model_inner("/nonexistent/path/model.step", &state.project).await;
+        let result = open_model_inner("/nonexistent/path/model.step", &state.project).await;
         assert!(matches!(result, Err(AppError::FileNotFound)));
     }
 
@@ -287,7 +277,10 @@ mod tests {
             "vertices and normals must have equal length"
         );
         let project = state.project.read().expect("read lock");
-        let model = project.source_model.as_ref().expect("source_model must be set");
+        let model = project
+            .source_model
+            .as_ref()
+            .expect("source_model must be set");
         assert!(!model.checksum.is_empty());
         assert_eq!(model.path, fixture);
     }

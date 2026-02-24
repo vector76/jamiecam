@@ -21,9 +21,7 @@ pub fn run() {
     //
     // Log level is controlled by the RUST_LOG environment variable;
     // defaults to INFO when the variable is absent.
-    let log_dir = dirs::data_local_dir()
-        .unwrap_or_default()
-        .join("jamiecam");
+    let log_dir = dirs::data_local_dir().unwrap_or_default().join("jamiecam");
 
     // Ensure the log directory exists before handing it to the appender.
     // tracing_appender::rolling::never panics if it cannot open the log file,
@@ -78,8 +76,7 @@ mod tests {
     fn serde_round_trip() {
         let original = serde_json::json!({ "name": "JamieCam", "version": 1 });
         let serialised = serde_json::to_string(&original).expect("serialise");
-        let recovered: serde_json::Value =
-            serde_json::from_str(&serialised).expect("deserialise");
+        let recovered: serde_json::Value = serde_json::from_str(&serialised).expect("deserialise");
         assert_eq!(original, recovered);
     }
 }

@@ -20,10 +20,10 @@ use std::path::Path;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
+use super::types::{ProjectFile, ProjectMeta, SourceModelRef};
 use crate::error::AppError;
 use crate::geometry::MeshData;
 use crate::state::{LoadedModel, Project};
-use super::types::{ProjectFile, ProjectMeta, SourceModelRef};
 
 /// Name of the project manifest inside every `.jcam` ZIP.
 const PROJECT_JSON: &str = "project.json";
@@ -266,8 +266,7 @@ mod tests {
         {
             let file = std::fs::File::create(&tmp).unwrap();
             let mut zip = zip::ZipWriter::new(file);
-            let opts = SimpleFileOptions::default()
-                .compression_method(CompressionMethod::Deflated);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
             zip.start_file("project.json", opts).unwrap();
             let json = r#"{
                 "schema_version": 99,

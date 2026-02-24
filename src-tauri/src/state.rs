@@ -72,17 +72,10 @@ impl Default for Project {
 ///
 /// Phase 0: no disk persistence.  The list is rebuilt from scratch each
 /// session.  A persistence layer will be added in a future phase.
+#[derive(Default)]
 pub struct UserPreferences {
     /// Most-recently-used file paths, newest first.
     pub recent_files: VecDeque<PathBuf>,
-}
-
-impl Default for UserPreferences {
-    fn default() -> Self {
-        Self {
-            recent_files: VecDeque::new(),
-        }
-    }
 }
 
 /// Root application state managed by Tauri.
