@@ -1,0 +1,24 @@
+# Cargo build configuration for JamieCam.
+# This file applies to all developers. Do NOT put absolute paths here —
+# those belong in shell profiles (see docs/build-and-dev-setup.md).
+
+[build]
+# Uncomment to use the mold linker on Linux for faster linking:
+# linker = "clang"
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[profile.dev]
+# Debug builds: no optimisation, full debug info
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+# Optimise all dependencies even in debug builds so OCCT FFI calls
+# don't dominate every iteration.
+opt-level = 2
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

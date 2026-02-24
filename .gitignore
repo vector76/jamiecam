@@ -1,0 +1,51 @@
+# Secrets and local environment
+.env
+
+# raymond agent state
+/.raymond/
+
+# ===== Rust / Cargo =====
+/target/
+src-tauri/target/
+**/*.rs.bk
+Cargo.lock
+# Keep Cargo.lock for binaries (Tauri app); uncomment next line only for libraries
+# src-tauri/Cargo.lock
+
+# Generated bindings
+src-tauri/src/geometry/ffi.rs
+
+# ===== Node / pnpm =====
+node_modules/
+dist/
+dist-ssr/
+*.local
+.pnpm-debug.log*
+
+# ===== Tauri build outputs =====
+src-tauri/gen/
+src-tauri/WixTools/
+
+# ===== Editor / OS =====
+.vscode/*.log
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===== C++ build =====
+src-tauri/cpp/build/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# ===== Test / coverage artifacts =====
+tarpaulin-report.html
+lcov.info
+coverage/
+
+# ===== Logs =====
+*.log

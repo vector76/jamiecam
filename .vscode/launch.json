@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug Tauri App",
+      "cargo": {
+        "args": ["build", "--manifest-path", "src-tauri/Cargo.toml"],
+        "filter": { "name": "jamiecam", "kind": "bin" }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "RUST_LOG": "debug",
+        "WEBVIEW_DEVTOOLS": "1"
+      }
+    }
+  ]
+}

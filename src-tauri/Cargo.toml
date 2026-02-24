@@ -1,0 +1,45 @@
+[package]
+name = "jamiecam"
+version = "0.1.0"
+description = "JamieCam — CNC CAM desktop application"
+authors = []
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "jamiecam_lib"
+crate-type = ["lib"]
+
+[[bin]]
+name = "jamiecam"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+# Listed here for future use (Steps 3–4: C++ wrapper compilation and FFI generation)
+bindgen = "0.70"
+cc = "1"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+dirs = "5"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+
+[features]
+# this feature is used for production builds or when `devtools` feature is not
+# enabled, which is the case when cargo test is run
+custom-protocol = ["tauri/custom-protocol"]
