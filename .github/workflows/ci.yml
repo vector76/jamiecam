@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Build and test (3-platform matrix) ──────────────────────────────
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-13, windows-2022]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Linux: system dependencies ─────────────────────────────────────────
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            llvm clang libclang-dev \
+            libocct-foundation-dev \
+            libocct-modeling-data-dev \
+            libocct-modeling-algorithms-dev \
+            libocct-data-exchange-dev \
+            libocct-ocaf-dev
+
+      - name: Set environment variables (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "OCCT_INCLUDE_DIR=/usr/include/opencascade" >> $GITHUB_ENV
+          echo "OCCT_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=/usr/lib/llvm-16/lib" >> $GITHUB_ENV
+
+      # ── macOS: system dependencies ─────────────────────────────────────────
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake llvm opencascade
+
+      - name: Set environment variables (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "OCCT_INCLUDE_DIR=$(brew --prefix opencascade)/include/opencascade" >> $GITHUB_ENV
+          echo "OCCT_LIB_DIR=$(brew --prefix opencascade)/lib" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+      # ── Windows: system dependencies ───────────────────────────────────────
+      - name: Install LLVM (Windows)
+        if: runner.os == 'Windows'
+        run: choco install llvm --yes
+        shell: powershell
+
+      - name: Set up vcpkg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg --depth 1
+          C:\vcpkg\bootstrap-vcpkg.bat
+        shell: powershell
+
+      # Cache the vcpkg installed tree — CRITICAL: vcpkg builds OCCT from source
+      # which takes 20–40 minutes; the cache reduces this to seconds on cache hit.
+      - name: Cache vcpkg packages (Windows)
+        if: runner.os == 'Windows'
+        id: cache-vcpkg
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-windows-opencascade-7.7
+
+      - name: Install OCCT via vcpkg (Windows)
+        if: runner.os == 'Windows' && steps.cache-vcpkg.outputs.cache-hit != 'true'
+        run: C:\vcpkg\vcpkg install opencascade:x64-windows-static
+        shell: powershell
+
+      - name: Set environment variables (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "OCCT_INCLUDE_DIR=C:\vcpkg\installed\x64-windows-static\include\opencascade"
+          Add-Content -Path $env:GITHUB_ENV -Value "OCCT_LIB_DIR=C:\vcpkg\installed\x64-windows-static\lib"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIBCLANG_PATH=C:\Program Files\LLVM\lib"
+        shell: powershell
+
+      # ── Rust toolchain ──────────────────────────────────────────────────────
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # ── Node.js and pnpm ────────────────────────────────────────────────────
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      # ── Rust: build and test ────────────────────────────────────────────────
+      - name: Build Rust backend
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Test Rust backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # ── C++ wrapper: build and test ─────────────────────────────────────────
+      - name: Configure C++ wrapper
+        run: cmake -B src-tauri/cpp/build -DBUILD_TESTS=ON src-tauri/cpp
+
+      - name: Build C++ wrapper
+        run: cmake --build src-tauri/cpp/build
+
+      - name: Test C++ wrapper
+        run: ctest --test-dir src-tauri/cpp/build --output-on-failure
+
+      # ── Frontend: install and build ─────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        run: pnpm build
+
+  # ── Job 2: Clippy (Linux only) ─────────────────────────────────────────────
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake pkg-config \
+            libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            llvm clang libclang-dev \
+            libocct-foundation-dev \
+            libocct-modeling-data-dev \
+            libocct-modeling-algorithms-dev \
+            libocct-data-exchange-dev \
+            libocct-ocaf-dev
+
+      - name: Set environment variables
+        run: |
+          echo "OCCT_INCLUDE_DIR=/usr/include/opencascade" >> $GITHUB_ENV
+          echo "OCCT_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=/usr/lib/llvm-16/lib" >> $GITHUB_ENV
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: linux-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: linux-cargo-clippy-
+
+      - name: Run Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+  # ── Job 3: Frontend typecheck and lint (Linux only) ────────────────────────
+  frontend-typecheck:
+    name: Frontend Typecheck & Lint
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
