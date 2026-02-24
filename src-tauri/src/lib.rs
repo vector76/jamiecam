@@ -1,5 +1,6 @@
 pub mod error;
 pub mod geometry;
+pub mod project;
 pub mod state;
 
 use state::AppState;

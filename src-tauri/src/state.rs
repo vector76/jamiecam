@@ -10,6 +10,7 @@ use std::sync::RwLock;
 use crate::geometry::MeshData;
 
 /// A geometry model that has been loaded into memory.
+#[derive(Debug)]
 pub struct LoadedModel {
     /// Absolute path to the source file on disk.
     pub path: PathBuf,
@@ -24,6 +25,7 @@ pub struct LoadedModel {
 /// All optional/vec scaffolding fields (stock, wcs, tools, operations) are
 /// present as typed placeholders so later phases can populate them without
 /// changing the struct layout.
+#[derive(Debug)]
 pub struct Project {
     pub name: String,
     pub description: String,
