@@ -9,9 +9,9 @@ fn main() {
 
     // C++ wrapper compilation — only when OCCT headers and libs are present.
     // A missing OCCT installation is non-fatal: cargo build still succeeds and
-    // the geometry module compiles (extern "C" declarations are not resolved
-    // unless actually called).
-    if occt_include.join("Standard.hxx").exists() && has_occt_lib(&occt_lib) {
+    // the geometry module compiles in stub mode (all operations return errors).
+    let occt_found = occt_include.join("Standard.hxx").exists() && has_occt_lib(&occt_lib);
+    if occt_found {
         compile_cpp(&occt_include);
         link_occt(&occt_lib);
     } else {
@@ -27,8 +27,11 @@ fn main() {
     // FFI binding generation via bindgen.
     // cam_geometry.h is pure C (no OCCT headers), so bindgen only needs
     // libclang — it does not require OCCT to be installed.
+    // `cam_geometry_bindings` is only emitted when OCCT was found *and*
+    // bindgen succeeded — both are required for the symbols to be available
+    // at link time.
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-    generate_ffi_bindings(&out_path);
+    generate_ffi_bindings(&out_path, occt_found);
 
     // Declare the custom cfg so Clippy and rustc don't warn on #[cfg(cam_geometry_bindings)].
     println!("cargo:rustc-check-cfg=cfg(cam_geometry_bindings)");
@@ -65,10 +68,12 @@ fn occt_lib_dir() -> PathBuf {
 
 /// Returns true if at least one OCCT toolkit library is present in `dir`.
 fn has_occt_lib(dir: &std::path::Path) -> bool {
-    // Check for the most fundamental OCCT library in both static and shared forms.
+    // Check for the most fundamental OCCT library in all supported forms.
+    // .dylib is the macOS shared library extension (Homebrew does not install .so).
     [
         "libTKernel.a",
         "libTKernel.so",
+        "libTKernel.dylib",
         "TKernel.lib",
         "TKernel.dll",
     ]
@@ -220,16 +225,28 @@ fn link_occt(occt_lib: &std::path::Path) {
 
 /// Generate `ffi_generated.rs` from `cpp/cam_geometry.h` using bindgen.
 ///
-/// If bindgen fails (e.g. libclang is not installed), an empty placeholder
-/// file is written and a cargo warning is emitted so the build still succeeds.
-/// In that case, the `cam_geometry_bindings` cfg flag is *not* set, and any
-/// `#[cfg(cam_geometry_bindings)]` test blocks are silently skipped.
+/// `cam_geometry_bindings` is only emitted when `occt_found` is true *and*
+/// bindgen succeeds — both are required for the symbols to be defined at link
+/// time.  If either condition fails, a placeholder file is written and the cfg
+/// is left unset, causing all `#[cfg(cam_geometry_bindings)]` blocks to compile
+/// in stub mode (operations return errors without referencing any C symbols).
 ///
 /// On macOS, set `LIBCLANG_PATH` to the Homebrew LLVM lib directory:
 ///   export LIBCLANG_PATH=$(brew --prefix llvm)/lib
 /// On Windows, set `LIBCLANG_PATH` to the LLVM installation (not the MSVC
 /// toolchain — a separate LLVM install is required for bindgen).
-fn generate_ffi_bindings(out_path: &std::path::Path) {
+fn generate_ffi_bindings(out_path: &std::path::Path, occt_found: bool) {
+    if !occt_found {
+        // OCCT was not compiled in; write a placeholder and skip the cfg so
+        // all #[cfg(cam_geometry_bindings)] blocks compile as stubs.
+        std::fs::write(
+            out_path.join("ffi_generated.rs"),
+            "// FFI bindings skipped — OCCT not found.\n",
+        )
+        .expect("failed to write placeholder ffi_generated.rs");
+        return;
+    }
+
     let result = bindgen::Builder::default()
         .header("cpp/cam_geometry.h")
         .allowlist_function("cg_.*")
