@@ -174,7 +174,8 @@ fn compile_cpp(occt_include: &std::path::Path) {
 
 // ── OCCT link directives ──────────────────────────────────────────────────────
 
-const OCCT_LIBS: &[&str] = &[
+// Libraries present in all supported OCCT versions (7.6.x – 7.9.x).
+const OCCT_LIBS_COMMON: &[&str] = &[
     "TKernel",
     "TKMath",
     "TKBRep",
@@ -188,13 +189,27 @@ const OCCT_LIBS: &[&str] = &[
     "TKOffset",
     "TKMesh",
     "TKXSBase",
-    "TKSTEPBase",
-    "TKSTEPAttr",
-    "TKSTEP",
-    "TKIGES",
-    "TKSTL",
     "TKXCAF",
 ];
+
+// STEP/IGES/STL library names for OCCT < 7.8 (e.g. Ubuntu 24.04 ships 7.6.3).
+const OCCT_STEP_LIBS_PRE78: &[&str] = &["TKSTEPBase", "TKSTEPAttr", "TKSTEP", "TKIGES", "TKSTL"];
+
+// STEP/IGES/STL library names for OCCT 7.8+ (DE framework rename used by
+// Homebrew on macOS and vcpkg on Windows).
+const OCCT_STEP_LIBS_78PLUS: &[&str] = &["TKDESTEP", "TKDEIGES", "TKDESTL"];
+
+/// Returns true when the OCCT lib dir contains the pre-7.8 `TKSTEPBase` library.
+fn has_legacy_step_libs(dir: &std::path::Path) -> bool {
+    [
+        "libTKSTEPBase.a",
+        "libTKSTEPBase.so",
+        "libTKSTEPBase.dylib",
+        "TKSTEPBase.lib",
+    ]
+    .iter()
+    .any(|name| dir.join(name).exists())
+}
 
 // Windows system libraries required by OCCT.
 #[cfg(target_os = "windows")]
@@ -211,7 +226,18 @@ fn link_occt(occt_lib: &std::path::Path) {
     #[cfg(not(target_os = "windows"))]
     let link_kind = "dylib";
 
-    for lib in OCCT_LIBS {
+    for lib in OCCT_LIBS_COMMON {
+        println!("cargo:rustc-link-lib={link_kind}={lib}");
+    }
+
+    // OCCT 7.8 renamed TKSTEPBase/TKSTEPAttr/TKSTEP/TKIGES/TKSTL.
+    // Probe for TKSTEPBase to detect which naming scheme is in use.
+    let step_libs = if has_legacy_step_libs(occt_lib) {
+        OCCT_STEP_LIBS_PRE78
+    } else {
+        OCCT_STEP_LIBS_78PLUS
+    };
+    for lib in step_libs {
         println!("cargo:rustc-link-lib={link_kind}={lib}");
     }
 

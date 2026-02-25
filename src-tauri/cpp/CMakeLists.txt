@@ -47,10 +47,19 @@ target_include_directories(cam_geometry PUBLIC
 
 target_link_directories(cam_geometry PUBLIC "${OCCT_LIB_DIR}")
 
+# OCCT 7.8 renamed the STEP/IGES/STL data-exchange libraries.
+# Probe for TKSTEPBase to detect which naming scheme is in use.
+find_library(TK_STEPBASE_LIB NAMES TKSTEPBase HINTS "${OCCT_LIB_DIR}")
+if(TK_STEPBASE_LIB)
+    set(OCCT_STEP_LIBS TKSTEPBase TKSTEPAttr TKSTEP TKIGES TKSTL)
+else()
+    set(OCCT_STEP_LIBS TKDESTEP TKDEIGES TKDESTL)
+endif()
+
 target_link_libraries(cam_geometry PUBLIC
     TKernel TKMath TKBRep TKGeomBase TKG2d TKG3d TKTopAlgo
     TKPrim TKBO TKShHealing TKOffset
-    TKMesh TKXSBase TKSTEPBase TKSTEPAttr TKSTEP TKIGES TKSTL TKXCAF
+    TKMesh TKXSBase ${OCCT_STEP_LIBS} TKXCAF
 )
 
 if(MSVC)
