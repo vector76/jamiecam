@@ -5,6 +5,7 @@
 //! 2. Write a complete ZIP archive to `<target>.tmp` (same directory → same
 //!    filesystem as the final path).
 //! 3. Atomically rename the temp file over the target.
+//!
 //! On any failure the temp file is deleted and the original is left intact.
 //!
 //! # Load

@@ -30,6 +30,9 @@ fn main() {
     let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     generate_ffi_bindings(&out_path);
 
+    // Declare the custom cfg so Clippy and rustc don't warn on #[cfg(cam_geometry_bindings)].
+    println!("cargo::rustc-check-cfg=cfg(cam_geometry_bindings)");
+
     // Incremental rebuild triggers.
     println!("cargo:rerun-if-changed=cpp/cam_geometry.h");
     println!("cargo:rerun-if-changed=cpp/cam_geometry.cpp");
@@ -141,6 +144,7 @@ fn compile_cpp(occt_include: &std::path::Path) {
             "cpp/third_party/Clipper2/Clipper2Lib/src/clipper.engine.cpp",
             "cpp/third_party/Clipper2/Clipper2Lib/src/clipper.offset.cpp",
             "cpp/third_party/Clipper2/Clipper2Lib/src/clipper.rectclip.cpp",
+            "cpp/third_party/Clipper2/Clipper2Lib/src/clipper.triangulation.cpp",
         ])
         // Suppress warnings from OCCT and Clipper2 headers we do not control.
         .warnings(false);
@@ -162,8 +166,6 @@ const OCCT_LIBS: &[&str] = &[
     "TKMath",
     "TKBRep",
     "TKGeomBase",
-    "TKGeom2d",
-    "TKGeom3d",
     "TKG2d",
     "TKG3d",
     "TKTopAlgo",
@@ -177,6 +179,7 @@ const OCCT_LIBS: &[&str] = &[
     "TKSTEPAttr",
     "TKSTEP",
     "TKIGES",
+    "TKSTL",
     "TKXCAF",
 ];
 
@@ -189,8 +192,14 @@ const WINDOWS_SYSTEM_LIBS: &[&str] = &[
 fn link_occt(occt_lib: &std::path::Path) {
     println!("cargo:rustc-link-search=native={}", occt_lib.display());
 
+    // Windows/vcpkg provides static libs; Linux/macOS apt/brew provide shared libs.
+    #[cfg(target_os = "windows")]
+    let link_kind = "static";
+    #[cfg(not(target_os = "windows"))]
+    let link_kind = "dylib";
+
     for lib in OCCT_LIBS {
-        println!("cargo:rustc-link-lib=static={lib}");
+        println!("cargo:rustc-link-lib={link_kind}={lib}");
     }
 
     #[cfg(target_os = "windows")]

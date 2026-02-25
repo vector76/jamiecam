@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
+        os: [ubuntu-22.04, macos-14, windows-2022]
 
     steps:
       - uses: actions/checkout@v4
@@ -95,6 +95,7 @@ jobs:
 
       # ── Rust toolchain ──────────────────────────────────────────────────────
       - name: Set up Rust stable
+        id: rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo registry
@@ -106,6 +107,14 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/target
+          key: ${{ runner.os }}-cargo-target-${{ steps.rust.outputs.rustc-version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
 
       # ── Node.js and pnpm ────────────────────────────────────────────────────
       - uses: pnpm/action-setup@v4
@@ -126,13 +135,13 @@ jobs:
 
       # ── C++ wrapper: build and test ─────────────────────────────────────────
       - name: Configure C++ wrapper
-        run: cmake -B src-tauri/cpp/build -DBUILD_TESTS=ON src-tauri/cpp
+        run: cmake -B src-tauri/cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON src-tauri/cpp
 
       - name: Build C++ wrapper
-        run: cmake --build src-tauri/cpp/build
+        run: cmake --build src-tauri/cpp/build --config Release
 
       - name: Test C++ wrapper
-        run: ctest --test-dir src-tauri/cpp/build --output-on-failure
+        run: ctest --test-dir src-tauri/cpp/build --config Release --output-on-failure
 
       # ── Frontend: install and build ─────────────────────────────────────────
       - name: Install frontend dependencies
@@ -172,6 +181,7 @@ jobs:
           echo "LIBCLANG_PATH=/usr/lib/llvm-16/lib" >> $GITHUB_ENV
 
       - name: Set up Rust stable
+        id: rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -184,6 +194,13 @@ jobs:
             ~/.cargo/git
           key: linux-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: linux-cargo-clippy-
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/target
+          key: linux-cargo-target-clippy-${{ steps.rust.outputs.rustc-version }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: linux-cargo-target-clippy-
 
       - name: Run Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
