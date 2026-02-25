@@ -138,10 +138,10 @@ jobs:
         run: cmake -B src-tauri/cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON src-tauri/cpp
 
       - name: Build C++ wrapper
-        run: cmake --build src-tauri/cpp/build --config Release
+        run: cmake --build src-tauri/cpp/build
 
       - name: Test C++ wrapper
-        run: ctest --test-dir src-tauri/cpp/build --config Release --output-on-failure
+        run: ctest --test-dir src-tauri/cpp/build --output-on-failure
 
       # ── Frontend: install and build ─────────────────────────────────────────
       - name: Install frontend dependencies
