@@ -21,6 +21,7 @@ dist/
 dist-ssr/
 *.local
 .pnpm-debug.log*
+tsconfig.tsbuildinfo
 
 # ===== Tauri build outputs =====
 src-tauri/gen/

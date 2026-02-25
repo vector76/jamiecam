@@ -31,12 +31,20 @@ fn main() {
     generate_ffi_bindings(&out_path);
 
     // Declare the custom cfg so Clippy and rustc don't warn on #[cfg(cam_geometry_bindings)].
-    println!("cargo::rustc-check-cfg=cfg(cam_geometry_bindings)");
+    println!("cargo:rustc-check-cfg=cfg(cam_geometry_bindings)");
 
     // Incremental rebuild triggers.
     println!("cargo:rerun-if-changed=cpp/cam_geometry.h");
     println!("cargo:rerun-if-changed=cpp/cam_geometry.cpp");
     println!("cargo:rerun-if-changed=cpp/handle_registry.cpp");
+    println!("cargo:rerun-if-changed=cpp/third_party/Clipper2/Clipper2Lib/src/clipper.engine.cpp");
+    println!("cargo:rerun-if-changed=cpp/third_party/Clipper2/Clipper2Lib/src/clipper.offset.cpp");
+    println!(
+        "cargo:rerun-if-changed=cpp/third_party/Clipper2/Clipper2Lib/src/clipper.rectclip.cpp"
+    );
+    println!(
+        "cargo:rerun-if-changed=cpp/third_party/Clipper2/Clipper2Lib/src/clipper.triangulation.cpp"
+    );
     println!("cargo:rerun-if-env-changed=OCCT_INCLUDE_DIR");
     println!("cargo:rerun-if-env-changed=OCCT_LIB_DIR");
 }
@@ -227,6 +235,9 @@ fn generate_ffi_bindings(out_path: &std::path::Path) {
         .allowlist_function("cg_.*")
         .allowlist_type("Cg.*")
         .allowlist_var("CG_.*")
+        .rustified_enum("CgError")
+        .rustified_enum("CgSurfaceType")
+        .rustified_enum("CgBoolOp")
         .generate();
 
     match result {

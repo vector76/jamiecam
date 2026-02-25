@@ -196,11 +196,18 @@ const char* cg_last_error_message(void) {
 
 /* ── Shape import ────────────────────────────────────────────────────────── */
 
+// OCCT's STEP protocol initialisation is not thread-safe: the global schema
+// registry is lazily populated on the first TransferRoots() call, and
+// concurrent initialisations corrupt the registry, yielding StepSelect_StepType
+// exceptions.  Serialise all STEP reads with this mutex.
+static std::mutex g_step_mutex;
+
 CgShapeId cg_load_step(const char* path) {
     if (!path) {
         set_last_error("cg_load_step: null path");
         return CG_NULL_ID;
     }
+    std::lock_guard<std::mutex> lock(g_step_mutex);
     try {
         STEPControl_Reader reader;
         IFSelect_ReturnStatus status = reader.ReadFile(path);
@@ -234,6 +241,9 @@ CgShapeId cg_load_step(const char* path) {
     }
 }
 
+// NOTE: when implementing cg_load_iges, hold g_step_mutex for the duration of
+// the reader call.  OCCT's IGES schema registry has the same global-init
+// thread-safety issue as the STEP registry — see cg_load_step above.
 CgShapeId cg_load_iges(const char* /*path*/) {
     set_last_error("not implemented");
     return CG_NULL_ID;
@@ -292,13 +302,16 @@ CgBbox cg_shape_bounding_box(CgShapeId id) {
     try {
         const TopoDS_Shape& shape = registry_get_shape(id);
         Bnd_Box box;
-        BRepBndLib::Add(shape, box);
+        BRepBndLib::AddOptimal(shape, box);
         if (box.IsVoid()) {
             set_last_error("cg_shape_bounding_box: empty/void shape");
             return result;
         }
         box.Get(result.xmin, result.ymin, result.zmin,
                 result.xmax, result.ymax, result.zmax);
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_shape_bounding_box: invalid shape ID");
         return result;
     } catch (const Standard_Failure& ex) {
         set_last_error(std::string("BBox exception: ") + ex.GetMessageString());
@@ -370,6 +383,9 @@ CgMeshId cg_shape_tessellate(CgShapeId id, double chord_tol, double angle_tol) {
         normalize_normals(*data);
         return mesh_store_insert(std::move(data));
 
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_shape_tessellate: invalid shape ID");
+        return CG_NULL_ID;
     } catch (const Standard_Failure& ex) {
         set_last_error(std::string("Tessellate exception: ") + ex.GetMessageString());
         return CG_NULL_ID;

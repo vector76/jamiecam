@@ -29,6 +29,7 @@ set(CLIPPER2_SOURCES
     "${CLIPPER2_DIR}/src/clipper.engine.cpp"
     "${CLIPPER2_DIR}/src/clipper.offset.cpp"
     "${CLIPPER2_DIR}/src/clipper.rectclip.cpp"
+    "${CLIPPER2_DIR}/src/clipper.triangulation.cpp"
 )
 
 # ── libcam_geometry static library ───────────────────────────────────────────
@@ -47,11 +48,16 @@ target_include_directories(cam_geometry PUBLIC
 target_link_directories(cam_geometry PUBLIC "${OCCT_LIB_DIR}")
 
 target_link_libraries(cam_geometry PUBLIC
-    TKBRep TKernel TKMath TKGeomBase TKGeom3d
-    TKMesh TKSTL TKXSBase TKSTEP TKSTEPBase TKSTEPAttr TKShHealing
+    TKernel TKMath TKBRep TKGeomBase TKG2d TKG3d TKTopAlgo
+    TKPrim TKBO TKShHealing TKOffset
+    TKMesh TKXSBase TKSTEPBase TKSTEPAttr TKSTEP TKIGES TKSTL TKXCAF
 )
 
-target_compile_options(cam_geometry PRIVATE -Wall -Wextra)
+if(MSVC)
+    target_compile_options(cam_geometry PRIVATE /W4)
+else()
+    target_compile_options(cam_geometry PRIVATE -Wall -Wextra)
+endif()
 
 # ── Optional test binary ──────────────────────────────────────────────────────
 option(BUILD_TESTS "Build C++ geometry tests" OFF)
@@ -70,9 +76,15 @@ if(BUILD_TESTS)
         FIXTURES_DIR="${FIXTURES_DIR}"
     )
     target_link_libraries(test_geometry PRIVATE cam_geometry)
-    target_link_options(test_geometry PRIVATE
-        "-Wl,-rpath,${OCCT_LIB_DIR}"
-    )
+    # Embed the OCCT shared-library directory as an rpath so the test binary
+    # can find the .so/.dylib at runtime without LD_LIBRARY_PATH.
+    # Windows uses static OCCT (vcpkg x64-windows-static) so no rpath needed,
+    # and MSVC's link.exe does not understand -Wl,-rpath.
+    if(NOT WIN32)
+        target_link_options(test_geometry PRIVATE
+            "-Wl,-rpath,${OCCT_LIB_DIR}"
+        )
+    endif()
 
     enable_testing()
     add_test(NAME geometry_tests COMMAND test_geometry)

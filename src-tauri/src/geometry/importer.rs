@@ -49,7 +49,7 @@ pub fn import(path: &Path) -> Result<MeshData, GeometryError> {
             extension: ext.to_string(),
         }),
         None => Err(GeometryError::UnsupportedFormat {
-            extension: String::new(),
+            extension: "(no extension)".to_string(),
         }),
     }
 }
@@ -90,7 +90,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(GeometryError::UnsupportedFormat { extension })
-            if extension.is_empty()
+            if extension == "(no extension)"
         ));
     }
 

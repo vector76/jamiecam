@@ -30,7 +30,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            llvm clang libclang-dev \
+            llvm-16 clang-16 libclang-16-dev \
             libocct-foundation-dev \
             libocct-modeling-data-dev \
             libocct-modeling-algorithms-dev \
@@ -167,7 +167,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            llvm clang libclang-dev \
+            llvm-16 clang-16 libclang-16-dev \
             libocct-foundation-dev \
             libocct-modeling-data-dev \
             libocct-modeling-algorithms-dev \
