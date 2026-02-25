@@ -82,7 +82,7 @@ jobs:
 
       - name: Install OCCT via vcpkg (Windows)
         if: runner.os == 'Windows' && steps.cache-vcpkg.outputs.cache-hit != 'true'
-        run: C:\vcpkg\vcpkg install opencascade:x64-windows-static
+        run: C:\vcpkg\vcpkg install opencascade:x64-windows-static --vcpkg-root C:\vcpkg
         shell: powershell
 
       - name: Set environment variables (Windows)
