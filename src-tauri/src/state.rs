@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::geometry::MeshData;
-use crate::models::{StockDefinition, Tool, WorkCoordinateSystem};
+use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
 
 /// A geometry model that has been loaded into memory.
 #[derive(Debug)]
@@ -47,8 +47,8 @@ pub struct Project {
     pub wcs: Vec<WorkCoordinateSystem>,
     /// Tool library entries.
     pub tools: Vec<Tool>,
-    /// Machining operations (populated in a future phase).
-    pub operations: Vec<()>,
+    /// Machining operations.
+    pub operations: Vec<Operation>,
 }
 
 impl Default for Project {

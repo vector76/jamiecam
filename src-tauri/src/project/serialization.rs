@@ -114,7 +114,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         stock: pf.stock,
         wcs: pf.wcs,
         tools: pf.tools,
-        operations: vec![],
+        operations: pf.operations,
     })
 }
 
@@ -151,7 +151,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         stock: project.stock.clone(),
         wcs: project.wcs.clone(),
         tools: project.tools.clone(),
-        operations: vec![],
+        operations: project.operations.clone(),
     };
 
     // Serialize and write project.json.
@@ -393,6 +393,10 @@ mod tests {
         );
         assert!(project.stock.is_none(), "stock should default to None");
         assert!(project.wcs.is_empty(), "wcs should default to empty vec");
+        assert!(
+            project.operations.is_empty(),
+            "operations should default to empty vec"
+        );
         assert_eq!(project.name, "Phase0 Project");
     }
 
@@ -456,5 +460,80 @@ mod tests {
         assert_eq!(loaded.wcs.len(), 1);
         assert_eq!(loaded.wcs[0].id, wcs_id);
         assert_eq!(loaded.wcs[0].name, "G54");
+    }
+
+    #[test]
+    fn round_trip_project_with_operations() {
+        use crate::models::operation::{
+            CompensationSide, DrillParams, OperationParams, PocketParams, ProfileParams,
+        };
+        use crate::models::Operation;
+
+        let tool_id = Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap();
+
+        let op_profile = Operation {
+            id: Uuid::parse_str("aaaa0000-0000-0000-0000-000000000001").unwrap(),
+            name: "Outer Profile".to_string(),
+            enabled: true,
+            tool_id,
+            params: OperationParams::Profile(ProfileParams {
+                depth: 10.0,
+                stepdown: 2.5,
+                compensation_side: CompensationSide::Left,
+            }),
+        };
+        let op_pocket = Operation {
+            id: Uuid::parse_str("bbbb0000-0000-0000-0000-000000000002").unwrap(),
+            name: "Rough Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 15.0,
+                stepdown: 3.0,
+                stepover_percent: 45.0,
+            }),
+        };
+        let op_drill = Operation {
+            id: Uuid::parse_str("cccc0000-0000-0000-0000-000000000003").unwrap(),
+            name: "Drill Holes".to_string(),
+            enabled: false,
+            tool_id,
+            params: OperationParams::Drill(DrillParams {
+                depth: 20.0,
+                peck_depth: Some(5.0),
+            }),
+        };
+
+        let mut project = Project::default();
+        project.name = "Operations Round-Trip Test".to_string();
+        project.created_at = "2026-01-01T00:00:00Z".to_string();
+        project.modified_at = "2026-01-02T00:00:00Z".to_string();
+        project.operations.push(op_profile.clone());
+        project.operations.push(op_pocket.clone());
+        project.operations.push(op_drill.clone());
+
+        let tmp = std::env::temp_dir().join("jcam_test_round_trip_operations.jcam");
+        save(&project, &tmp).expect("save should succeed");
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(loaded.operations.len(), 3, "all 3 operations must survive");
+
+        // Verify order and identity.
+        assert_eq!(loaded.operations[0].id, op_profile.id);
+        assert_eq!(loaded.operations[0].name, "Outer Profile");
+        assert_eq!(loaded.operations[0].params, op_profile.params);
+
+        assert_eq!(loaded.operations[1].id, op_pocket.id);
+        assert_eq!(loaded.operations[1].name, "Rough Pocket");
+        assert_eq!(loaded.operations[1].params, op_pocket.params);
+
+        assert_eq!(loaded.operations[2].id, op_drill.id);
+        assert_eq!(loaded.operations[2].name, "Drill Holes");
+        assert!(
+            !loaded.operations[2].enabled,
+            "enabled=false must round-trip"
+        );
+        assert_eq!(loaded.operations[2].params, op_drill.params);
     }
 }

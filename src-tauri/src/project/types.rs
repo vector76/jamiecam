@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{StockDefinition, Tool, WorkCoordinateSystem};
+use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
 
 /// Core project metadata stored under the `"project"` key in `project.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,7 +61,7 @@ pub struct ProjectFile {
     /// Tool library.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<Tool>,
-    /// Machining operations (populated in a future phase).
+    /// Machining operations.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub operations: Vec<serde_json::Value>,
+    pub operations: Vec<Operation>,
 }
