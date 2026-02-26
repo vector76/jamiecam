@@ -59,6 +59,10 @@ pub fn run() {
             commands::file::load_project,
             commands::file::new_project,
             commands::project::get_project_snapshot,
+            commands::tools::add_tool,
+            commands::tools::edit_tool,
+            commands::tools::delete_tool,
+            commands::tools::list_tools,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
