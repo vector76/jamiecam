@@ -1,18 +1,22 @@
 /**
  * AppShell — root layout component.
  *
- * Places the Toolbar across the top and the 3-D Viewport in the remaining
- * space.  Phase 0: no side panels.
+ * Places the Toolbar across the top, the 3-D Viewport in the main area,
+ * and the OperationListPanel as a fixed-width sidebar on the right.
  */
 
 import { Toolbar } from '../toolbar/Toolbar'
 import { Viewport } from '../../viewport/Viewport'
+import { OperationListPanel } from '../operations/OperationListPanel'
 
 export function AppShell() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <Toolbar />
-      <Viewport style={{ flex: 1 }} />
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <Viewport style={{ flex: 1 }} />
+        <OperationListPanel />
+      </div>
     </div>
   )
 }
