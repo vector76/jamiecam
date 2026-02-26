@@ -113,7 +113,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         source_model,
         stock: None,
         wcs: None,
-        tools: vec![],
+        tools: pf.tools,
         operations: vec![],
     })
 }
@@ -150,7 +150,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         source_model: source_model_ref.clone(),
         stock: None,
         wcs: vec![],
-        tools: vec![],
+        tools: project.tools.clone(),
         operations: vec![],
     };
 
@@ -199,7 +199,22 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{Tool, ToolType};
     use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn make_tool() -> Tool {
+        Tool {
+            id: Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap(),
+            name: "10mm 4F Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: Some(15000),
+            default_feed_rate: Some(2400.0),
+        }
+    }
 
     fn make_project_with_model() -> Project {
         let mut p = Project::default();
@@ -316,5 +331,66 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn round_trip_project_with_tool() {
+        let mut project = Project::default();
+        project.name = "Tool Round-Trip Test".to_string();
+        project.created_at = "2026-01-01T00:00:00Z".to_string();
+        project.modified_at = "2026-01-02T00:00:00Z".to_string();
+        let tool = make_tool();
+        project.tools.push(tool.clone());
+
+        let tmp = std::env::temp_dir().join("jcam_test_round_trip_tool.jcam");
+        save(&project, &tmp).expect("save should succeed");
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(loaded.tools.len(), 1);
+        let rt = &loaded.tools[0];
+        assert_eq!(rt.id, tool.id);
+        assert_eq!(rt.name, tool.name);
+        assert_eq!(rt.tool_type, tool.tool_type);
+        assert_eq!(rt.material, tool.material);
+        assert_eq!(rt.diameter, tool.diameter);
+        assert_eq!(rt.flute_count, tool.flute_count);
+        assert_eq!(rt.default_spindle_speed, tool.default_spindle_speed);
+        assert_eq!(rt.default_feed_rate, tool.default_feed_rate);
+    }
+
+    #[test]
+    fn load_phase0_schema_without_tools_field_succeeds() {
+        // A Phase 0 .jcam archive that has no "tools" key in project.json.
+        // Because ProjectFile uses #[serde(default)] the field should default
+        // to an empty vec and load without error.
+        let tmp = std::env::temp_dir().join("jcam_test_phase0_compat.jcam");
+
+        {
+            let file = std::fs::File::create(&tmp).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("project.json", opts).unwrap();
+            let json = r#"{
+                "schema_version": 1,
+                "app_version": "0.1.0",
+                "created_at": "2026-01-01T00:00:00Z",
+                "modified_at": "2026-01-01T00:00:00Z",
+                "project": { "name": "Phase0 Project", "description": "", "units": "mm" }
+            }"#;
+            zip.write_all(json.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+
+        let result = load(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+
+        let project = result.expect("Phase 0 schema without tools should load successfully");
+        assert!(
+            project.tools.is_empty(),
+            "tools should default to empty vec"
+        );
+        assert_eq!(project.name, "Phase0 Project");
     }
 }

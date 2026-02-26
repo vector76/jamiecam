@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::geometry::MeshData;
+use crate::models::Tool;
 
 /// A geometry model that has been loaded into memory.
 #[derive(Debug)]
@@ -39,13 +40,13 @@ pub struct Project {
     pub modified_at: String,
     /// The geometry model currently loaded, if any.
     pub source_model: Option<LoadedModel>,
-    // ── Phase 0 scaffolding — types will be replaced in later beads ──────────
+    // ── Scaffolding — remaining types will be replaced in later beads ────────
     /// Stock solid definition (populated in a future phase).
     pub stock: Option<()>,
     /// Work coordinate system (populated in a future phase).
     pub wcs: Option<()>,
-    /// Tool library entries (populated in a future phase).
-    pub tools: Vec<()>,
+    /// Tool library entries.
+    pub tools: Vec<Tool>,
     /// Machining operations (populated in a future phase).
     pub operations: Vec<()>,
 }

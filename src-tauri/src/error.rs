@@ -41,6 +41,10 @@ pub enum AppError {
     /// The file extension is not supported by any importer.
     #[error("{0}")]
     UnsupportedFormat(String),
+
+    /// A requested resource (tool, operation, etc.) was not found.
+    #[error("{0}")]
+    NotFound(String),
 }
 
 impl From<GeometryError> for AppError {
@@ -121,6 +125,14 @@ mod tests {
         assert!(matches!(app_err, AppError::Io(_)));
         let value = serde_json::to_value(&app_err).expect("serialize");
         assert_eq!(value["kind"], "Io");
+    }
+
+    #[test]
+    fn not_found_error_serializes_to_kind_message() {
+        let err = AppError::NotFound("tool abc123 not found".to_string());
+        let value = serde_json::to_value(&err).expect("serialize AppError::NotFound");
+        assert_eq!(value["kind"], "NotFound");
+        assert_eq!(value["message"], "tool abc123 not found");
     }
 
     #[test]

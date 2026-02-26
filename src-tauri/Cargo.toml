@@ -38,6 +38,7 @@ dirs = "5"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [features]
 # this feature is used for production builds or when `devtools` feature is not
