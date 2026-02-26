@@ -11,6 +11,10 @@ const SNAPSHOT: ProjectSnapshot = {
   modelChecksum: 'abc123def456',
   projectName: 'Test Project',
   modifiedAt: '2026-01-01T00:00:00Z',
+  tools: [],
+  stock: null,
+  wcs: [],
+  operations: [],
 }
 
 beforeEach(() => {

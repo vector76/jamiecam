@@ -38,8 +38,8 @@ const api = await import('../../api/file')
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2] }
-const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '' }
-const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '' }
+const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
+const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
