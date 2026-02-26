@@ -1,4 +1,4 @@
-# JamieCam environment check script — Windows (PowerShell)
+# JamieCam environment check script - Windows (PowerShell)
 #
 # Verifies that all required tools and environment variables are present
 # before attempting a build.  Exits with a non-zero code if any check fails.
@@ -6,22 +6,21 @@
 # Usage (from repo root, in PowerShell):
 #   .\scripts\check-env.ps1
 #
-# See docs/build-and-dev-setup.md for installation instructions.
+# See docs/windows-build-setup.md for installation instructions.
 
 #Requires -Version 5.1
 [CmdletBinding()]
 param()
 
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 
-# ── Minimum required versions ─────────────────────────────────────────────────
+# -- Minimum required versions -------------------------------------------------
 $MIN_RUSTC_VER   = [Version]'1.77.0'
 $MIN_NODE_MAJOR  = 20
 $MIN_PNPM_MAJOR  = 9
 $MIN_CMAKE_VER   = [Version]'3.20.0'
 
-# ── Result counters ───────────────────────────────────────────────────────────
+# -- Result counters -----------------------------------------------------------
 $script:PassCount = 0
 $script:FailCount = 0
 
@@ -35,7 +34,7 @@ function Write-Fail([string]$Message) {
     $script:FailCount++
 }
 
-# ── Version helpers ───────────────────────────────────────────────────────────
+# -- Version helpers -----------------------------------------------------------
 
 function Get-VersionFromOutput([string]$Output) {
     # Extracts the first x.y.z version string from a command's output
@@ -43,12 +42,12 @@ function Get-VersionFromOutput([string]$Output) {
     return $null
 }
 
-# ── Individual checks ─────────────────────────────────────────────────────────
+# -- Individual checks ---------------------------------------------------------
 
 function Test-Rustc {
     $cmd = Get-Command rustc -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        Write-Fail "rustc not found — install Rust: https://rustup.rs"
+        Write-Fail "rustc not found - install Rust: https://rustup.rs"
         return
     }
     $output = & rustc --version 2>&1
@@ -56,14 +55,14 @@ function Test-Rustc {
     if ($ver -ge $MIN_RUSTC_VER) {
         Write-Pass "rustc $ver (>= $MIN_RUSTC_VER)"
     } else {
-        Write-Fail "rustc $ver is below minimum $MIN_RUSTC_VER — run: rustup update stable"
+        Write-Fail "rustc $ver is below minimum $MIN_RUSTC_VER - run: rustup update stable"
     }
 }
 
 function Test-Cargo {
     $cmd = Get-Command cargo -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        Write-Fail "cargo not found — install Rust: https://rustup.rs"
+        Write-Fail "cargo not found - install Rust: https://rustup.rs"
         return
     }
     $output = & cargo --version 2>&1
@@ -74,7 +73,7 @@ function Test-Cargo {
 function Test-Node {
     $cmd = Get-Command node -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        Write-Fail "node not found — install Node.js $MIN_NODE_MAJOR LTS: https://nodejs.org"
+        Write-Fail "node not found - install Node.js $MIN_NODE_MAJOR LTS: https://nodejs.org"
         return
     }
     $output = & node --version 2>&1
@@ -82,14 +81,14 @@ function Test-Node {
     if ($ver -and $ver.Major -ge $MIN_NODE_MAJOR) {
         Write-Pass "node $ver (>= $MIN_NODE_MAJOR)"
     } else {
-        Write-Fail "node $ver is below minimum v$MIN_NODE_MAJOR — update Node.js"
+        Write-Fail "node $ver is below minimum v$MIN_NODE_MAJOR - update Node.js"
     }
 }
 
 function Test-Pnpm {
     $cmd = Get-Command pnpm -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        Write-Fail "pnpm not found — run: npm install -g pnpm"
+        Write-Fail "pnpm not found - run: npm install -g pnpm"
         return
     }
     $output = & pnpm --version 2>&1
@@ -97,14 +96,14 @@ function Test-Pnpm {
     if ($ver -and $ver.Major -ge $MIN_PNPM_MAJOR) {
         Write-Pass "pnpm $ver (>= $MIN_PNPM_MAJOR)"
     } else {
-        Write-Fail "pnpm $ver is below minimum $MIN_PNPM_MAJOR — run: npm install -g pnpm"
+        Write-Fail "pnpm $ver is below minimum $MIN_PNPM_MAJOR - run: npm install -g pnpm"
     }
 }
 
 function Test-Cmake {
     $cmd = Get-Command cmake -ErrorAction SilentlyContinue
     if (-not $cmd) {
-        Write-Fail "cmake not found — install cmake >= $MIN_CMAKE_VER"
+        Write-Fail "cmake not found - install cmake >= $MIN_CMAKE_VER"
         return
     }
     $output = & cmake --version 2>&1
@@ -112,14 +111,14 @@ function Test-Cmake {
     if ($ver -ge $MIN_CMAKE_VER) {
         Write-Pass "cmake $ver (>= $MIN_CMAKE_VER)"
     } else {
-        Write-Fail "cmake $ver is below minimum $MIN_CMAKE_VER — upgrade cmake"
+        Write-Fail "cmake $ver is below minimum $MIN_CMAKE_VER - upgrade cmake"
     }
 }
 
 function Test-OcctInclude {
-    $dir = $env:OCCT_INCLUDE_DIR
-    if ([string]::IsNullOrEmpty($dir)) {
-        Write-Fail "OCCT_INCLUDE_DIR is not set — see docs/build-and-dev-setup.md"
+    $dir = "$env:OCCT_INCLUDE_DIR"
+    if (-not $dir) {
+        Write-Fail "OCCT_INCLUDE_DIR is not set - see docs/windows-build-setup.md"
         return
     }
     $header = Join-Path $dir 'Standard.hxx'
@@ -131,9 +130,9 @@ function Test-OcctInclude {
 }
 
 function Test-OcctLib {
-    $dir = $env:OCCT_LIB_DIR
-    if ([string]::IsNullOrEmpty($dir)) {
-        Write-Fail "OCCT_LIB_DIR is not set — see docs/build-and-dev-setup.md"
+    $dir = "$env:OCCT_LIB_DIR"
+    if (-not $dir) {
+        Write-Fail "OCCT_LIB_DIR is not set - see docs/windows-build-setup.md"
         return
     }
     $lib = Get-ChildItem -Path $dir -Filter 'TKBRep.lib' -ErrorAction SilentlyContinue
@@ -145,9 +144,9 @@ function Test-OcctLib {
 }
 
 function Test-Libclang {
-    $dir = $env:LIBCLANG_PATH
-    if ([string]::IsNullOrEmpty($dir)) {
-        Write-Fail "LIBCLANG_PATH is not set — see docs/build-and-dev-setup.md"
+    $dir = "$env:LIBCLANG_PATH"
+    if (-not $dir) {
+        Write-Fail "LIBCLANG_PATH is not set - see docs/windows-build-setup.md"
         return
     }
     $lib = Get-ChildItem -Path $dir -Filter 'libclang*' -ErrorAction SilentlyContinue
@@ -158,7 +157,7 @@ function Test-Libclang {
     }
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 Write-Host "JamieCam environment check"
 Write-Host "=========================="
 Write-Host ""
@@ -177,9 +176,9 @@ Write-Host ""
 Write-Host "Results: $($script:PassCount) passed, $($script:FailCount) failed"
 
 if ($script:FailCount -gt 0) {
-    Write-Host "Environment check FAILED — fix the issues above before building." -ForegroundColor Red
-    Write-Host "See docs/build-and-dev-setup.md for setup instructions."
+    Write-Host "Environment check FAILED - fix the issues above before building." -ForegroundColor Red
+    Write-Host "See docs/windows-build-setup.md for setup instructions."
     exit 1
 } else {
-    Write-Host "Environment check PASSED — ready to build!" -ForegroundColor Green
+    Write-Host "Environment check PASSED - ready to build!" -ForegroundColor Green
 }
