@@ -4,6 +4,13 @@ project(cam_geometry CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Windows/vcpkg: OCCT static libs are built with /MT (static CRT).
+# Set this before any add_library/add_executable so it applies to all targets.
+# CMAKE_MSVC_RUNTIME_LIBRARY requires CMake 3.15+.
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # ── OCCT paths ────────────────────────────────────────────────────────────────
 # Pass via -DOCCT_INCLUDE_DIR=... and -DOCCT_LIB_DIR=... on the cmake command
 # line, or set OCCT_INCLUDE_DIR / OCCT_LIB_DIR environment variables.
@@ -57,7 +64,7 @@ else()
 endif()
 
 target_link_libraries(cam_geometry PUBLIC
-    TKernel TKMath TKBRep TKGeomBase TKG2d TKG3d TKTopAlgo
+    TKernel TKMath TKG2d TKG3d TKGeomBase TKGeomAlgo TKBRep TKTopAlgo
     TKPrim TKBO TKShHealing TKOffset
     TKMesh TKXSBase ${OCCT_STEP_LIBS} TKXCAF
 )

@@ -75,7 +75,6 @@ fn has_occt_lib(dir: &std::path::Path) -> bool {
         "libTKernel.so",
         "libTKernel.dylib",
         "TKernel.lib",
-        "TKernel.dll",
     ]
     .iter()
     .any(|name| dir.join(name).exists())
@@ -164,10 +163,10 @@ fn compile_cpp(occt_include: &std::path::Path) {
 
     // Windows: CRT linkage must match the vcpkg x64-windows-static OCCT build.
     // vcpkg's x64-windows-static triplet compiles with /MT (static CRT).
-    // Rust's MSVC target also defaults to static CRT via the `+crt-static`
-    // target feature, so this keeps them in sync.
+    // Use static_crt() rather than .flag("/MT") to avoid the D9025 warning
+    // that arises when cc's default /MD flag is later overridden by /MT.
     #[cfg(target_os = "windows")]
-    build.flag("/MT");
+    build.static_crt(true);
 
     build.compile("cam_geometry");
 }
@@ -175,13 +174,16 @@ fn compile_cpp(occt_include: &std::path::Path) {
 // ── OCCT link directives ──────────────────────────────────────────────────────
 
 // Libraries present in all supported OCCT versions (7.6.x – 7.9.x).
+// Note: TKXCAF is intentionally omitted here; it is appended after the
+// STEP/DE libs in link_occt() because TKDESTEP/TKDESTL depend on it.
 const OCCT_LIBS_COMMON: &[&str] = &[
     "TKernel",
     "TKMath",
-    "TKBRep",
-    "TKGeomBase",
     "TKG2d",
     "TKG3d",
+    "TKGeomBase",
+    "TKGeomAlgo",
+    "TKBRep",
     "TKTopAlgo",
     "TKPrim",
     "TKBO",
@@ -189,7 +191,6 @@ const OCCT_LIBS_COMMON: &[&str] = &[
     "TKOffset",
     "TKMesh",
     "TKXSBase",
-    "TKXCAF",
 ];
 
 // STEP/IGES/STL library names for OCCT < 7.8 (e.g. Ubuntu 24.04 ships 7.6.3).
@@ -240,6 +241,8 @@ fn link_occt(occt_lib: &std::path::Path) {
     for lib in step_libs {
         println!("cargo:rustc-link-lib={link_kind}={lib}");
     }
+    // The STEP/DE libs depend on TKXCAF, so TKXCAF must come after them.
+    println!("cargo:rustc-link-lib={link_kind}=TKXCAF");
 
     #[cfg(target_os = "windows")]
     for lib in WINDOWS_SYSTEM_LIBS {

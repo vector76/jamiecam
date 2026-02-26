@@ -128,17 +128,17 @@ jobs:
         run: cargo build --release --manifest-path src-tauri/Cargo.toml
 
       - name: Test Rust backend
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+        run: cargo test --release --manifest-path src-tauri/Cargo.toml
 
       # ── C++ wrapper: build and test ─────────────────────────────────────────
       - name: Configure C++ wrapper
         run: cmake -B src-tauri/cpp/build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON src-tauri/cpp
 
       - name: Build C++ wrapper
-        run: cmake --build src-tauri/cpp/build
+        run: cmake --build src-tauri/cpp/build --config Release
 
       - name: Test C++ wrapper
-        run: ctest --test-dir src-tauri/cpp/build --output-on-failure
+        run: ctest --test-dir src-tauri/cpp/build -C Release --output-on-failure
 
       # ── Frontend: install and build ─────────────────────────────────────────
       - name: Install frontend dependencies
