@@ -67,6 +67,11 @@ pub fn run() {
             commands::stock::get_stock,
             commands::stock::set_wcs,
             commands::stock::get_wcs,
+            commands::operations::add_operation,
+            commands::operations::edit_operation,
+            commands::operations::delete_operation,
+            commands::operations::reorder_operations,
+            commands::operations::list_operations,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
