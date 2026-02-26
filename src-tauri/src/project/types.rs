@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::Tool;
+use crate::models::{StockDefinition, Tool, WorkCoordinateSystem};
 
 /// Core project metadata stored under the `"project"` key in `project.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,12 +52,12 @@ pub struct ProjectFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_model: Option<SourceModelRef>,
     // ── Scaffolding — remaining types replaced in later phases ───────────────
-    /// Stock solid definition (populated in a future phase).
+    /// Stock solid definition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stock: Option<serde_json::Value>,
-    /// Work coordinate systems (populated in a future phase).
+    pub stock: Option<StockDefinition>,
+    /// Work coordinate systems.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub wcs: Vec<serde_json::Value>,
+    pub wcs: Vec<WorkCoordinateSystem>,
     /// Tool library.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<Tool>,

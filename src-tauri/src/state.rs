@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use crate::geometry::MeshData;
-use crate::models::Tool;
+use crate::models::{StockDefinition, Tool, WorkCoordinateSystem};
 
 /// A geometry model that has been loaded into memory.
 #[derive(Debug)]
@@ -41,10 +41,10 @@ pub struct Project {
     /// The geometry model currently loaded, if any.
     pub source_model: Option<LoadedModel>,
     // ── Scaffolding — remaining types will be replaced in later beads ────────
-    /// Stock solid definition (populated in a future phase).
-    pub stock: Option<()>,
-    /// Work coordinate system (populated in a future phase).
-    pub wcs: Option<()>,
+    /// Stock solid definition.
+    pub stock: Option<StockDefinition>,
+    /// Work coordinate systems.
+    pub wcs: Vec<WorkCoordinateSystem>,
     /// Tool library entries.
     pub tools: Vec<Tool>,
     /// Machining operations (populated in a future phase).
@@ -62,7 +62,7 @@ impl Default for Project {
             modified_at: String::new(),
             source_model: None,
             stock: None,
-            wcs: None,
+            wcs: Vec::new(),
             tools: Vec::new(),
             operations: Vec::new(),
         }
@@ -134,7 +134,7 @@ mod tests {
     fn project_default_scaffolding_fields_are_empty() {
         let project = Project::default();
         assert!(project.stock.is_none());
-        assert!(project.wcs.is_none());
+        assert!(project.wcs.is_empty());
         assert!(project.tools.is_empty());
         assert!(project.operations.is_empty());
     }

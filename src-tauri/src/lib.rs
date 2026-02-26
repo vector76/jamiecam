@@ -63,6 +63,10 @@ pub fn run() {
             commands::tools::edit_tool,
             commands::tools::delete_tool,
             commands::tools::list_tools,
+            commands::stock::set_stock,
+            commands::stock::get_stock,
+            commands::stock::set_wcs,
+            commands::stock::get_wcs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

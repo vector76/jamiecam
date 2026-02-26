@@ -111,8 +111,8 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         created_at: pf.created_at,
         modified_at: pf.modified_at,
         source_model,
-        stock: None,
-        wcs: None,
+        stock: pf.stock,
+        wcs: pf.wcs,
         tools: pf.tools,
         operations: vec![],
     })
@@ -148,8 +148,8 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
             units: project.units.clone(),
         },
         source_model: source_model_ref.clone(),
-        stock: None,
-        wcs: vec![],
+        stock: project.stock.clone(),
+        wcs: project.wcs.clone(),
         tools: project.tools.clone(),
         operations: vec![],
     };
@@ -391,6 +391,70 @@ mod tests {
             project.tools.is_empty(),
             "tools should default to empty vec"
         );
+        assert!(project.stock.is_none(), "stock should default to None");
+        assert!(project.wcs.is_empty(), "wcs should default to empty vec");
         assert_eq!(project.name, "Phase0 Project");
+    }
+
+    #[test]
+    fn round_trip_project_with_stock_and_wcs() {
+        use crate::models::stock::{BoxDimensions, Vec3};
+        use crate::models::wcs::{Vec3 as WcsVec3, WorkCoordinateSystem};
+        use crate::models::StockDefinition;
+
+        let mut project = Project::default();
+        project.name = "Stock/WCS Round-Trip Test".to_string();
+        project.created_at = "2026-01-01T00:00:00Z".to_string();
+        project.modified_at = "2026-01-02T00:00:00Z".to_string();
+
+        project.stock = Some(StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: -5.0,
+                y: -5.0,
+                z: -2.0,
+            },
+            width: 120.0,
+            depth: 80.0,
+            height: 30.0,
+        }));
+
+        let wcs_id = Uuid::parse_str("3f8a2b00-0000-0000-0000-000000000001").unwrap();
+        project.wcs.push(WorkCoordinateSystem {
+            id: wcs_id,
+            name: "G54".to_string(),
+            origin: WcsVec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            x_axis: WcsVec3 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            z_axis: WcsVec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+            },
+        });
+
+        let tmp = std::env::temp_dir().join("jcam_test_round_trip_stock_wcs.jcam");
+        save(&project, &tmp).expect("save should succeed");
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        // Stock round-trip
+        let stock = loaded.stock.expect("stock should survive round-trip");
+        let StockDefinition::Box(b) = stock;
+        assert_eq!(b.width, 120.0);
+        assert_eq!(b.depth, 80.0);
+        assert_eq!(b.height, 30.0);
+        assert_eq!(b.origin.x, -5.0);
+
+        // WCS round-trip
+        assert_eq!(loaded.wcs.len(), 1);
+        assert_eq!(loaded.wcs[0].id, wcs_id);
+        assert_eq!(loaded.wcs[0].name, "G54");
     }
 }
