@@ -2,9 +2,8 @@
  * Typed wrappers around Tauri's invoke() for operation CRUD IPC commands.
  */
 
-import { invoke } from '@tauri-apps/api/core'
 import type { Operation, OperationInput } from './types'
-import { toAppError } from './errors'
+import { typedInvoke } from './errors'
 
 /**
  * Add a new operation to the project.
@@ -16,11 +15,7 @@ import { toAppError } from './errors'
  * @throws AppError if the tool ID is not found or input is invalid.
  */
 export async function addOperation(input: OperationInput): Promise<Operation> {
-  try {
-    return await invoke<Operation>('add_operation', { input })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Operation>('add_operation', { input })
 }
 
 /**
@@ -32,11 +27,7 @@ export async function addOperation(input: OperationInput): Promise<Operation> {
  * @throws AppError if the operation or tool ID is not found.
  */
 export async function editOperation(id: string, input: OperationInput): Promise<Operation> {
-  try {
-    return await invoke<Operation>('edit_operation', { id, input })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Operation>('edit_operation', { id, input })
 }
 
 /**
@@ -46,11 +37,7 @@ export async function editOperation(id: string, input: OperationInput): Promise<
  * @throws AppError if the operation ID is not found.
  */
 export async function deleteOperation(id: string): Promise<void> {
-  try {
-    await invoke<void>('delete_operation', { id })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('delete_operation', { id })
 }
 
 /**
@@ -63,11 +50,7 @@ export async function deleteOperation(id: string): Promise<void> {
  * @throws AppError if the ID count or any ID does not match the current list.
  */
 export async function reorderOperations(ids: string[]): Promise<void> {
-  try {
-    await invoke<void>('reorder_operations', { ids })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('reorder_operations', { ids })
 }
 
 /**
@@ -77,9 +60,5 @@ export async function reorderOperations(ids: string[]): Promise<void> {
  * @throws AppError on unexpected backend failure.
  */
 export async function listOperations(): Promise<Operation[]> {
-  try {
-    return await invoke<Operation[]>('list_operations')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Operation[]>('list_operations')
 }

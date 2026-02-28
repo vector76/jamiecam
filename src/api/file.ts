@@ -7,9 +7,8 @@
  *    callers always receive a typed error object.
  */
 
-import { invoke } from '@tauri-apps/api/core'
 import type { MeshData, ProjectSnapshot } from './types'
-import { toAppError } from './errors'
+import { typedInvoke } from './errors'
 
 /**
  * Open a 3D model file, tessellate it, and store it in the active project.
@@ -19,11 +18,7 @@ import { toAppError } from './errors'
  * @throws AppError on import failure or if the path is not found.
  */
 export async function openModel(path: string): Promise<MeshData> {
-  try {
-    return await invoke<MeshData>('open_model', { path })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<MeshData>('open_model', { path })
 }
 
 /**
@@ -33,11 +28,7 @@ export async function openModel(path: string): Promise<MeshData> {
  * @throws AppError on unexpected backend failure.
  */
 export async function newProject(): Promise<ProjectSnapshot> {
-  try {
-    return await invoke<ProjectSnapshot>('new_project')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<ProjectSnapshot>('new_project')
 }
 
 /**
@@ -47,11 +38,7 @@ export async function newProject(): Promise<ProjectSnapshot> {
  * @throws AppError if the file cannot be written.
  */
 export async function saveProject(path: string): Promise<void> {
-  try {
-    await invoke<void>('save_project', { path })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('save_project', { path })
 }
 
 /**
@@ -62,11 +49,7 @@ export async function saveProject(path: string): Promise<void> {
  * @throws AppError if the file is missing or has an unsupported schema version.
  */
 export async function loadProject(path: string): Promise<ProjectSnapshot> {
-  try {
-    return await invoke<ProjectSnapshot>('load_project', { path })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<ProjectSnapshot>('load_project', { path })
 }
 
 /**
@@ -78,9 +61,5 @@ export async function loadProject(path: string): Promise<ProjectSnapshot> {
  * @throws AppError on unexpected backend failure.
  */
 export async function getProjectSnapshot(): Promise<ProjectSnapshot> {
-  try {
-    return await invoke<ProjectSnapshot>('get_project_snapshot')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<ProjectSnapshot>('get_project_snapshot')
 }

@@ -13,6 +13,8 @@ use crate::error::AppError;
 use crate::models::{Tool, ToolType};
 use crate::state::{AppState, Project};
 
+use super::parse_entity_id;
+
 // ── Input type ────────────────────────────────────────────────────────────────
 
 /// Fields required to create or replace a tool (ID is excluded; it is either
@@ -69,8 +71,7 @@ pub(crate) fn edit_tool_inner(
     input: ToolInput,
     project_lock: &RwLock<Project>,
 ) -> Result<Tool, AppError> {
-    let uuid = Uuid::parse_str(id)
-        .map_err(|_| AppError::NotFound(format!("tool id '{id}' is not a valid UUID")))?;
+    let uuid = parse_entity_id(id, "tool")?;
 
     let mut project = project_lock
         .write()
@@ -100,8 +101,7 @@ pub(crate) fn edit_tool_inner(
 /// Removes the tool with the given `id`. Returns [`AppError::NotFound`] if no
 /// tool with that ID exists.
 pub(crate) fn delete_tool_inner(id: &str, project_lock: &RwLock<Project>) -> Result<(), AppError> {
-    let uuid = Uuid::parse_str(id)
-        .map_err(|_| AppError::NotFound(format!("tool id '{id}' is not a valid UUID")))?;
+    let uuid = parse_entity_id(id, "tool")?;
 
     let mut project = project_lock
         .write()

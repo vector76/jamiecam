@@ -2,9 +2,8 @@
  * Typed wrappers around Tauri's invoke() for tool CRUD IPC commands.
  */
 
-import { invoke } from '@tauri-apps/api/core'
 import type { Tool, ToolInput } from './types'
-import { toAppError } from './errors'
+import { typedInvoke } from './errors'
 
 /**
  * Add a new tool to the project tool library.
@@ -14,11 +13,7 @@ import { toAppError } from './errors'
  * @throws AppError on validation failure or backend error.
  */
 export async function addTool(input: ToolInput): Promise<Tool> {
-  try {
-    return await invoke<Tool>('add_tool', { input })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Tool>('add_tool', { input })
 }
 
 /**
@@ -30,11 +25,7 @@ export async function addTool(input: ToolInput): Promise<Tool> {
  * @throws AppError if the tool ID is not found.
  */
 export async function editTool(id: string, input: ToolInput): Promise<Tool> {
-  try {
-    return await invoke<Tool>('edit_tool', { id, input })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Tool>('edit_tool', { id, input })
 }
 
 /**
@@ -44,11 +35,7 @@ export async function editTool(id: string, input: ToolInput): Promise<Tool> {
  * @throws AppError if the tool ID is not found.
  */
 export async function deleteTool(id: string): Promise<void> {
-  try {
-    await invoke<void>('delete_tool', { id })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('delete_tool', { id })
 }
 
 /**
@@ -58,9 +45,5 @@ export async function deleteTool(id: string): Promise<void> {
  * @throws AppError on unexpected backend failure.
  */
 export async function listTools(): Promise<Tool[]> {
-  try {
-    return await invoke<Tool[]>('list_tools')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<Tool[]>('list_tools')
 }

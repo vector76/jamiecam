@@ -19,6 +19,8 @@ use crate::models::operation::OperationParams;
 use crate::models::Operation;
 use crate::state::{AppState, Project};
 
+use super::parse_entity_id;
+
 // ── Input type ────────────────────────────────────────────────────────────────
 
 /// Fields required to create or replace an operation (ID is excluded; it is
@@ -51,9 +53,7 @@ pub(crate) fn add_operation_inner(
     input: OperationInput,
     project_lock: &RwLock<Project>,
 ) -> Result<Operation, AppError> {
-    let tool_uuid = Uuid::parse_str(&input.tool_id).map_err(|_| {
-        AppError::NotFound(format!("tool id '{}' is not a valid UUID", input.tool_id))
-    })?;
+    let tool_uuid = parse_entity_id(&input.tool_id, "tool")?;
 
     let mut project = project_lock
         .write()
@@ -89,12 +89,9 @@ pub(crate) fn edit_operation_inner(
     input: OperationInput,
     project_lock: &RwLock<Project>,
 ) -> Result<Operation, AppError> {
-    let op_uuid = Uuid::parse_str(id)
-        .map_err(|_| AppError::NotFound(format!("operation id '{id}' is not a valid UUID")))?;
+    let op_uuid = parse_entity_id(id, "operation")?;
 
-    let tool_uuid = Uuid::parse_str(&input.tool_id).map_err(|_| {
-        AppError::NotFound(format!("tool id '{}' is not a valid UUID", input.tool_id))
-    })?;
+    let tool_uuid = parse_entity_id(&input.tool_id, "tool")?;
 
     let mut project = project_lock
         .write()
@@ -133,8 +130,7 @@ pub(crate) fn delete_operation_inner(
     id: &str,
     project_lock: &RwLock<Project>,
 ) -> Result<(), AppError> {
-    let uuid = Uuid::parse_str(id)
-        .map_err(|_| AppError::NotFound(format!("operation id '{id}' is not a valid UUID")))?;
+    let uuid = parse_entity_id(id, "operation")?;
 
     let mut project = project_lock
         .write()
@@ -166,10 +162,7 @@ pub(crate) fn reorder_operations_inner(
 ) -> Result<(), AppError> {
     let uuids: Vec<Uuid> = ids
         .iter()
-        .map(|s| {
-            Uuid::parse_str(s)
-                .map_err(|_| AppError::NotFound(format!("operation id '{s}' is not a valid UUID")))
-        })
+        .map(|s| parse_entity_id(s, "operation"))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Detect duplicates before acquiring the lock.

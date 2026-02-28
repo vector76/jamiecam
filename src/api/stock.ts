@@ -2,9 +2,8 @@
  * Typed wrappers around Tauri's invoke() for stock and WCS IPC commands.
  */
 
-import { invoke } from '@tauri-apps/api/core'
 import type { StockDefinition, WorkCoordinateSystem } from './types'
-import { toAppError } from './errors'
+import { typedInvoke } from './errors'
 
 /**
  * Set (or clear) the project stock definition.
@@ -13,11 +12,7 @@ import { toAppError } from './errors'
  * @throws AppError on unexpected backend failure.
  */
 export async function setStock(stock: StockDefinition | null): Promise<void> {
-  try {
-    await invoke<void>('set_stock', { stock })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('set_stock', { stock })
 }
 
 /**
@@ -27,11 +22,7 @@ export async function setStock(stock: StockDefinition | null): Promise<void> {
  * @throws AppError on unexpected backend failure.
  */
 export async function getStock(): Promise<StockDefinition | null> {
-  try {
-    return await invoke<StockDefinition | null>('get_stock')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<StockDefinition | null>('get_stock')
 }
 
 /**
@@ -41,11 +32,7 @@ export async function getStock(): Promise<StockDefinition | null> {
  * @throws AppError on unexpected backend failure.
  */
 export async function setWcs(wcs: WorkCoordinateSystem[]): Promise<void> {
-  try {
-    await invoke<void>('set_wcs', { wcs })
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<void>('set_wcs', { wcs })
 }
 
 /**
@@ -55,9 +42,5 @@ export async function setWcs(wcs: WorkCoordinateSystem[]): Promise<void> {
  * @throws AppError on unexpected backend failure.
  */
 export async function getWcs(): Promise<WorkCoordinateSystem[]> {
-  try {
-    return await invoke<WorkCoordinateSystem[]>('get_wcs')
-  } catch (e) {
-    throw toAppError(e)
-  }
+  return typedInvoke<WorkCoordinateSystem[]>('get_wcs')
 }
