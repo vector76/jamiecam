@@ -74,6 +74,9 @@ pub fn run() {
             commands::operations::delete_operation,
             commands::operations::reorder_operations,
             commands::operations::list_operations,
+            commands::toolpath::list_post_processors,
+            commands::toolpath::get_gcode_preview,
+            commands::file::export_gcode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

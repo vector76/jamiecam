@@ -7,10 +7,10 @@
 use std::sync::RwLock;
 
 use crate::error::AppError;
-use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta, ToolInfo};
+use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
 
-use super::{parse_entity_id, read_project};
+use super::{build_tool_infos, parse_entity_id, read_project};
 
 // ── list_post_processors ──────────────────────────────────────────────────────
 
@@ -48,23 +48,7 @@ pub(crate) fn get_gcode_preview_inner(
             .ok_or_else(|| AppError::NotFound(format!("no toolpath for operation {op_uuid}")))?
             .clone();
 
-        let tool_infos: Vec<ToolInfo> = project
-            .operations
-            .iter()
-            .find(|op| op.id == op_uuid)
-            .and_then(|op| {
-                project
-                    .tools
-                    .iter()
-                    .find(|t| t.id == op.tool_id)
-                    .map(|tool| ToolInfo {
-                        number: toolpath.tool_number,
-                        diameter: tool.diameter,
-                        description: tool.name.clone(),
-                    })
-            })
-            .into_iter()
-            .collect();
+        let tool_infos = build_tool_infos(std::slice::from_ref(&toolpath), &project);
 
         (toolpath, tool_infos)
     }; // read lock released here

@@ -17,8 +17,10 @@ use crate::error::AppError;
 use crate::geometry::MeshData;
 use crate::state::{AppState, LoadedModel, Project};
 
+use crate::postprocessor::{program::GenerateOptions, PostProcessor};
+
 use super::project::ProjectSnapshot;
-use super::{read_project, write_project};
+use super::{build_tool_infos, parse_entity_id, read_project, write_project};
 
 // ── open_model ────────────────────────────────────────────────────────────────
 
@@ -159,6 +161,86 @@ pub async fn load_project(
 #[tauri::command]
 pub async fn new_project(state: tauri::State<'_, AppState>) -> Result<ProjectSnapshot, AppError> {
     new_project_inner(&state.project)
+}
+
+// ── export_gcode ──────────────────────────────────────────────────────────────
+
+/// Input parameters for [`export_gcode`].
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportParams {
+    pub operation_ids: Vec<String>,
+    pub post_processor_id: String,
+    pub output_path: String,
+    pub program_number: Option<u32>,
+    pub include_comments: bool,
+}
+
+/// Testable inner logic for [`export_gcode`].
+///
+/// 1. Parses all operation UUIDs.
+/// 2. Verifies each operation exists in the project.
+/// 3. Looks up each toolpath by operation UUID.
+/// 4. Builds [`crate::postprocessor::ToolInfo`] from matching operations and tools.
+/// 5. Loads the named builtin post-processor.
+/// 6. Generates G-code and writes it to `params.output_path`.
+pub(crate) fn export_gcode_inner(
+    params: ExportParams,
+    project_lock: &RwLock<Project>,
+) -> Result<(), AppError> {
+    let op_uuids = params
+        .operation_ids
+        .iter()
+        .map(|id| parse_entity_id(id, "operation"))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let (toolpaths, tool_infos) = {
+        let project = read_project(project_lock)?;
+
+        let mut toolpaths = Vec::new();
+        for op_uuid in &op_uuids {
+            if !project.operations.iter().any(|op| op.id == *op_uuid) {
+                return Err(AppError::NotFound(format!("operation {op_uuid} not found")));
+            }
+            let toolpath = project
+                .toolpaths
+                .get(op_uuid)
+                .ok_or_else(|| AppError::NotFound(format!("no toolpath for operation {op_uuid}")))?
+                .clone();
+            toolpaths.push(toolpath);
+        }
+
+        let tool_infos = build_tool_infos(&toolpaths, &project);
+
+        (toolpaths, tool_infos)
+    }; // read lock released here
+
+    let pp = PostProcessor::builtin(&params.post_processor_id)
+        .map_err(|e| AppError::PostProcessor(e.to_string()))?;
+
+    let gcode = pp
+        .generate(
+            &toolpaths,
+            &tool_infos,
+            GenerateOptions {
+                program_number: params.program_number,
+                include_comments: params.include_comments,
+            },
+        )
+        .map_err(|e| AppError::PostProcessor(e.to_string()))?;
+
+    std::fs::write(&params.output_path, gcode).map_err(AppError::from)?;
+
+    Ok(())
+}
+
+/// Generate G-code for the given operations and write it to the output path.
+#[tauri::command]
+pub async fn export_gcode(
+    params: ExportParams,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), AppError> {
+    export_gcode_inner(params, &state.project)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -341,5 +423,166 @@ mod tests {
         }
         let snap = get_project_snapshot_inner(&state.project).expect("should succeed");
         assert_eq!(snap.project_name, "Snapshot Test");
+    }
+
+    // ── export_gcode ──────────────────────────────────────────────────────
+
+    fn make_export_state() -> (AppState, uuid::Uuid) {
+        use crate::models::{
+            operation::{OperationParams, PocketParams},
+            tool::ToolType,
+            Operation, Tool, Vec3,
+        };
+        use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
+        use crate::toolpath::Toolpath;
+        use uuid::Uuid;
+
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let tool = Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+
+        let operation = Operation {
+            id: op_id,
+            name: "Rough Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+            }),
+        };
+
+        let toolpath = Toolpath {
+            operation_id: op_id,
+            tool_number: 1,
+            spindle_speed: 8000.0,
+            feed_rate: 500.0,
+            passes: vec![Pass {
+                kind: PassKind::Cutting,
+                cuts: vec![
+                    CutPoint {
+                        position: Vec3 {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 5.0,
+                        },
+                        move_kind: MoveKind::Rapid,
+                        tool_orientation: None,
+                    },
+                    CutPoint {
+                        position: Vec3 {
+                            x: 10.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                    },
+                ],
+            }],
+        };
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(tool);
+            project.operations.push(operation);
+            project.toolpaths.insert(op_id, toolpath);
+        }
+
+        (state, op_id)
+    }
+
+    #[test]
+    fn export_gcode_inner_writes_file_to_temp_path() {
+        let (state, op_id) = make_export_state();
+        let tmp = std::env::temp_dir().join("jcam_export_gcode_test.nc");
+        let params = ExportParams {
+            operation_ids: vec![op_id.to_string()],
+            post_processor_id: "fanuc-0i".to_string(),
+            output_path: tmp.to_string_lossy().to_string(),
+            program_number: Some(1),
+            include_comments: true,
+        };
+
+        export_gcode_inner(params, &state.project).expect("export should succeed");
+
+        assert!(tmp.exists(), "output file must exist after export");
+        let content = std::fs::read_to_string(&tmp).expect("read output file");
+        assert!(!content.is_empty(), "output file must not be empty");
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn export_gcode_inner_returns_not_found_when_toolpath_absent() {
+        use crate::models::{
+            operation::{OperationParams, PocketParams},
+            Operation,
+        };
+        use uuid::Uuid;
+
+        let state = AppState::default();
+        let op_id = Uuid::new_v4();
+
+        let operation = Operation {
+            id: op_id,
+            name: "Rough Pocket".to_string(),
+            enabled: true,
+            tool_id: Uuid::new_v4(),
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+            }),
+        };
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.operations.push(operation);
+            // toolpath intentionally NOT inserted
+        }
+
+        let params = ExportParams {
+            operation_ids: vec![op_id.to_string()],
+            post_processor_id: "fanuc-0i".to_string(),
+            output_path: "/tmp/should_not_be_created.nc".to_string(),
+            program_number: None,
+            include_comments: false,
+        };
+
+        let result = export_gcode_inner(params, &state.project);
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "expected NotFound, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn export_gcode_inner_returns_io_error_for_unwritable_path() {
+        let (state, op_id) = make_export_state();
+        let params = ExportParams {
+            operation_ids: vec![op_id.to_string()],
+            post_processor_id: "fanuc-0i".to_string(),
+            output_path: "/nonexistent_dir_jamiecam/output.nc".to_string(),
+            program_number: None,
+            include_comments: false,
+        };
+
+        let result = export_gcode_inner(params, &state.project);
+        assert!(
+            matches!(result, Err(AppError::Io(_))),
+            "expected Io error, got: {result:?}"
+        );
     }
 }
