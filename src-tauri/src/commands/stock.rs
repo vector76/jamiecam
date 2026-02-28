@@ -115,7 +115,6 @@ pub async fn get_wcs(
 mod tests {
     use super::*;
     use crate::models::stock::{BoxDimensions, Vec3};
-    use crate::models::wcs::Vec3 as WcsVec3;
     use crate::state::AppState;
     use uuid::Uuid;
 
@@ -136,17 +135,17 @@ mod tests {
         WorkCoordinateSystem {
             id: Uuid::new_v4(),
             name: "G54".to_string(),
-            origin: WcsVec3 {
+            origin: Vec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
             },
-            x_axis: WcsVec3 {
+            x_axis: Vec3 {
                 x: 1.0,
                 y: 0.0,
                 z: 0.0,
             },
-            z_axis: WcsVec3 {
+            z_axis: Vec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 1.0,

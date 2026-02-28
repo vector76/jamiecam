@@ -403,8 +403,7 @@ mod tests {
     #[test]
     fn round_trip_project_with_stock_and_wcs() {
         use crate::models::stock::{BoxDimensions, Vec3};
-        use crate::models::wcs::{Vec3 as WcsVec3, WorkCoordinateSystem};
-        use crate::models::StockDefinition;
+        use crate::models::{StockDefinition, WorkCoordinateSystem};
 
         let mut project = Project::default();
         project.name = "Stock/WCS Round-Trip Test".to_string();
@@ -426,17 +425,17 @@ mod tests {
         project.wcs.push(WorkCoordinateSystem {
             id: wcs_id,
             name: "G54".to_string(),
-            origin: WcsVec3 {
+            origin: Vec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
             },
-            x_axis: WcsVec3 {
+            x_axis: Vec3 {
                 x: 1.0,
                 y: 0.0,
                 z: 0.0,
             },
-            z_axis: WcsVec3 {
+            z_axis: Vec3 {
                 x: 0.0,
                 y: 0.0,
                 z: 1.0,

@@ -29,7 +29,7 @@ export function OperationListPanel() {
         name: full.name,
         enabled: !currentEnabled,
         toolId: full.toolId,
-        type: full.type as 'profile' | 'pocket' | 'drill',
+        type: full.type,
         params: full.params,
       }
       await editOperation(id, input)

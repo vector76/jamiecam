@@ -1,1 +1,0 @@
-Implement ONLY phase 0 from development-roadmap.md, then stop.

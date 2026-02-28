@@ -54,3 +54,4 @@ coverage/
 
 # ===== Logs =====
 *.log
+/.claude

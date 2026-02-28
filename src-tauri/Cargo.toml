@@ -39,6 +39,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 
 [features]
 # this feature is used for production builds or when `devtools` feature is not

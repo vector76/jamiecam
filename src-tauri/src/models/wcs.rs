@@ -7,14 +7,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// A 3-component f64 vector, used for origin positions and axis directions.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Vec3 {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
+use crate::models::stock::Vec3;
 
 fn default_origin() -> Vec3 {
     Vec3 {

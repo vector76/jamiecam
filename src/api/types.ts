@@ -148,8 +148,7 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  /** Operation type discriminant (e.g. `"profile"`, `"pocket"`, `"drill"`). */
-  type: string
+  type: 'profile' | 'pocket' | 'drill'
   params: ProfileParams | PocketParams | DrillParams
 }
 
@@ -171,7 +170,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: string
+  operationType: 'profile' | 'pocket' | 'drill'
   enabled: boolean
   needsRecalculate: boolean
 }

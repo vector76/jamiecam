@@ -114,7 +114,9 @@ pub(crate) fn edit_operation_inner(
         .ok_or_else(|| AppError::NotFound(format!("operation {id} not found")))?;
 
     entry.name = input.name;
-    entry.enabled = input.enabled.unwrap_or(true);
+    if let Some(enabled) = input.enabled {
+        entry.enabled = enabled;
+    }
     entry.tool_id = tool_uuid;
     entry.params = input.params;
 
@@ -204,7 +206,7 @@ pub(crate) fn reorder_operations_inner(
             .operations
             .iter()
             .position(|op| &op.id == uuid)
-            .unwrap();
+            .ok_or_else(|| AppError::NotFound(format!("operation {uuid} not found")))?;
         reordered.push(project.operations[pos].clone());
     }
     project.operations = reordered;
@@ -397,6 +399,41 @@ mod tests {
         let ops = list_operations_inner(&state.project).expect("list should succeed");
         assert_eq!(ops.len(), 1);
         assert_eq!(ops[0].name, "Renamed");
+    }
+
+    #[test]
+    fn edit_operation_omitting_enabled_preserves_existing_value() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        // Add an operation and then disable it explicitly.
+        let op = add_operation_inner(profile_input("Op", &tid), &state.project)
+            .expect("add should succeed");
+        edit_operation_inner(
+            &op.id.to_string(),
+            OperationInput {
+                enabled: Some(false),
+                ..profile_input("Op", &tid)
+            },
+            &state.project,
+        )
+        .expect("disable should succeed");
+
+        // Now edit without specifying `enabled` — the false value must be kept.
+        let updated = edit_operation_inner(
+            &op.id.to_string(),
+            OperationInput {
+                name: "Renamed".to_string(),
+                ..profile_input("Op", &tid)
+            },
+            &state.project,
+        )
+        .expect("edit should succeed");
+
+        assert!(
+            !updated.enabled,
+            "enabled must be preserved when absent from input"
+        );
     }
 
     #[test]

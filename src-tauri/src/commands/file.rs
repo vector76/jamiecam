@@ -67,13 +67,25 @@ pub(crate) async fn open_model_inner(
 
 /// Testable inner logic for [`save_project`].
 ///
-/// Acquires a read lock on `project_lock` and calls
-/// [`crate::project::serialization::save`].
+/// Updates `modified_at` (and `created_at` on first save) to the current UTC
+/// time, then serialises the project to `path_str`.
 pub(crate) fn save_project_inner(
     path_str: &str,
     project_lock: &RwLock<Project>,
 ) -> Result<(), AppError> {
     let path_buf = PathBuf::from(path_str);
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+    {
+        let mut project = project_lock
+            .write()
+            .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+        if project.created_at.is_empty() {
+            project.created_at = now.clone();
+        }
+        project.modified_at = now;
+    }
+
     let project = project_lock
         .read()
         .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
@@ -191,12 +203,24 @@ mod tests {
         {
             let mut p = state.project.write().expect("write lock");
             p.name = "Round Trip".to_string();
-            p.created_at = "2026-01-01T00:00:00Z".to_string();
-            p.modified_at = "2026-01-02T12:00:00Z".to_string();
+            // Leave created_at and modified_at empty — save_project_inner must fill them.
         }
 
         let tmp = std::env::temp_dir().join("jcam_cmd_test_round_trip.jcam");
         save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+
+        // After save, both timestamps must be non-empty ISO-8601 strings.
+        {
+            let p = state.project.read().expect("read lock");
+            assert!(
+                !p.created_at.is_empty(),
+                "created_at must be set after first save"
+            );
+            assert!(
+                !p.modified_at.is_empty(),
+                "modified_at must be set after save"
+            );
+        }
 
         // Reset state, then load the saved file.
         new_project_inner(&state.project).expect("new_project should succeed");
@@ -209,6 +233,35 @@ mod tests {
         let project = state.project.read().expect("read lock");
         assert_eq!(project.name, "Round Trip");
         assert_eq!(project.schema_version, 1);
+        assert!(
+            !project.created_at.is_empty(),
+            "created_at must survive round-trip"
+        );
+        assert!(
+            !project.modified_at.is_empty(),
+            "modified_at must survive round-trip"
+        );
+    }
+
+    #[test]
+    fn save_preserves_created_at_on_subsequent_saves() {
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_created_at.jcam");
+
+        // First save: sets created_at.
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("first save");
+        let created_at_1 = state.project.read().expect("read").created_at.clone();
+        assert!(!created_at_1.is_empty());
+
+        // Second save: created_at must not change; modified_at may change.
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("second save");
+        let _ = std::fs::remove_file(&tmp);
+        let created_at_2 = state.project.read().expect("read").created_at.clone();
+
+        assert_eq!(
+            created_at_1, created_at_2,
+            "created_at must not change on re-save"
+        );
     }
 
     #[test]

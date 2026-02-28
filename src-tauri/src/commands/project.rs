@@ -313,17 +313,17 @@ mod tests {
             p.wcs.push(WorkCoordinateSystem {
                 id: wcs_id,
                 name: "G54".to_string(),
-                origin: crate::models::wcs::Vec3 {
+                origin: crate::models::Vec3 {
                     x: 0.0,
                     y: 0.0,
                     z: 0.0,
                 },
-                x_axis: crate::models::wcs::Vec3 {
+                x_axis: crate::models::Vec3 {
                     x: 1.0,
                     y: 0.0,
                     z: 0.0,
                 },
-                z_axis: crate::models::wcs::Vec3 {
+                z_axis: crate::models::Vec3 {
                     x: 0.0,
                     y: 0.0,
                     z: 1.0,
