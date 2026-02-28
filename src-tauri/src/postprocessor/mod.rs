@@ -3,6 +3,7 @@ pub mod block;
 pub mod config;
 pub mod formatter;
 pub mod modal;
+pub mod program;
 
 /// Internal error type for post-processor failures.
 /// The IPC layer maps these to AppError::PostProcessor at the boundary.
