@@ -17,3 +17,37 @@ pub enum PostProcessorError {
     #[error("program assembly error: {0}")]
     Assembly(String),
 }
+
+#[allow(dead_code)]
+pub(crate) const FANUC_0I_TOML: &str = include_str!("builtins/fanuc-0i.toml");
+#[allow(dead_code)]
+pub(crate) const LINUXCNC_TOML: &str = include_str!("builtins/linuxcnc.toml");
+#[allow(dead_code)]
+pub(crate) const MACH4_TOML: &str = include_str!("builtins/mach4.toml");
+#[allow(dead_code)]
+pub(crate) const GRBL_TOML: &str = include_str!("builtins/grbl.toml");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fanuc_0i_builtin_parses_without_error() {
+        config::parse(FANUC_0I_TOML).unwrap();
+    }
+
+    #[test]
+    fn linuxcnc_builtin_parses_without_error() {
+        config::parse(LINUXCNC_TOML).unwrap();
+    }
+
+    #[test]
+    fn mach4_builtin_parses_without_error() {
+        config::parse(MACH4_TOML).unwrap();
+    }
+
+    #[test]
+    fn grbl_builtin_parses_without_error() {
+        config::parse(GRBL_TOML).unwrap();
+    }
+}

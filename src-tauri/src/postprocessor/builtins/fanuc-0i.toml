@@ -1,0 +1,128 @@
+# Fanuc 0i-MD/MF — 3-axis mill, metric, standard G-code
+# ── Identity ──────────────────────────────────────────────────────────────
+[meta]
+id          = "fanuc-0i"
+name        = "Fanuc 0i-MD/MF"
+description = "Fanuc 0i Mill-Drill / Mill-Turn, 3-axis, metric"
+version     = "1.0"
+author      = "JamieCam"
+
+# ── Machine capabilities ──────────────────────────────────────────────────
+[machine]
+units    = "metric"
+max_axes = 3
+
+# ── Output formatting ─────────────────────────────────────────────────────
+[format]
+line_numbers             = true
+line_number_start        = 10
+line_number_increment    = 10
+line_number_max          = 9999
+decimal_places           = 3
+trailing_zeros           = false
+leading_zero_suppression = false
+word_separator           = " "
+eol                      = "\r\n"
+percent_delimiters       = true
+block_delete_char        = "/"
+
+# ── Axis naming ───────────────────────────────────────────────────────────
+[axes]
+x = "X"
+y = "Y"
+z = "Z"
+
+# ── Program structure ─────────────────────────────────────────────────────
+[program]
+number_prefix  = "O"
+number         = 1000
+number_format  = "%04d"
+comment_open   = "("
+comment_close  = ")"
+header = [
+  "G90 G94 G17",
+  "G21",
+  "G28 G91 Z0.",
+  "G90",
+]
+footer = [
+  "M05",
+  "G28 G91 Z0.",
+  "G90",
+  "G28 X0. Y0.",
+  "M30",
+]
+
+# ── Tool change ───────────────────────────────────────────────────────────
+[tool_change]
+pre = [
+  "G28 G91 Z0.",
+  "G90",
+  "M05",
+]
+command              = "T{tool_number} M06"
+post = [
+  "G43 H{tool_number}",
+  "M03 S{spindle_speed}",
+]
+suppress_first_if_t1 = false
+
+# ── Motion commands ───────────────────────────────────────────────────────
+[motion]
+rapid      = "G00"
+linear     = "G01"
+arc_cw     = "G02"
+arc_ccw    = "G03"
+arc_format = "ijk"
+plane_xy   = "G17"
+plane_xz   = "G18"
+plane_yz   = "G19"
+
+# ── Feed and speed words ──────────────────────────────────────────────────
+[words]
+feed         = "F"
+spindle      = "S"
+tool         = "T"
+tool_offset  = "H"
+dwell        = "P"
+feed_per_min = "G94"
+feed_per_rev = "G95"
+inverse_time = "G93"
+absolute     = "G90"
+incremental  = "G91"
+
+# ── Spindle ───────────────────────────────────────────────────────────────
+[spindle]
+on_cw   = "M03"
+on_ccw  = "M04"
+off     = "M05"
+orient  = "M19"
+max_rpm = 15000
+
+# ── Coolant ───────────────────────────────────────────────────────────────
+[coolant]
+flood        = "M08"
+mist         = "M07"
+air          = "M07"
+off          = "M09"
+through_tool = "M88"
+
+# ── Canned drilling cycles ────────────────────────────────────────────────
+[cycles]
+supported    = true
+drill        = "G81"
+peck         = "G83"
+chip_break   = "G73"
+boring_feed  = "G85"
+boring_dwell = "G86"
+reaming      = "G85"
+tapping      = "G84"
+tapping_ccw  = "G74"
+cycle_cancel = "G80"
+r_plane_abs  = "G98"
+r_plane_r    = "G99"
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────
+[misc]
+optional_stop = "M01"
+program_stop  = "M00"

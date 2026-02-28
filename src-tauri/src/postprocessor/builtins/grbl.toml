@@ -1,0 +1,110 @@
+# GRBL 1.1 — 3-axis mill, metric, no line numbers, no canned cycles
+# ── Identity ──────────────────────────────────────────────────────────────
+[meta]
+id          = "grbl"
+name        = "GRBL 1.1"
+description = "GRBL 1.1, 3-axis, metric, no canned cycles"
+version     = "1.0"
+author      = "JamieCam"
+
+# ── Machine capabilities ──────────────────────────────────────────────────
+[machine]
+units    = "metric"
+max_axes = 3
+
+# ── Output formatting ─────────────────────────────────────────────────────
+[format]
+line_numbers             = false
+line_number_start        = 1
+line_number_increment    = 1
+line_number_max          = 0
+decimal_places           = 3
+trailing_zeros           = false
+leading_zero_suppression = false
+word_separator           = " "
+eol                      = "\n"
+percent_delimiters       = false
+block_delete_char        = ""
+
+# ── Axis naming ───────────────────────────────────────────────────────────
+[axes]
+x = "X"
+y = "Y"
+z = "Z"
+
+# ── Program structure ─────────────────────────────────────────────────────
+[program]
+number_prefix  = ""
+number         = 0
+number_format  = "%d"
+comment_open   = "("
+comment_close  = ")"
+header = [
+  "G90 G94 G17",
+  "G21",
+]
+footer = [
+  "M05",
+  "M09",
+  "M30",
+]
+
+# ── Tool change ───────────────────────────────────────────────────────────
+[tool_change]
+pre = [
+  "M05",
+  "M09",
+]
+command              = "T{tool_number} M06"
+post = [
+  "M03 S{spindle_speed}",
+]
+suppress_first_if_t1 = false
+
+# ── Motion commands ───────────────────────────────────────────────────────
+[motion]
+rapid      = "G00"
+linear     = "G01"
+arc_cw     = "G02"
+arc_ccw    = "G03"
+arc_format = "ijk"
+plane_xy   = "G17"
+plane_xz   = "G18"
+plane_yz   = "G19"
+
+# ── Feed and speed words ──────────────────────────────────────────────────
+[words]
+feed         = "F"
+spindle      = "S"
+tool         = "T"
+tool_offset  = "H"
+dwell        = "P"
+feed_per_min = "G94"
+feed_per_rev = "G95"
+inverse_time = "G93"
+absolute     = "G90"
+incremental  = "G91"
+
+# ── Spindle ───────────────────────────────────────────────────────────────
+[spindle]
+on_cw   = "M03"
+on_ccw  = "M04"
+off     = "M05"
+max_rpm = 0
+
+# ── Coolant ───────────────────────────────────────────────────────────────
+[coolant]
+flood = "M08"
+mist  = "M07"
+air   = "M07"
+off   = "M09"
+
+# ── Canned drilling cycles ────────────────────────────────────────────────
+# GRBL does not support canned cycles; all drilling is expanded to linear moves
+[cycles]
+supported = false
+
+# ── Miscellaneous ─────────────────────────────────────────────────────────
+[misc]
+optional_stop = "M01"
+program_stop  = "M00"
