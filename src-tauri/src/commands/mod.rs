@@ -11,6 +11,7 @@ pub mod file;
 pub mod operations;
 pub mod project;
 pub mod stock;
+pub mod toolpath;
 pub mod tools;
 
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
