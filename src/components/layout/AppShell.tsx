@@ -9,6 +9,7 @@ import { Toolbar } from '../toolbar/Toolbar'
 import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
 import { Notifications } from '../common/Notifications'
+import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
 
 export function AppShell() {
   return (
@@ -16,7 +17,10 @@ export function AppShell() {
       <Toolbar />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Viewport style={{ flex: 1 }} />
-        <OperationListPanel />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <OperationListPanel />
+          <GCodePreviewPanel />
+        </div>
       </div>
       <Notifications />
     </div>

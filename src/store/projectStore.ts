@@ -20,6 +20,10 @@ interface ProjectState {
   pushNotification: (message: string) => void
   /** Remove notification at the given index. */
   dismissNotification: (index: number) => void
+  /** The currently-selected operation ID, or null if none. */
+  selectedOperationId: string | null
+  /** Set the currently-selected operation ID. */
+  setSelectedOperationId: (id: string | null) => void
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
@@ -28,6 +32,8 @@ export const useProjectStore = create<ProjectState>((set) => ({
   notifications: [],
   pushNotification: (message) => set((s) => ({ notifications: [...s.notifications, message] })),
   dismissNotification: (index) => set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
+  selectedOperationId: null,
+  setSelectedOperationId: (id) => set({ selectedOperationId: id }),
 }))
 
 /**
@@ -83,3 +89,19 @@ export const useStock = (): StockDefinition | null =>
  */
 export const useNotifications = (): string[] =>
   useProjectStore((state) => state.notifications)
+
+/**
+ * Selector hook: returns the currently-selected operation ID, or null.
+ *
+ * Re-renders the component only when selectedOperationId changes.
+ */
+export const useSelectedOperationId = (): string | null =>
+  useProjectStore((state) => state.selectedOperationId)
+
+/**
+ * Selector hook: returns the pushNotification action.
+ *
+ * Stable reference — Zustand actions never change identity.
+ */
+export const usePushNotification = (): ((message: string) => void) =>
+  useProjectStore((state) => state.pushNotification)
