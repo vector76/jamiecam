@@ -211,7 +211,7 @@ not yet exist — they depend on the CAM algorithms not yet written.
 | `src/viewport/controls.ts` | OrbitControls (Z-up) |
 | `src/viewport/modelMesh.ts` | `MeshData` → `BufferGeometry` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
-| `src/components/layout/OperationListPanel.tsx` | Operation list sidebar |
+| `src/components/operations/OperationListPanel.tsx` | Operation list sidebar |
 | `src/components/toolbar/Toolbar.tsx` | File operation toolbar |
 
 ---

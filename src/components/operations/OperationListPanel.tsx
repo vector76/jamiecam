@@ -10,13 +10,20 @@
 import { useOperations, useProjectStore, useTools } from '../../store/projectStore'
 import { addOperation, deleteOperation, editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
+import { toAppError } from '../../api/errors'
 import type { OperationInput } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
   const tools = useTools()
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
+  const pushNotification = useProjectStore((s) => s.pushNotification)
   const noTools = tools.length === 0
+
+  function handleError(e: unknown) {
+    const err = toAppError(e)
+    pushNotification(err.message ?? err.kind ?? 'An error occurred')
+  }
 
   // ── Toggle enabled ────────────────────────────────────────────────────────
 
@@ -35,9 +42,7 @@ export function OperationListPanel() {
       await editOperation(id, input)
       const snapshot = await getProjectSnapshot()
       setSnapshot(snapshot)
-    } catch {
-      // Phase 0: panel does not surface mutation errors.
-    }
+    } catch (e) { handleError(e) }
   }
 
   // ── Delete ────────────────────────────────────────────────────────────────
@@ -47,9 +52,7 @@ export function OperationListPanel() {
       await deleteOperation(id)
       const snapshot = await getProjectSnapshot()
       setSnapshot(snapshot)
-    } catch {
-      // Phase 0: panel does not surface mutation errors.
-    }
+    } catch (e) { handleError(e) }
   }
 
   // ── Add ───────────────────────────────────────────────────────────────────
@@ -78,9 +81,7 @@ export function OperationListPanel() {
       await addOperation(input)
       const snapshot = await getProjectSnapshot()
       setSnapshot(snapshot)
-    } catch {
-      // Phase 0: panel does not surface mutation errors.
-    }
+    } catch (e) { handleError(e) }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────

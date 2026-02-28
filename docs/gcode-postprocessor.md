@@ -734,14 +734,15 @@ alter output require deliberate golden file updates.
 
 ```
 tests/
-└── postprocessor/
-    ├── fanuc-0i/
-    │   ├── simple_pocket.toolpath.json   (serialized input)
-    │   └── simple_pocket.nc              (expected output)
-    ├── linuxcnc/
-    │   └── ...
-    └── grbl/
-        └── ...
+└── integration/
+    └── golden_gcode/
+        ├── fanuc-0i/
+        │   ├── simple_pocket.toolpath.json   (serialized input)
+        │   └── simple_pocket.nc              (expected output)
+        ├── linuxcnc/
+        │   └── ...
+        └── grbl/
+            └── ...
 ```
 
 ### Round-Trip Simulation Test

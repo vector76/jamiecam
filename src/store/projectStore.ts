@@ -14,11 +14,20 @@ interface ProjectState {
   snapshot: ProjectSnapshot | null
   /** Replace the current snapshot (pass null to clear). */
   setSnapshot: (s: ProjectSnapshot | null) => void
+  /** Active notification messages shown to the user. */
+  notifications: string[]
+  /** Append a notification message. */
+  pushNotification: (message: string) => void
+  /** Remove notification at the given index. */
+  dismissNotification: (index: number) => void
 }
 
 export const useProjectStore = create<ProjectState>((set) => ({
   snapshot: null,
   setSnapshot: (snapshot) => set({ snapshot }),
+  notifications: [],
+  pushNotification: (message) => set((s) => ({ notifications: [...s.notifications, message] })),
+  dismissNotification: (index) => set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
 }))
 
 /**
@@ -66,3 +75,11 @@ export const useTools = (): ToolSummary[] =>
  */
 export const useStock = (): StockDefinition | null =>
   useProjectStore((state) => state.snapshot?.stock ?? null)
+
+/**
+ * Selector hook: returns the active notification messages array.
+ *
+ * Re-renders the component only when the notifications array reference changes.
+ */
+export const useNotifications = (): string[] =>
+  useProjectStore((state) => state.notifications)

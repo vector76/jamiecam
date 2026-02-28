@@ -8,6 +8,7 @@
 import { Toolbar } from '../toolbar/Toolbar'
 import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
+import { Notifications } from '../common/Notifications'
 
 export function AppShell() {
   return (
@@ -17,6 +18,7 @@ export function AppShell() {
         <Viewport style={{ flex: 1 }} />
         <OperationListPanel />
       </div>
+      <Notifications />
     </div>
   )
 }
