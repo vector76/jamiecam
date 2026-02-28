@@ -212,3 +212,27 @@ export interface AppError {
   kind: string
   message?: string
 }
+
+// ── Post-processor types ──────────────────────────────────────────────────────
+
+/**
+ * Metadata for a built-in post-processor.
+ * Mirrors the Rust `PostProcessorMeta` struct.
+ */
+export interface PostProcessorMeta {
+  id: string
+  name: string
+  description: string
+}
+
+/**
+ * Parameters for exporting G-code to a file.
+ * Mirrors the Rust `ExportParams` struct.
+ */
+export interface ExportParams {
+  operationIds: string[]
+  postProcessorId: string
+  outputPath: string
+  programNumber?: number
+  includeComments: boolean
+}
