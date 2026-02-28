@@ -1,3 +1,4 @@
+pub mod arcs;
 pub mod block;
 pub mod config;
 pub mod formatter;
