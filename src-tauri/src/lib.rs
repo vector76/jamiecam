@@ -2,6 +2,7 @@ pub mod commands;
 pub mod error;
 pub mod geometry;
 pub mod models;
+pub mod postprocessor;
 pub mod project;
 pub mod state;
 pub mod toolpath;
