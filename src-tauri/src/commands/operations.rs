@@ -19,7 +19,7 @@ use crate::models::operation::OperationParams;
 use crate::models::Operation;
 use crate::state::{AppState, Project};
 
-use super::parse_entity_id;
+use super::{parse_entity_id, read_project, write_project};
 
 // ── Input type ────────────────────────────────────────────────────────────────
 
@@ -55,9 +55,7 @@ pub(crate) fn add_operation_inner(
 ) -> Result<Operation, AppError> {
     let tool_uuid = parse_entity_id(&input.tool_id, "tool")?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     if !project.tools.iter().any(|t| t.id == tool_uuid) {
         return Err(AppError::NotFound(format!(
@@ -93,9 +91,7 @@ pub(crate) fn edit_operation_inner(
 
     let tool_uuid = parse_entity_id(&input.tool_id, "tool")?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     if !project.tools.iter().any(|t| t.id == tool_uuid) {
         return Err(AppError::NotFound(format!(
@@ -132,9 +128,7 @@ pub(crate) fn delete_operation_inner(
 ) -> Result<(), AppError> {
     let uuid = parse_entity_id(id, "operation")?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     let before = project.operations.len();
     project.operations.retain(|op| op.id != uuid);
@@ -175,9 +169,7 @@ pub(crate) fn reorder_operations_inner(
         }
     }
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     if uuids.len() != project.operations.len() {
         return Err(AppError::Io(format!(
@@ -185,12 +177,6 @@ pub(crate) fn reorder_operations_inner(
             uuids.len(),
             project.operations.len()
         )));
-    }
-
-    for uuid in &uuids {
-        if !project.operations.iter().any(|op| &op.id == uuid) {
-            return Err(AppError::NotFound(format!("operation {uuid} not found")));
-        }
     }
 
     let mut reordered = Vec::with_capacity(project.operations.len());
@@ -215,9 +201,7 @@ pub(crate) fn reorder_operations_inner(
 pub(crate) fn list_operations_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<Vec<Operation>, AppError> {
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     Ok(project.operations.clone())
 }
 

@@ -18,6 +18,7 @@ use crate::geometry::MeshData;
 use crate::state::{AppState, LoadedModel, Project};
 
 use super::project::ProjectSnapshot;
+use super::{read_project, write_project};
 
 // ── open_model ────────────────────────────────────────────────────────────────
 
@@ -51,9 +52,7 @@ pub(crate) async fn open_model_inner(
 
     let (mesh, checksum) = blocking_result?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     project.source_model = Some(LoadedModel {
         path: path_buf,
         checksum,
@@ -77,18 +76,14 @@ pub(crate) fn save_project_inner(
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
     {
-        let mut project = project_lock
-            .write()
-            .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+        let mut project = write_project(project_lock)?;
         if project.created_at.is_empty() {
             project.created_at = now.clone();
         }
         project.modified_at = now;
     }
 
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     crate::project::serialization::save(&project, &path_buf)
 }
 
@@ -105,9 +100,7 @@ pub(crate) fn load_project_inner(
     let path_buf = PathBuf::from(path_str);
     let new_project = crate::project::serialization::load(&path_buf)?;
     let snapshot = ProjectSnapshot::from(&new_project);
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
 }
@@ -123,9 +116,7 @@ pub(crate) fn new_project_inner(
 ) -> Result<ProjectSnapshot, AppError> {
     let new_project = Project::default();
     let snapshot = ProjectSnapshot::from(&new_project);
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
 }

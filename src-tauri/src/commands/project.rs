@@ -15,6 +15,8 @@ use crate::models::operation::OperationParams;
 use crate::models::{StockDefinition, WorkCoordinateSystem};
 use crate::state::{AppState, Project};
 
+use super::read_project;
+
 // ── Summary types ─────────────────────────────────────────────────────────────
 
 /// A compact summary of a tool for display in dropdowns and the operation panel.
@@ -126,9 +128,7 @@ impl From<&Project> for ProjectSnapshot {
 pub(crate) fn get_project_snapshot_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<ProjectSnapshot, AppError> {
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     Ok(ProjectSnapshot::from(&*project))
 }
 

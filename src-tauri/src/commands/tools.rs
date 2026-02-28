@@ -13,7 +13,7 @@ use crate::error::AppError;
 use crate::models::{Tool, ToolType};
 use crate::state::{AppState, Project};
 
-use super::parse_entity_id;
+use super::{parse_entity_id, read_project, write_project};
 
 // ── Input type ────────────────────────────────────────────────────────────────
 
@@ -52,9 +52,7 @@ pub(crate) fn add_tool_inner(
         default_spindle_speed: input.default_spindle_speed,
         default_feed_rate: input.default_feed_rate,
     };
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     project.tools.push(tool.clone());
     Ok(tool)
 }
@@ -73,9 +71,7 @@ pub(crate) fn edit_tool_inner(
 ) -> Result<Tool, AppError> {
     let uuid = parse_entity_id(id, "tool")?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     let entry = project
         .tools
@@ -103,9 +99,7 @@ pub(crate) fn edit_tool_inner(
 pub(crate) fn delete_tool_inner(id: &str, project_lock: &RwLock<Project>) -> Result<(), AppError> {
     let uuid = parse_entity_id(id, "tool")?;
 
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
 
     let before = project.tools.len();
     project.tools.retain(|t| t.id != uuid);
@@ -122,9 +116,7 @@ pub(crate) fn delete_tool_inner(id: &str, project_lock: &RwLock<Project>) -> Res
 ///
 /// Returns a snapshot of the current tool library (cloned to release the lock).
 pub(crate) fn list_tools_inner(project_lock: &RwLock<Project>) -> Result<Vec<Tool>, AppError> {
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     Ok(project.tools.clone())
 }
 

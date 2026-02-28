@@ -11,6 +11,8 @@ use crate::error::AppError;
 use crate::models::{StockDefinition, WorkCoordinateSystem};
 use crate::state::{AppState, Project};
 
+use super::{read_project, write_project};
+
 // ── set_stock ─────────────────────────────────────────────────────────────────
 
 /// Testable inner logic for [`set_stock`].
@@ -20,9 +22,7 @@ pub(crate) fn set_stock_inner(
     stock: Option<StockDefinition>,
     project_lock: &RwLock<Project>,
 ) -> Result<(), AppError> {
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     project.stock = stock;
     Ok(())
 }
@@ -35,9 +35,7 @@ pub(crate) fn set_stock_inner(
 pub(crate) fn get_stock_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<Option<StockDefinition>, AppError> {
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     Ok(project.stock.clone())
 }
 
@@ -50,9 +48,7 @@ pub(crate) fn set_wcs_inner(
     wcs: Vec<WorkCoordinateSystem>,
     project_lock: &RwLock<Project>,
 ) -> Result<(), AppError> {
-    let mut project = project_lock
-        .write()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let mut project = write_project(project_lock)?;
     project.wcs = wcs;
     Ok(())
 }
@@ -65,9 +61,7 @@ pub(crate) fn set_wcs_inner(
 pub(crate) fn get_wcs_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<Vec<WorkCoordinateSystem>, AppError> {
-    let project = project_lock
-        .read()
-        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))?;
+    let project = read_project(project_lock)?;
     Ok(project.wcs.clone())
 }
 

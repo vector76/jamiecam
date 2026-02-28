@@ -13,9 +13,12 @@ pub mod project;
 pub mod stock;
 pub mod tools;
 
+use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::state::Project;
 
 /// Parse a UUID from a string, returning [`AppError::NotFound`] if the string
 /// is not a valid UUID.
@@ -25,4 +28,24 @@ use crate::error::AppError;
 pub(super) fn parse_entity_id(id: &str, entity: &str) -> Result<Uuid, AppError> {
     Uuid::parse_str(id)
         .map_err(|_| AppError::NotFound(format!("{entity} id '{id}' is not a valid UUID")))
+}
+
+/// Acquire a write lock on `project_lock`, mapping a poisoned-lock failure to
+/// [`AppError::Io`].
+pub(super) fn write_project(
+    project_lock: &RwLock<Project>,
+) -> Result<RwLockWriteGuard<'_, Project>, AppError> {
+    project_lock
+        .write()
+        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))
+}
+
+/// Acquire a read lock on `project_lock`, mapping a poisoned-lock failure to
+/// [`AppError::Io`].
+pub(super) fn read_project(
+    project_lock: &RwLock<Project>,
+) -> Result<RwLockReadGuard<'_, Project>, AppError> {
+    project_lock
+        .read()
+        .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))
 }
