@@ -1,4 +1,5 @@
 pub mod config;
+pub mod formatter;
 
 /// Internal error type for post-processor failures.
 /// The IPC layer maps these to AppError::PostProcessor at the boundary.
