@@ -115,6 +115,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         wcs: pf.wcs,
         tools: pf.tools,
         operations: pf.operations,
+        toolpaths: std::collections::HashMap::new(),
     })
 }
 

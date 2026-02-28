@@ -3,9 +3,12 @@
 //! [`AppState`] is registered with `tauri::Builder::manage` and accessed from
 //! command handlers via `tauri::State<AppState>`.
 
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::RwLock;
+
+use uuid::Uuid;
 
 use crate::geometry::MeshData;
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
@@ -49,6 +52,8 @@ pub struct Project {
     pub tools: Vec<Tool>,
     /// Machining operations.
     pub operations: Vec<Operation>,
+    /// Generated toolpaths keyed by operation UUID.
+    pub toolpaths: HashMap<Uuid, crate::toolpath::Toolpath>,
 }
 
 impl Default for Project {
@@ -65,6 +70,7 @@ impl Default for Project {
             wcs: Vec::new(),
             tools: Vec::new(),
             operations: Vec::new(),
+            toolpaths: HashMap::new(),
         }
     }
 }
@@ -137,6 +143,7 @@ mod tests {
         assert!(project.wcs.is_empty());
         assert!(project.tools.is_empty());
         assert!(project.operations.is_empty());
+        assert!(project.toolpaths.is_empty());
     }
 
     #[test]

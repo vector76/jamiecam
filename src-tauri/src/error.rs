@@ -45,6 +45,10 @@ pub enum AppError {
     /// A requested resource (tool, operation, etc.) was not found.
     #[error("{0}")]
     NotFound(String),
+
+    /// A post-processor error; the inner message describes the failure.
+    #[error("{0}")]
+    PostProcessor(String),
 }
 
 impl From<GeometryError> for AppError {
@@ -133,6 +137,14 @@ mod tests {
         let value = serde_json::to_value(&err).expect("serialize AppError::NotFound");
         assert_eq!(value["kind"], "NotFound");
         assert_eq!(value["message"], "tool abc123 not found");
+    }
+
+    #[test]
+    fn post_processor_error_serializes_to_kind_message() {
+        let err = AppError::PostProcessor("invalid config".to_string());
+        let value = serde_json::to_value(&err).expect("serialize AppError::PostProcessor");
+        assert_eq!(value["kind"], "PostProcessor");
+        assert_eq!(value["message"], "invalid config");
     }
 
     #[test]

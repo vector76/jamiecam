@@ -4,6 +4,7 @@ pub mod geometry;
 pub mod models;
 pub mod project;
 pub mod state;
+pub mod toolpath;
 
 use state::AppState;
 
