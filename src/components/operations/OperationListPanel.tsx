@@ -136,7 +136,7 @@ export function OperationListPanel() {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); void handleCalculate(op.id) }}
-              disabled={op.operationType !== 'pocket' || !stock}
+              disabled={(op.operationType !== 'pocket' && op.operationType !== 'profile') || !stock}
               aria-label={`Calculate ${op.name}`}
             >
               Calc

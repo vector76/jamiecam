@@ -310,10 +310,19 @@ describe('OperationListPanel — Calculate button', () => {
     expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeInTheDocument()
   })
 
-  it('Calculate is disabled for non-pocket operations', () => {
+  it('Calculate is enabled for profile operations when stock is defined', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).not.toBeDisabled()
+  })
+
+  it('Calculate is disabled for drill operations even when stock is defined', () => {
+    const drillOp = { id: 'dddd-0001', name: 'Drill Op', operationType: 'drill' as const, enabled: true, needsRecalculate: false }
+    useProjectStore.setState({
+      snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [drillOp] }
+    })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Drill Op' })).toBeDisabled()
   })
 
   it('Calculate is disabled when stock is null even for pocket operations', () => {
