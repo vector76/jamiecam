@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-01. Based on git history (69 commits, branch `main`)._
+_Last updated: 2026-03-01. Based on git history (71 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -196,7 +196,9 @@ immediately once algorithms are written.
 **Toolpath linking** (`99a92ab`)
 - `src-tauri/src/toolpath/linking.rs`: `link_passes()` wraps each cutting
   pass with `LeadOut`, `Linking` (three rapids: lift/traverse/descend),
-  and `LeadIn` passes; lead passes are skipped for passes with ≤1 point
+  and `LeadIn` passes; `LeadIn` is skipped when the current cutting pass
+  has ≤1 point; `LeadOut` is skipped for the first pass and when the
+  previous cutting pass has ≤1 point
 
 **Pocket clearing algorithm** (`646154b`)
 - `src-tauri/src/toolpath/operations/pocket.rs`: `pocket_passes(stock, params, tool_diameter)`
@@ -204,8 +206,8 @@ immediately once algorithms are written.
   first contour, then repeatedly by stepover until polygon collapses
 - Repeats per Z depth level (`stepdown` increments down to `depth`)
 - Returns `AppError::GeometryImport` if tool is too large for stock
-- Unit tests: Z-level count, non-empty output for valid tool, error
-  propagation for oversized tool
+- Unit tests (all gated on `cam_geometry_bindings`): Z-level count,
+  non-empty output for valid tool, error propagation for oversized tool
 
 **Toolpath planner** (`3babbb6`)
 - `src-tauri/src/toolpath/planner.rs`: `plan(operation, tool, stock)`
@@ -313,14 +315,9 @@ immediately once algorithms are written.
 ## Phases 2–5
 
 Nothing from Phases 2–5 is implemented. `src-tauri/src/simulation/` does not
-yet exist. `src-tauri/src/postprocessor/` is complete. `kinematics.rs` and
-`cycles.rs` are not created; the engine returns `PostProcessorError::NotSupported`
-when a 5-axis path is encountered. Within Phase 1's toolpath module:
-- `src-tauri/src/toolpath/types.rs` — type definitions (complete)
-- `src-tauri/src/toolpath/linking.rs` — pass linking (complete)
-- `src-tauri/src/toolpath/planner.rs` — planner entry point, pocket dispatch (complete)
-- `src-tauri/src/toolpath/operations/pocket.rs` — pocket clearing algorithm (complete)
-- Profile and Drill algorithm files — not yet created
+yet exist. `kinematics.rs` and `cycles.rs` are not created; the post-processor
+engine returns `PostProcessorError::NotSupported` when a 5-axis path is
+encountered.
 
 ---
 
@@ -365,12 +362,12 @@ algorithm golden files do not yet exist — the algorithms are not implemented.
 | `src-tauri/src/main.rs` | Thin binary entry point (calls `lib.rs::run()`) |
 | `src-tauri/src/lib.rs` | Tauri app init, IPC command registration |
 | `src-tauri/src/state.rs` | `AppState`, `RwLock<Project>`, `Project.toolpaths` |
-| `src-tauri/src/error.rs` | `AppError` enum (incl. `PostProcessor` variant) |
+| `src-tauri/src/error.rs` | `AppError` enum (thiserror, adjacently-tagged serde); variants: `FileNotFound`, `GeometryImport`, `Io`, `ProjectLoad`, `ProjectSave`, `UnsupportedFormat`, `NotFound`, `PostProcessor` |
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
 | `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum |
-| `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `CutPoint`, `MoveKind`, `ToolpathStats`, `LineGeometryData` |
+| `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData` |
 | `src-tauri/src/toolpath/linking.rs` | `link_passes()` — retract/traverse/descend between cutting passes |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — dispatches to algorithm, links passes, computes stats |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
@@ -390,8 +387,8 @@ algorithm golden files do not yet exist — the algorithms are not implemented.
 | `src-tauri/src/commands/operations.rs` | Operation CRUD commands |
 | `src-tauri/src/commands/project.rs` | `get_project_snapshot` |
 | `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/STL) |
-| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape`, `OcctMesh`, `Drop` |
-| `src-tauri/src/geometry/ffi.rs` | bindgen-generated FFI |
+| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape`, `OcctMesh` (with `Drop` impls) |
+| `src-tauri/src/geometry/ffi.rs` | FFI bindings module: includes bindgen output written to `$OUT_DIR` at build time |
 | `src-tauri/src/project/serialization.rs` | `.jcam` ZIP read/write |
 
 ### C++ geometry wrapper
