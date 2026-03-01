@@ -9,8 +9,10 @@ use std::sync::RwLock;
 use crate::error::AppError;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
+use crate::toolpath::types::PassKind;
+use crate::toolpath::{LineGeometryData, ToolpathStats};
 
-use super::{build_tool_infos, parse_entity_id, read_project};
+use super::{build_tool_infos, parse_entity_id, read_project, write_project};
 
 // ── list_post_processors ──────────────────────────────────────────────────────
 
@@ -67,6 +69,135 @@ pub(crate) fn get_gcode_preview_inner(
     .map_err(|e| AppError::PostProcessor(e.to_string()))
 }
 
+// ── calculate_toolpath ────────────────────────────────────────────────────────
+
+/// Testable inner logic for [`calculate_toolpath`].
+///
+/// 1. Parses `operation_id` as a UUID.
+/// 2. Reads the operation, stock, and tool from the project (all must exist).
+/// 3. Calls [`crate::toolpath::planner::plan`] to generate the toolpath.
+/// 4. Stores the result in `project.toolpaths`.
+/// 5. Returns statistics about the generated toolpath.
+pub(crate) fn calculate_toolpath_inner(
+    operation_id: &str,
+    project_lock: &RwLock<Project>,
+) -> Result<ToolpathStats, AppError> {
+    let op_uuid = parse_entity_id(operation_id, "operation")?;
+
+    let (operation, tool, stock) = {
+        let project = read_project(project_lock)?;
+
+        let operation = project
+            .operations
+            .iter()
+            .find(|op| op.id == op_uuid)
+            .ok_or_else(|| AppError::NotFound(format!("operation {op_uuid} not found")))?
+            .clone();
+
+        let stock = project
+            .stock
+            .clone()
+            .ok_or_else(|| AppError::NotFound("project has no stock defined".to_string()))?;
+
+        let tool = project
+            .tools
+            .iter()
+            .find(|t| t.id == operation.tool_id)
+            .ok_or_else(|| AppError::NotFound(format!("tool {} not found", operation.tool_id)))?
+            .clone();
+
+        (operation, tool, stock)
+    }; // read lock released here
+
+    let (toolpath, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock)?;
+
+    {
+        let mut project = write_project(project_lock)?;
+        project.toolpaths.insert(op_uuid, toolpath);
+    } // write lock released here
+
+    Ok(stats)
+}
+
+// ── get_toolpath_geometry ─────────────────────────────────────────────────────
+
+/// Testable inner logic for [`get_toolpath_geometry`].
+///
+/// Converts the stored [`crate::toolpath::Toolpath`] for the given operation
+/// into flat-array line geometry suitable for Three.js rendering.
+pub(crate) fn get_toolpath_geometry_inner(
+    operation_id: &str,
+    project_lock: &RwLock<Project>,
+) -> Result<LineGeometryData, AppError> {
+    let op_uuid = parse_entity_id(operation_id, "operation")?;
+
+    let (toolpath, op_index) = {
+        let project = read_project(project_lock)?;
+
+        let toolpath = project
+            .toolpaths
+            .get(&op_uuid)
+            .ok_or_else(|| AppError::NotFound(format!("no toolpath for operation {op_uuid}")))?
+            .clone();
+
+        let op_index = project
+            .operations
+            .iter()
+            .position(|op| op.id == op_uuid)
+            .ok_or_else(|| AppError::NotFound(format!("operation {op_uuid} not found")))?;
+
+        (toolpath, op_index)
+    }; // read lock released here
+
+    const PALETTE: [(f32, f32, f32); 6] = [
+        (1.0, 0.0, 0.0),
+        (0.0, 0.8, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.0, 0.8, 0.8),
+        (0.8, 0.0, 0.8),
+        (0.8, 0.8, 0.0),
+    ];
+    let op_colour = PALETTE[op_index % 6];
+    let linking_colour: (f32, f32, f32) = (0.5, 0.5, 0.5);
+    let lead_colour = (op_colour.0 * 0.6, op_colour.1 * 0.6, op_colour.2 * 0.6);
+
+    let segment_count: usize = toolpath
+        .passes
+        .iter()
+        .map(|p| p.cuts.len().saturating_sub(1))
+        .sum();
+    let mut positions: Vec<f32> = Vec::with_capacity(segment_count * 6);
+    let mut colours: Vec<f32> = Vec::with_capacity(segment_count * 6);
+    let mut types: Vec<u8> = Vec::with_capacity(segment_count);
+
+    for pass in &toolpath.passes {
+        let (colour, type_byte): ((f32, f32, f32), u8) = match pass.kind {
+            PassKind::Linking => (linking_colour, 0),
+            PassKind::Cutting | PassKind::SpringPass => (op_colour, 1),
+            PassKind::LeadIn => (lead_colour, 2),
+            PassKind::LeadOut => (lead_colour, 3),
+        };
+
+        for pair in pass.cuts.windows(2) {
+            let a = &pair[0].position;
+            let b = &pair[1].position;
+
+            positions.extend_from_slice(&[
+                a.x as f32, a.y as f32, a.z as f32, b.x as f32, b.y as f32, b.z as f32,
+            ]);
+            colours
+                .extend_from_slice(&[colour.0, colour.1, colour.2, colour.0, colour.1, colour.2]);
+            types.push(type_byte);
+        }
+    }
+
+    Ok(LineGeometryData {
+        positions,
+        colours,
+        types,
+    })
+}
+
 // ── Tauri command wrappers ────────────────────────────────────────────────────
 
 /// List all builtin post-processors, returning their metadata.
@@ -86,6 +217,24 @@ pub async fn get_gcode_preview(
     state: tauri::State<'_, AppState>,
 ) -> Result<String, AppError> {
     get_gcode_preview_inner(&operation_id, &post_processor_id, &state.project)
+}
+
+/// Calculate and store the toolpath for the given operation, returning statistics.
+#[tauri::command]
+pub async fn calculate_toolpath(
+    operation_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<ToolpathStats, AppError> {
+    calculate_toolpath_inner(&operation_id, &state.project)
+}
+
+/// Get the flat-array line geometry for the toolpath of the given operation.
+#[tauri::command]
+pub async fn get_toolpath_geometry(
+    operation_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<LineGeometryData, AppError> {
+    get_toolpath_geometry_inner(&operation_id, &state.project)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -114,10 +263,115 @@ mod tests {
     }
 
     #[test]
-    fn get_gcode_preview_inner_returns_not_found_when_no_toolpath() {
+    fn calculate_toolpath_inner_returns_not_found_with_no_operation() {
         let state = AppState::default();
         let valid_uuid = Uuid::new_v4().to_string();
-        let result = get_gcode_preview_inner(&valid_uuid, "fanuc-0i", &state.project);
+        let result = calculate_toolpath_inner(&valid_uuid, &state.project);
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "expected NotFound, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn calculate_toolpath_inner_returns_not_found_with_no_stock() {
+        let state = AppState::default();
+
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let operation = Operation {
+            id: op_id,
+            name: "Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+            }),
+        };
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.operations.push(operation);
+            // No stock set, no tool needed — should fail at stock lookup.
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project);
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "expected NotFound (no stock), got: {result:?}"
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn calculate_toolpath_inner_stores_toolpath_for_pocket() {
+        use crate::models::stock::BoxDimensions;
+
+        let state = AppState::default();
+
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let tool = Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+
+        let operation = Operation {
+            id: op_id,
+            name: "Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+            }),
+        };
+
+        let stock = crate::models::StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 50.0,
+            depth: 50.0,
+            height: 10.0,
+        });
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(tool);
+            project.operations.push(operation);
+            project.stock = Some(stock);
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project);
+        let stats = result.expect("calculate_toolpath_inner should succeed for pocket");
+        assert!(stats.total_pass_count > 0, "expected non-zero pass count");
+
+        let project = state.project.read().expect("read lock");
+        assert!(
+            project.toolpaths.contains_key(&op_id),
+            "toolpath should be stored in project"
+        );
+    }
+
+    #[test]
+    fn get_toolpath_geometry_inner_returns_not_found_when_no_toolpath() {
+        let state = AppState::default();
+        let valid_uuid = Uuid::new_v4().to_string();
+        let result = get_toolpath_geometry_inner(&valid_uuid, &state.project);
         assert!(
             matches!(result, Err(AppError::NotFound(_))),
             "expected NotFound, got: {result:?}"

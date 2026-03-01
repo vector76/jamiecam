@@ -75,6 +75,8 @@ pub fn run() {
             commands::operations::reorder_operations,
             commands::operations::list_operations,
             commands::toolpath::list_post_processors,
+            commands::toolpath::calculate_toolpath,
+            commands::toolpath::get_toolpath_geometry,
             commands::toolpath::get_gcode_preview,
             commands::file::export_gcode,
         ])
