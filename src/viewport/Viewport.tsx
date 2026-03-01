@@ -10,6 +10,7 @@ import type React from 'react'
 import * as THREE from 'three'
 import { SceneManager } from './scene'
 import { buildModelMesh } from './modelMesh'
+import { buildToolpathLines } from './toolpathLines'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 
@@ -21,8 +22,10 @@ export function Viewport({ style }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
+  const toolpathLinesRef = useRef<THREE.LineSegments | null>(null)
 
   const meshData = useViewportStore((state) => state.meshData)
+  const toolpathGeometry = useViewportStore((state) => state.toolpathGeometry)
 
   // ── Mount / unmount ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -44,6 +47,15 @@ export function Viewport({ style }: ViewportProps) {
       if (container.contains(canvas)) container.removeChild(canvas)
     }
   }, [])
+
+  // ── Toolpath update ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const mgr = mgrRef.current
+    if (!mgr) return
+    const lines = buildToolpathLines(toolpathGeometry)
+    toolpathLinesRef.current = lines
+    mgr.setToolpathLines(lines)
+  }, [toolpathGeometry])
 
   // ── Mesh update ────────────────────────────────────────────────────────────
   useEffect(() => {

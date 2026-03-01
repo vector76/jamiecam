@@ -23,6 +23,7 @@ export class SceneManager {
   private controls: OrbitControls
   private frameId: number | null = null
   private resizeObserver: ResizeObserver
+  private toolpathGroup: THREE.Group
 
   constructor(canvas: HTMLCanvasElement, container: HTMLElement) {
     this.scene = new THREE.Scene()
@@ -65,6 +66,10 @@ export class SceneManager {
     const grid = new THREE.GridHelper(1000, 100)
     grid.rotation.x = Math.PI / 2
     this.scene.add(grid)
+
+    this.toolpathGroup = new THREE.Group()
+    this.toolpathGroup.name = 'ToolpathGroup'
+    this.scene.add(this.toolpathGroup)
 
     // ── Three-point lighting (intensities from docs/viewport-design.md) ───
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4)
@@ -141,5 +146,23 @@ export class SceneManager {
     this.resizeObserver.disconnect()
     this.controls.dispose()
     this.renderer.dispose()
+  }
+
+  /**
+   * Replace the toolpath line segments displayed in the scene.
+   * Disposes the previous geometry before replacing.
+   */
+  setToolpathLines(lines: THREE.LineSegments | null): void {
+    for (const child of [...this.toolpathGroup.children]) {
+      if (child instanceof THREE.LineSegments) {
+        // Dispose geometry only — the material is a shared module-level
+        // singleton owned by toolpathLines.ts and must not be disposed here.
+        child.geometry.dispose()
+      }
+    }
+    this.toolpathGroup.clear()
+    if (lines !== null) {
+      this.toolpathGroup.add(lines)
+    }
   }
 }
