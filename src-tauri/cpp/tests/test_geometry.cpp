@@ -231,3 +231,150 @@ TEST_CASE("cg_mesh_free(CG_NULL_ID) is safe") {
 }
 
 } // TEST_SUITE free_safety
+
+// ---------------------------------------------------------------------------
+// Test suite: 2D polygon operations (Clipper2)
+// ---------------------------------------------------------------------------
+
+// Helper: unit square [0,1]x[0,1] as flat xy pairs (4 points, CCW).
+static const double kUnitSquare[] = {
+    0.0, 0.0,
+    1.0, 0.0,
+    1.0, 1.0,
+    0.0, 1.0,
+};
+static const size_t kUnitSquareCount = 4;
+
+// Helper: compute signed area of a flat xy polygon.
+static double poly_area(const double* pts, size_t n) {
+    double area = 0.0;
+    for (size_t i = 0; i < n; ++i) {
+        size_t j = (i + 1) % n;
+        area += pts[i*2] * pts[j*2+1] - pts[j*2] * pts[i*2+1];
+    }
+    return area * 0.5;
+}
+
+TEST_SUITE("poly_offset") {
+
+TEST_CASE("inward offset of unit square returns smaller polygon") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_offset(kUnitSquare, kUnitSquareCount,
+                                 -0.1, 0.01, &out, &cnt);
+    INFO("last error: " << last_error());
+    REQUIRE(err == CG_OK);
+    REQUIRE(cnt > 0);
+    double area = std::abs(poly_area(out, cnt));
+    CHECK(area < 0.85);   // inset by 0.1 on each side → 0.8×0.8 = 0.64 mm²
+    CHECK(area > 0.55);
+    cg_poly_free(out);
+}
+
+TEST_CASE("outward offset of unit square returns larger polygon") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_offset(kUnitSquare, kUnitSquareCount,
+                                 0.1, 0.01, &out, &cnt);
+    INFO("last error: " << last_error());
+    REQUIRE(err == CG_OK);
+    REQUIRE(cnt > 0);
+    double area = std::abs(poly_area(out, cnt));
+    CHECK(area > 1.2);   // expanded by 0.1 on each side, plus rounded corners
+    cg_poly_free(out);
+}
+
+TEST_CASE("large inward offset collapses polygon and returns CG_ERR_NO_RESULT") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_offset(kUnitSquare, kUnitSquareCount,
+                                 -10.0, 0.01, &out, &cnt);
+    CHECK(err == CG_ERR_NO_RESULT);
+    CHECK(out == nullptr);
+    CHECK(cnt == 0);
+}
+
+TEST_CASE("cg_poly_free of nullptr does not crash") {
+    cg_poly_free(nullptr);
+}
+
+} // TEST_SUITE poly_offset
+
+// Two overlapping unit squares offset by 0.5 in X — overlap is 0.5×1.
+static const double kSquareB[] = {
+    0.5, 0.0,
+    1.5, 0.0,
+    1.5, 1.0,
+    0.5, 1.0,
+};
+static const size_t kSquareBCount = 4;
+
+TEST_SUITE("poly_boolean") {
+
+TEST_CASE("intersection of two overlapping squares returns overlap region") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_boolean(kUnitSquare, kUnitSquareCount,
+                                   kSquareB,   kSquareBCount,
+                                   CG_BOOL_INTERSECTION,
+                                   &out, &cnt);
+    INFO("last error: " << last_error());
+    REQUIRE(err == CG_OK);
+    REQUIRE(cnt > 0);
+    double area = std::abs(poly_area(out, cnt));
+    CHECK(area > 0.45);   // overlap is 0.5×1 = 0.5 mm²
+    CHECK(area < 0.55);
+    cg_poly_free(out);
+}
+
+TEST_CASE("union of two overlapping squares returns merged region") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_boolean(kUnitSquare, kUnitSquareCount,
+                                   kSquareB,   kSquareBCount,
+                                   CG_BOOL_UNION,
+                                   &out, &cnt);
+    INFO("last error: " << last_error());
+    REQUIRE(err == CG_OK);
+    REQUIRE(cnt > 0);
+    double area = std::abs(poly_area(out, cnt));
+    CHECK(area > 1.4);   // union of two 1 mm² squares with 0.5 overlap = 1.5 mm²
+    CHECK(area < 1.6);
+    cg_poly_free(out);
+}
+
+TEST_CASE("difference removes clip region from subject") {
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_boolean(kUnitSquare, kUnitSquareCount,
+                                   kSquareB,   kSquareBCount,
+                                   CG_BOOL_DIFFERENCE,
+                                   &out, &cnt);
+    INFO("last error: " << last_error());
+    REQUIRE(err == CG_OK);
+    REQUIRE(cnt > 0);
+    double area = std::abs(poly_area(out, cnt));
+    CHECK(area > 0.45);   // remainder is 0.5×1 = 0.5 mm²
+    CHECK(area < 0.55);
+    cg_poly_free(out);
+}
+
+TEST_CASE("intersection of non-overlapping squares returns CG_ERR_NO_RESULT") {
+    static const double far_square[] = {
+        5.0, 5.0,
+        6.0, 5.0,
+        6.0, 6.0,
+        5.0, 6.0,
+    };
+    double* out = nullptr;
+    size_t  cnt = 0;
+    CgError err = cg_poly_boolean(kUnitSquare, kUnitSquareCount,
+                                   far_square, 4,
+                                   CG_BOOL_INTERSECTION,
+                                   &out, &cnt);
+    CHECK(err == CG_ERR_NO_RESULT);
+    CHECK(out == nullptr);
+    CHECK(cnt == 0);
+}
+
+} // TEST_SUITE poly_boolean

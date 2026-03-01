@@ -44,6 +44,9 @@
 #include <unordered_map>
 #include <vector>
 
+// ── Clipper2 includes ─────────────────────────────────────────────────────────
+#include "clipper2/clipper.h"
+
 // ── Project includes ─────────────────────────────────────────────────────────
 #include "cam_geometry.h"
 #include "handle_registry.h"
@@ -579,29 +582,128 @@ void cg_planar_faces_free(CgPlanarFaceInfo* faces) {
     delete[] faces;
 }
 
-/* ── 2D polygon operations (stubs — Clipper2 impl in later phase) ────────── */
+/* ── 2D polygon operations (Clipper2) ───────────────────────────────────── */
 
-CgError cg_poly_offset(const double* /*points*/, size_t /*point_count*/,
-                        double /*delta*/, double /*arc_tolerance*/,
+CgError cg_poly_offset(const double* points, size_t point_count,
+                        double delta, double arc_tolerance,
                         double** out_points, size_t* out_count) {
-    set_last_error("not implemented");
     if (out_points) *out_points = nullptr;
     if (out_count)  *out_count  = 0;
-    return CG_ERR_NO_RESULT;
+    try {
+        constexpr double SCALE = 1e6;
+        Clipper2Lib::Path64 path;
+        path.reserve(point_count);
+        for (size_t i = 0; i < point_count; ++i) {
+            path.push_back({
+                static_cast<int64_t>(std::round(points[i * 2]     * SCALE)),
+                static_cast<int64_t>(std::round(points[i * 2 + 1] * SCALE))
+            });
+        }
+        Clipper2Lib::Paths64 result = Clipper2Lib::InflatePaths(
+            Clipper2Lib::Paths64{path},
+            delta * SCALE,
+            Clipper2Lib::JoinType::Round,
+            Clipper2Lib::EndType::Polygon,
+            2.0,
+            arc_tolerance * SCALE
+        );
+        if (result.empty()) {
+            set_last_error("polygon offset collapsed to empty result");
+            return CG_ERR_NO_RESULT;
+        }
+        // Keep only the largest-area path
+        size_t best = 0;
+        double best_area = std::abs(Clipper2Lib::Area<int64_t>(result[0]));
+        for (size_t i = 1; i < result.size(); ++i) {
+            double a = std::abs(Clipper2Lib::Area<int64_t>(result[i]));
+            if (a > best_area) { best_area = a; best = i; }
+        }
+        const auto& best_path = result[best];
+        size_t n = best_path.size();
+        double* buf = new double[n * 2];
+        for (size_t i = 0; i < n; ++i) {
+            buf[i * 2]     = static_cast<double>(best_path[i].x) / SCALE;
+            buf[i * 2 + 1] = static_cast<double>(best_path[i].y) / SCALE;
+        }
+        *out_points = buf;
+        *out_count  = n;
+        return CG_OK;
+    } catch (const std::exception& ex) {
+        set_last_error(ex.what());
+        return CG_ERR_NO_RESULT;
+    } catch (...) {
+        set_last_error("unknown error in cg_poly_offset");
+        return CG_ERR_NO_RESULT;
+    }
 }
 
 void cg_poly_free(double* points) {
     delete[] points;
 }
 
-CgError cg_poly_boolean(const double* /*a_points*/, size_t /*a_count*/,
-                         const double* /*b_points*/, size_t /*b_count*/,
-                         CgBoolOp /*op*/,
+CgError cg_poly_boolean(const double* a_points, size_t a_count,
+                         const double* b_points, size_t b_count,
+                         CgBoolOp op,
                          double** out_points, size_t* out_count) {
-    set_last_error("not implemented");
     if (out_points) *out_points = nullptr;
     if (out_count)  *out_count  = 0;
-    return CG_ERR_NO_RESULT;
+    try {
+        constexpr double SCALE = 1e6;
+        auto to_path = [SCALE](const double* pts, size_t n) {
+            Clipper2Lib::Path64 p;
+            p.reserve(n);
+            for (size_t i = 0; i < n; ++i)
+                p.push_back({
+                    static_cast<int64_t>(std::round(pts[i * 2]     * SCALE)),
+                    static_cast<int64_t>(std::round(pts[i * 2 + 1] * SCALE))
+                });
+            return p;
+        };
+        Clipper2Lib::Paths64 subj = {to_path(a_points, a_count)};
+        Clipper2Lib::Paths64 clip = {to_path(b_points, b_count)};
+        Clipper2Lib::Paths64 result;
+        switch (op) {
+            case CG_BOOL_UNION:
+                result = Clipper2Lib::Union(subj, clip, Clipper2Lib::FillRule::NonZero);
+                break;
+            case CG_BOOL_DIFFERENCE:
+                result = Clipper2Lib::Difference(subj, clip, Clipper2Lib::FillRule::NonZero);
+                break;
+            case CG_BOOL_INTERSECTION:
+                result = Clipper2Lib::Intersect(subj, clip, Clipper2Lib::FillRule::NonZero);
+                break;
+            default:
+                set_last_error("unknown boolean op");
+                return CG_ERR_INVALID_ARG;
+        }
+        if (result.empty()) {
+            set_last_error("polygon boolean operation produced empty result");
+            return CG_ERR_NO_RESULT;
+        }
+        // Keep only the largest-area path
+        size_t best = 0;
+        double best_area = std::abs(Clipper2Lib::Area<int64_t>(result[0]));
+        for (size_t i = 1; i < result.size(); ++i) {
+            double a = std::abs(Clipper2Lib::Area<int64_t>(result[i]));
+            if (a > best_area) { best_area = a; best = i; }
+        }
+        const auto& best_path = result[best];
+        size_t n = best_path.size();
+        double* buf = new double[n * 2];
+        for (size_t i = 0; i < n; ++i) {
+            buf[i * 2]     = static_cast<double>(best_path[i].x) / SCALE;
+            buf[i * 2 + 1] = static_cast<double>(best_path[i].y) / SCALE;
+        }
+        *out_points = buf;
+        *out_count  = n;
+        return CG_OK;
+    } catch (const std::exception& ex) {
+        set_last_error(ex.what());
+        return CG_ERR_NO_RESULT;
+    } catch (...) {
+        set_last_error("unknown error in cg_poly_boolean");
+        return CG_ERR_NO_RESULT;
+    }
 }
 
 } // extern "C"
