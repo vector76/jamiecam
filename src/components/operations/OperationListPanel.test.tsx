@@ -9,7 +9,8 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { OperationListPanel } from './OperationListPanel'
 import { useProjectStore } from '../../store/projectStore'
-import type { Operation, ProjectSnapshot } from '../../api/types'
+import { useViewportStore } from '../../store/viewportStore'
+import type { Operation, ProjectSnapshot, LineGeometryData, ToolpathStats } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -24,8 +25,19 @@ vi.mock('../../api/file', () => ({
   getProjectSnapshot: vi.fn(),
 }))
 
+vi.mock('../../api/toolpath', () => ({
+  calculateToolpath: vi.fn(),
+  getToolpathGeometry: vi.fn(),
+}))
+
+vi.mock('./OperationEditorForm', () => ({
+  OperationEditorForm: ({ operationId }: { operationId: string | null }) =>
+    <div data-testid="editor-form" data-op-id={operationId ?? ''} />,
+}))
+
 const opsApi = await import('../../api/operations')
 const fileApi = await import('../../api/file')
+const toolpathApi = await import('../../api/toolpath')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -72,9 +84,21 @@ const FULL_OP2: Operation = {
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
+const STOCK = { type: 'box' as const, origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 20, height: 50 }
+
+const SNAPSHOT_WITH_STOCK: ProjectSnapshot = {
+  ...SNAPSHOT_WITH_OPS,
+  stock: STOCK,
+}
+
+const TOOLPATH_STATS: ToolpathStats = { totalPassCount: 3, totalPointCount: 42, totalPathLengthMm: 150.5 }
+
+const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 1, 1], colours: [1, 0, 0, 0, 1, 0], types: [0] }
+
 beforeEach(() => {
   vi.clearAllMocks()
-  useProjectStore.setState({ snapshot: null })
+  useProjectStore.setState({ snapshot: null, selectedOperationId: null, notifications: [] })
+  useViewportStore.setState({ toolpathGeometry: null })
 })
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -249,5 +273,108 @@ describe('OperationListPanel — delete', () => {
 
     await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
     expect(useProjectStore.getState().snapshot?.projectName).toBe('After Delete')
+  })
+})
+
+// ── Selection ─────────────────────────────────────────────────────────────────
+
+describe('OperationListPanel — selection', () => {
+  it('clicking a row sets selectedOperationId in the store', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByText('Rough Pocket'))
+    expect(useProjectStore.getState().selectedOperationId).toBe(OP2_ID)
+  })
+
+  it('selected row has a different background', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS, selectedOperationId: OP1_ID })
+    render(<OperationListPanel />)
+    const row = screen.getByText('Outer Profile').closest('div')!
+    expect(row.style.background).toBeTruthy()
+  })
+
+  it('mounts OperationEditorForm with selectedOpId', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS, selectedOperationId: OP2_ID })
+    render(<OperationListPanel />)
+    expect(screen.getByTestId('editor-form')).toHaveAttribute('data-op-id', OP2_ID)
+  })
+})
+
+// ── Calculate button ──────────────────────────────────────────────────────────
+
+describe('OperationListPanel — Calculate button', () => {
+  it('renders a Calculate button for each operation', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeInTheDocument()
+  })
+
+  it('Calculate is disabled for non-pocket operations', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).toBeDisabled()
+  })
+
+  it('Calculate is disabled when stock is null even for pocket operations', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS }) // stock: null
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeDisabled()
+  })
+
+  it('Calculate is enabled for pocket operations when stock is set', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).not.toBeDisabled()
+  })
+
+  it('Calculate calls calculateToolpath and getToolpathGeometry', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+
+    await waitFor(() => expect(toolpathApi.calculateToolpath).toHaveBeenCalledWith(OP2_ID))
+    expect(toolpathApi.getToolpathGeometry).toHaveBeenCalledWith(OP2_ID)
+  })
+
+  it('Calculate sets toolpath geometry in viewport store', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+
+    await waitFor(() => expect(useViewportStore.getState().toolpathGeometry).toEqual(LINE_GEOMETRY))
+  })
+
+  it('Calculate pushes a stats notification', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+
+    await waitFor(() => {
+      const notes = useProjectStore.getState().notifications
+      expect(notes.some((n) => n.includes('3 passes') && n.includes('42 pts') && n.includes('150.5 mm'))).toBe(true)
+    })
+  })
+
+  it('Calculate button click does not also select the row via row click', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK, selectedOperationId: null })
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+
+    await waitFor(() => expect(toolpathApi.calculateToolpath).toHaveBeenCalled())
+    // row-level onClick should NOT have fired due to stopPropagation
+    expect(useProjectStore.getState().selectedOperationId).toBeNull()
   })
 })

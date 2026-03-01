@@ -7,22 +7,42 @@
  * using the first available tool; they are disabled when no tools exist.
  */
 
-import { useOperations, useProjectStore, useTools } from '../../store/projectStore'
+import { useOperations, useProjectStore, useSelectedOperationId, useStock, useTools } from '../../store/projectStore'
+import { useViewportStore } from '../../store/viewportStore'
 import { addOperation, deleteOperation, editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
+import { calculateToolpath, getToolpathGeometry } from '../../api/toolpath'
+import { OperationEditorForm } from './OperationEditorForm'
 import type { OperationInput } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
   const tools = useTools()
+  const stock = useStock()
+  const selectedOpId = useSelectedOperationId()
+  const setSelectedOpId = useProjectStore((s) => s.setSelectedOperationId)
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
   const pushNotification = useProjectStore((s) => s.pushNotification)
+  const setToolpathGeometry = useViewportStore((s) => s.setToolpathGeometry)
   const noTools = tools.length === 0
 
   function handleError(e: unknown) {
     const err = toAppError(e)
     pushNotification(err.message ?? err.kind ?? 'An error occurred')
+  }
+
+  // ── Calculate toolpath ────────────────────────────────────────────────────
+
+  async function handleCalculate(id: string) {
+    try {
+      const stats = await calculateToolpath(id)
+      const geometry = await getToolpathGeometry(id)
+      setToolpathGeometry(geometry)
+      pushNotification(
+        `Toolpath: ${stats.totalPassCount} passes, ${stats.totalPointCount} pts, ${stats.totalPathLengthMm.toFixed(1)} mm`
+      )
+    } catch (e) { handleError(e) }
   }
 
   // ── Toggle enabled ────────────────────────────────────────────────────────
@@ -92,25 +112,39 @@ export function OperationListPanel() {
         {operations.map((op) => (
           <div
             key={op.id}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem' }}
+            onClick={() => setSelectedOpId(op.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem',
+              cursor: 'pointer',
+              background: op.id === selectedOpId ? '#e0e8ff' : undefined,
+            }}
           >
             <input
               type="checkbox"
               checked={op.enabled}
               onChange={() => void handleToggleEnabled(op.id, op.enabled)}
+              onClick={(e) => e.stopPropagation()}
               aria-label={`Toggle ${op.name}`}
             />
             <span style={{ flex: 1 }}>{op.name}</span>
             <span style={{ fontSize: '0.75em', color: '#666' }}>{op.operationType}</span>
             <button
-              onClick={() => void handleDelete(op.id)}
+              onClick={(e) => { e.stopPropagation(); void handleDelete(op.id) }}
               aria-label={`Delete ${op.name}`}
             >
               ✕
             </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); void handleCalculate(op.id) }}
+              disabled={op.operationType !== 'pocket' || !stock}
+              aria-label={`Calculate ${op.name}`}
+            >
+              Calc
+            </button>
           </div>
         ))}
       </div>
+      <OperationEditorForm operationId={selectedOpId} />
       <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
         <button
           onClick={() => void handleAdd('profile')}
