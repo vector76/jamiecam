@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-01. Based on git history (71 commits, branch `main`)._
+_Last updated: 2026-03-01. Based on git history (77 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -19,11 +19,11 @@ WCS, and operations is fully implemented on both the Rust backend and the
 TypeScript frontend. The post-processor engine and G-code export pipeline are
 complete, including four built-in post-processor configs, golden-file
 integration tests, IPC commands, and a G-code preview panel with export
-functionality. The pocket clearing CAM algorithm, Clipper2 polygon integration,
-toolpath linking, planner, IPC calculate/geometry commands, toolpath
-visualization in the viewport, operation editor form (pocket), and Calculate
-button are also implemented and tested end-to-end. Profile, drilling, and
-geometry selection are the main remaining items for Phase 1.
+functionality. The pocket clearing and profile contouring CAM algorithms, Clipper2 polygon
+integration, toolpath linking, planner, IPC calculate/geometry commands,
+toolpath visualization in the viewport, operation editor forms (pocket and
+profile), and Calculate button are also implemented and tested end-to-end.
+Drilling and geometry selection are the main remaining items for Phase 1.
 
 ---
 
@@ -167,7 +167,7 @@ immediately once algorithms are written.
 - Golden files: `tests/integration/golden_gcode/fanuc-0i/simple_pocket.nc`,
   `linuxcnc/simple_pocket.nc`
 
-### CAM algorithms (complete for pocket; profile/drill pending)
+### CAM algorithms (complete for pocket and profile; drill pending)
 
 **Clipper2 C++ implementation** (`4700298`)
 - `cg_poly_offset` and `cg_poly_boolean` stubs replaced with real Clipper2
@@ -209,12 +209,14 @@ immediately once algorithms are written.
 - Unit tests (all gated on `cam_geometry_bindings`): Z-level count,
   non-empty output for valid tool, error propagation for oversized tool
 
-**Toolpath planner** (`3babbb6`)
+**Toolpath planner** (`3babbb6`, updated `1b405df`)
 - `src-tauri/src/toolpath/planner.rs`: `plan(operation, tool, stock)`
-- Dispatches to `pocket_passes` then `link_passes`; assembles `Toolpath`
-  with `ToolpathStats`
-- Profile and Drill return `AppError::NotFound` ("not yet supported")
-- Unit tests: error for Profile, stats non-zero for Pocket (gated on bindings)
+- Dispatches to `pocket_passes` or `profile_passes` then `link_passes`;
+  assembles `Toolpath` with `ToolpathStats`
+- Drill returns `AppError::NotFound` ("operation type not supported"); no
+  unit test for this path
+- Unit tests: stats non-zero for Pocket and Profile (gated on bindings);
+  error for Profile without geometry bindings (stub path)
 
 **Pocket algorithm golden file test** (`f52cdc5`)
 - `src-tauri/tests/pocket_golden.rs`: `pocket_algorithm_golden_matches`
@@ -225,6 +227,28 @@ immediately once algorithms are written.
 - Golden fixture: `tests/integration/pocket/toolpath.json` (2848 lines)
 - `[[test]]` entries added to `src-tauri/Cargo.toml` for both
   `gcode_golden` and `pocket_golden`
+
+**Profile contouring algorithm** (`ad562cd`)
+- `src-tauri/src/toolpath/operations/profile.rs`: `profile_passes(stock, params, tool_diameter)`
+- Constructs stock boundary rectangle; offsets inward (Left) or outward
+  (Right) by tool radius, or uses raw boundary (Center) for the single
+  cutting contour; repeats contour per Z depth level (`stepdown` down to
+  `depth`)
+- Returns `AppError::GeometryImport` if Left/Right offset collapses entirely
+  (tool too large); Center never fails since it skips `poly_offset`
+- Geometry-gated tests: Z-level count, non-empty for Left, collapse when
+  tool too large, Left vs Center produce different contours
+- Ungated test: Center compensation uses raw boundary (compiles without
+  geometry bindings)
+
+**Profile algorithm golden file test** (`7e7da0f`)
+- `src-tauri/tests/profile_golden.rs`: `profile_algorithm_golden_matches`
+  gated via `#![cfg(cam_geometry_bindings)]`
+- Exercises full planner pipeline (50×50×10 mm stock, 6 mm flat endmill,
+  depth=10/stepdown=2.5, Left compensation); 4 Z levels with one
+  rectangular contour per level offset inward by 3 mm
+- Golden fixture: `tests/integration/profile/toolpath.json` (468 lines)
+- `[[test]]` entry added to `src-tauri/Cargo.toml` for `profile_golden`
 
 ### IPC commands (calculate and geometry)
 
@@ -239,22 +263,25 @@ immediately once algorithms are written.
 - Unit tests: NotFound with no operation, NotFound with no stock, stores
   toolpath for pocket (gated), NotFound when no toolpath stored
 
-### UI (substantially complete for pocket workflow)
+### UI (substantially complete for pocket and profile workflows)
 
-**Operation editor form** (`53c4f49`)
+**Operation editor form** (`53c4f49`, updated `70e8318`)
 - `OperationEditorForm` in `src/components/operations/OperationEditorForm.tsx`
 - Pocket operations: tool select (saves on change) + depth / stepdown /
   stepover number inputs (save on blur via `editOperation`)
-- Profile and drill: "coming soon" placeholder
-- Uses `key={operationId}` to remount uncontrolled inputs when selection changes
-- Tests in `OperationEditorForm.test.tsx` (255 lines)
+- Profile operations: tool select (saves on change) + depth / stepdown /
+  compensation side (Left/Center/Right) select (saves on change)
+- Drill: "coming soon" placeholder
+- Uses `key={operation.id}` on the rendered div to remount uncontrolled inputs when the selected operation changes
+- Tests in `OperationEditorForm.test.tsx` cover pocket and profile forms
 
-**Operation list panel — row selection and Calculate** (`f94a19a`)
+**Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`)
 - Row click sets `selectedOperationId`; selected row highlighted
 - `OperationEditorForm` mounted below the list, driven by `selectedOperationId`
-- Calculate button per row: enabled only for pocket operations when stock
-  is defined; calls `calculateToolpath` → `getToolpathGeometry` →
-  `setToolpathGeometry` and pushes a stats notification string
+- Calculate button per row: enabled for pocket and profile operations when
+  stock is defined; drill operations remain disabled; calls
+  `calculateToolpath` → `getToolpathGeometry` → `setToolpathGeometry` and
+  pushes a stats notification string
 - `stopPropagation` on checkbox, delete, and Calculate buttons
 
 **Toolpath visualization** (`63028d8`, `108548a`)
@@ -303,7 +330,6 @@ immediately once algorithms are written.
 | Item | Notes |
 |---|---|
 | Geometry selection | Click faces/edges in viewport; face fingerprinting |
-| Profile / contour algorithm | Planner returns `NotFound`; CAM logic not written |
 | Drilling algorithm | Planner returns `NotFound`; CAM logic not written |
 | Progress events | Tokio task progress → `emit()` → frontend progress bar |
 | Cache invalidation | SHA-256 cache key, stale detection; not implemented |
@@ -333,7 +359,7 @@ encountered.
 | `src/store/viewportStore.test.ts` | Viewport store (including `toolpathGeometry`) |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar component |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: selection, Calculate button, API calls, viewport store update, propagation |
-| `src/components/operations/OperationEditorForm.test.tsx` | Operation editor form: pocket fields, tool select, save on blur |
+| `src/components/operations/OperationEditorForm.test.tsx` | Operation editor form: pocket and profile fields, tool select, save on blur/change |
 | `src/components/common/Notifications.test.tsx` | Error notification toasts |
 | `src/viewport/Viewport.test.tsx` | Viewport component mount/unmount, mesh updates |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
@@ -341,16 +367,17 @@ encountered.
 | `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean (doctest) |
 | `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i, linuxcnc |
 | `src-tauri/tests/pocket_golden.rs` | Golden-file integration: pocket algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
+| `src-tauri/tests/profile_golden.rs` | Golden-file integration: profile algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot, toolpath (calculate, get_geometry, G-code preview) |
 | `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `linking.rs` pass wrapping, `planner.rs` dispatch, `operations/pocket.rs` Z-levels/output/error |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `linking.rs` pass wrapping, `planner.rs` dispatch, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse |
 | `src-tauri/src/geometry/clipper.rs` (inline) | Stub path always; integration path (offset/boolean) gated on bindings |
 | `src-tauri/src/` (inline) | `error.rs` variants, `state.rs` defaults, `project/serialization.rs` round-trips |
 
 Golden-file tests now cover both the post-processor output stage (G-code) and
-the CAM algorithm output stage (pocket toolpath JSON). Profile and Drill
-algorithm golden files do not yet exist — the algorithms are not implemented.
+the CAM algorithm output stage (pocket and profile toolpath JSON). Drill
+algorithm golden files do not yet exist — the algorithm is not implemented.
 
 ---
 
@@ -371,6 +398,7 @@ algorithm golden files do not yet exist — the algorithms are not implemented.
 | `src-tauri/src/toolpath/linking.rs` | `link_passes()` — retract/traverse/descend between cutting passes |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — dispatches to algorithm, links passes, computes stats |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
+| `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
 | `src-tauri/src/postprocessor/config.rs` | TOML schema deserialization + validation |
 | `src-tauri/src/postprocessor/formatter.rs` | Number formatting + template substitution |
@@ -409,6 +437,7 @@ algorithm golden files do not yet exist — the algorithms are not implemented.
 | `tests/integration/golden_gcode/linuxcnc/simple_pocket.toolpath.json` | Same fixture for LinuxCNC |
 | `tests/integration/golden_gcode/linuxcnc/simple_pocket.nc` | Golden G-code output for LinuxCNC |
 | `tests/integration/pocket/toolpath.json` | Golden pocket algorithm output (50×50×10 mm, 10 mm tool) |
+| `tests/integration/profile/toolpath.json` | Golden profile algorithm output (50×50×10 mm, 6 mm tool, Left compensation) |
 
 ### TypeScript frontend
 | File | Purpose |
@@ -427,7 +456,7 @@ algorithm golden files do not yet exist — the algorithms are not implemented.
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
 | `src/components/operations/OperationListPanel.tsx` | Operation list: row selection, Calculate button, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket parameter form (tool, depth, stepdown, stepover) |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket and profile parameter forms (tool, depth, stepdown, stepover / compensation side) |
 | `src/components/toolbar/Toolbar.tsx` | File operation toolbar |
 | `src/components/common/Notifications.tsx` | IPC error toast/snackbar |
 | `src/components/gcode/GCodePreviewPanel.tsx` | G-code preview with PP selector + Export |
