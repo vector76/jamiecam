@@ -1,23 +1,26 @@
-//! Geometry kernel interface — thin Rust layer over the C++ OCCT wrapper.
+//! Geometry kernel interface — thin Rust layer over the C++ OCCT and Clipper2 wrappers.
 //!
 //! # Module structure
 //!
 //! ```text
 //! geometry/
 //! ├── ffi.rs      — raw bindgen-generated extern "C" declarations (private)
-//! ├── safe.rs     — safe Rust wrappers with RAII and Result<T, E> (public API)
+//! ├── safe.rs     — safe RAII wrappers for OCCT (shapes, meshes)
+//! ├── clipper.rs  — safe wrappers for Clipper2 2D polygon operations
 //! └── importer.rs — high-level import dispatcher (STEP/IGES/STL → MeshData)
 //! ```
 //!
-//! All `unsafe` code lives in `safe.rs`. Code outside the `geometry` module
-//! should only use the types re-exported from here.
+//! All `unsafe` code is isolated in `safe.rs` and `clipper.rs`. Code outside
+//! the `geometry` module should only use the types re-exported from here.
 
 // Raw bindings are private — callers use the safe wrappers below.
 mod ffi;
 
+pub mod clipper;
 pub mod importer;
 pub mod safe;
 
+pub use clipper::{poly_boolean, poly_offset, BoolOp};
 pub use importer::import;
 pub use safe::{GeometryError, MeshData, OcctMesh, OcctShape};
 
