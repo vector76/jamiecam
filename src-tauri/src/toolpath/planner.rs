@@ -11,7 +11,7 @@ use crate::toolpath::{
 /// Generate a [`Toolpath`] and [`ToolpathStats`] for the given operation.
 ///
 /// Returns [`AppError::NotFound`] for operation types that are not yet
-/// supported (Profile, Drill).
+/// supported (Drill).
 pub fn plan(
     operation: &Operation,
     tool: &Tool,
@@ -22,7 +22,10 @@ pub fn plan(
         OperationParams::Pocket(params) => {
             operations::pocket::pocket_passes(stock, params, tool.diameter)?
         }
-        OperationParams::Profile(_) | OperationParams::Drill(_) => {
+        OperationParams::Profile(params) => {
+            operations::profile::profile_passes(stock, params, tool.diameter)?
+        }
+        OperationParams::Drill(_) => {
             return Err(AppError::NotFound(
                 "operation type not supported".to_string(),
             ));
@@ -102,24 +105,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn plan_returns_error_for_profile() {
-        let operation = Operation {
-            id: Uuid::nil(),
-            name: "Profile Op".to_string(),
-            enabled: true,
-            tool_id: Uuid::nil(),
-            params: OperationParams::Profile(ProfileParams {
-                depth: 5.0,
-                stepdown: 2.0,
-                compensation_side: CompensationSide::Center,
-            }),
-        };
-        let tool = make_tool_10mm();
-        let stock = make_stock_50x50x10();
-        assert!(plan(&operation, &tool, &stock).is_err());
-    }
-
     #[cfg(cam_geometry_bindings)]
     #[test]
     fn plan_stats_are_non_zero_for_pocket() {
@@ -139,5 +124,45 @@ mod tests {
         let (_, stats) = plan(&operation, &tool, &stock).expect("pocket plan should succeed");
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn plan_stats_are_non_zero_for_profile() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "Profile Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            params: OperationParams::Profile(ProfileParams {
+                depth: 10.0,
+                stepdown: 2.5,
+                compensation_side: CompensationSide::Left,
+            }),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        let (_, stats) = plan(&operation, &tool, &stock).expect("profile plan should succeed");
+        assert!(stats.total_pass_count > 0);
+        assert!(stats.total_path_length_mm > 0.0);
+    }
+
+    #[cfg(not(cam_geometry_bindings))]
+    #[test]
+    fn plan_profile_returns_error_without_geometry_bindings() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "Profile Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            params: OperationParams::Profile(ProfileParams {
+                depth: 5.0,
+                stepdown: 2.0,
+                compensation_side: CompensationSide::Left,
+            }),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        assert!(plan(&operation, &tool, &stock).is_err());
     }
 }
