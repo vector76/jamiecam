@@ -50,6 +50,10 @@ path = "tests/gcode_golden.rs"
 name = "pocket_golden"
 path = "tests/pocket_golden.rs"
 
+[[test]]
+name = "profile_golden"
+path = "tests/profile_golden.rs"
+
 [features]
 # this feature is used for production builds or when `devtools` feature is not
 # enabled, which is the case when cargo test is run
