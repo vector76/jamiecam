@@ -1,6 +1,6 @@
 /**
- * Tests for OperationEditorForm.tsx — renders a form for editing a pocket
- * operation, handles null/non-pocket states, and calls the API on field change.
+ * Tests for OperationEditorForm.tsx — renders forms for editing pocket and
+ * profile operations, handles null/unknown states, and calls the API on field change.
  *
  * API modules are mocked so tests run in jsdom without a real Tauri context.
  */
@@ -84,15 +84,71 @@ describe('OperationEditorForm — null state', () => {
   })
 })
 
-// ── Non-pocket operation ───────────────────────────────────────────────────────
+// ── Profile form rendering ─────────────────────────────────────────────────────
 
-describe('OperationEditorForm — non-pocket operation', () => {
-  it('renders coming soon for a profile operation', async () => {
+describe('OperationEditorForm — profile form', () => {
+  beforeEach(() => {
     vi.mocked(opsApi.listOperations).mockResolvedValue([PROFILE_OP])
+  })
+
+  it('renders depth, stepdown, and compensation side inputs for a profile operation', async () => {
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Floor depth (mm)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Step-down (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Compensation side')).toBeInTheDocument()
+  })
+
+  it('depth and stepdown inputs have correct default values', async () => {
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Floor depth (mm)')).toHaveValue(10))
+    expect(screen.getByLabelText('Step-down (mm)')).toHaveValue(2.5)
+  })
+
+  it('calls editOperation with updated compensationSide on select change', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
 
     render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByText('Parameters coming soon')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Compensation side')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Compensation side'), { target: { value: 'right' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ compensationSide: 'right' }) }),
+    ))
+  })
+
+  it('calls editOperation with updated depth on blur', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Floor depth (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Floor depth (mm)'), { target: { value: '15' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ depth: 15 }) }),
+    ))
+  })
+
+  it('calls editOperation with updated stepdown on blur', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Step-down (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Step-down (mm)'), { target: { value: '1.5' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepdown: 1.5 }) }),
+    ))
   })
 })
 

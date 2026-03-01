@@ -6,8 +6,8 @@
  * editOperation on each field change (on blur for number inputs, on change for
  * the tool select). After each save the project snapshot is refreshed.
  *
- * Only pocket operations have a parameter form for now; profile and drill show
- * a "coming soon" placeholder.
+ * Pocket and profile operations have parameter forms; drill shows a "coming
+ * soon" placeholder.
  */
 
 import { useEffect, useState } from 'react'
@@ -15,7 +15,7 @@ import { useTools, useProjectStore } from '../../store/projectStore'
 import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
-import type { Operation, OperationInput, PocketParams } from '../../api/types'
+import type { Operation, OperationInput, PocketParams, ProfileParams } from '../../api/types'
 
 interface Props {
   operationId: string | null
@@ -62,35 +62,67 @@ export function OperationEditorForm({ operationId }: Props) {
     } catch (e) { handleError(e) }
   }
 
-  if (operation.type !== 'pocket') {
-    return <div style={{ padding: '0.5rem', color: '#888' }}>Parameters coming soon</div>
+  if (operation.type === 'pocket') {
+    const params = operation.params as PocketParams
+    return (
+      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-tool">Tool</label>
+          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+            {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-depth">Floor depth (mm)</label>
+          <input id="oef-depth" type="number" defaultValue={params.depth}
+            onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-stepdown">Step-down (mm)</label>
+          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+            onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-stepover">Stepover (%)</label>
+          <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
+            onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
+        </div>
+      </div>
+    )
   }
 
-  const params = operation.params as PocketParams
+  if (operation.type === 'profile') {
+    const params = operation.params as ProfileParams
+    return (
+      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-tool">Tool</label>
+          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+            {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-depth">Floor depth (mm)</label>
+          <input id="oef-depth" type="number" defaultValue={params.depth}
+            onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-stepdown">Step-down (mm)</label>
+          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+            onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-compensation">Compensation side</label>
+          <select id="oef-compensation" value={params.compensationSide}
+            onChange={(e) => void save({ params: { ...params, compensationSide: e.target.value as ProfileParams['compensationSide'] } })}>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
+      </div>
+    )
+  }
 
-  return (
-    <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-      <div style={{ marginBottom: '0.25rem' }}>
-        <label htmlFor="oef-tool">Tool</label>
-        <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
-          {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-      <div style={{ marginBottom: '0.25rem' }}>
-        <label htmlFor="oef-depth">Floor depth (mm)</label>
-        <input id="oef-depth" type="number" defaultValue={params.depth}
-          onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
-      </div>
-      <div style={{ marginBottom: '0.25rem' }}>
-        <label htmlFor="oef-stepdown">Step-down (mm)</label>
-        <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
-          onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
-      </div>
-      <div style={{ marginBottom: '0.25rem' }}>
-        <label htmlFor="oef-stepover">Stepover (%)</label>
-        <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
-          onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
-      </div>
-    </div>
-  )
+  return <div style={{ padding: '0.5rem', color: '#888' }}>Parameters coming soon</div>
 }
