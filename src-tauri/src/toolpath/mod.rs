@@ -1,2 +1,2 @@
 pub mod types;
-pub use types::Toolpath;
+pub use types::{LineGeometryData, Toolpath, ToolpathStats};

@@ -94,6 +94,33 @@ pub enum ToolOrientation {
     },
 }
 
+/// Statistics computed over a generated toolpath.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolpathStats {
+    pub total_point_count: usize,
+    pub total_pass_count: usize,
+    /// Total path length in millimetres (sum of Euclidean distances between consecutive points).
+    pub total_path_length_mm: f64,
+}
+
+/// Flat-array line geometry for the Three.js viewport.
+///
+/// Segment type values (stored in `types`):
+///   0 = Linking (rapid)
+///   1 = Cutting
+///   2 = LeadIn
+///   3 = LeadOut
+///
+/// Layout: for each line segment, positions holds 6 floats (start XYZ + end XYZ),
+/// colours holds 6 floats (RGB × 2 for start and end vertex), types holds 1 byte.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LineGeometryData {
+    pub positions: Vec<f32>,
+    pub colours: Vec<f32>,
+    pub types: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,6 +255,54 @@ mod tests {
                 .as_str()
                 .unwrap(),
             "lead_in"
+        );
+    }
+
+    #[test]
+    fn toolpath_stats_serde_round_trip() {
+        let original = ToolpathStats {
+            total_point_count: 42,
+            total_pass_count: 3,
+            total_path_length_mm: 1234.5,
+        };
+        let json = serde_json::to_string(&original).expect("serialize ToolpathStats");
+        let recovered: ToolpathStats =
+            serde_json::from_str(&json).expect("deserialize ToolpathStats");
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn line_geometry_data_serde_round_trip() {
+        let original = LineGeometryData {
+            positions: vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+            colours: vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            types: vec![1],
+        };
+        let json = serde_json::to_string(&original).expect("serialize LineGeometryData");
+        let recovered: LineGeometryData =
+            serde_json::from_str(&json).expect("deserialize LineGeometryData");
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn toolpath_stats_fields_are_camel_case() {
+        let stats = ToolpathStats {
+            total_point_count: 10,
+            total_pass_count: 2,
+            total_path_length_mm: 99.9,
+        };
+        let value = serde_json::to_value(&stats).expect("serialize ToolpathStats to value");
+        assert!(
+            value.get("totalPointCount").is_some(),
+            "missing totalPointCount"
+        );
+        assert!(
+            value.get("totalPassCount").is_some(),
+            "missing totalPassCount"
+        );
+        assert!(
+            value.get("totalPathLengthMm").is_some(),
+            "missing totalPathLengthMm"
         );
     }
 }
