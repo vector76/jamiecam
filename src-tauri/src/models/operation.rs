@@ -45,12 +45,23 @@ pub struct PocketParams {
     pub stepover_percent: f64,
 }
 
+/// A single drill point location.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DrillPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
 /// Parameters for a Drill operation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DrillParams {
     /// Drill depth in project units.
     pub depth: f64,
+    /// Points to drill.
+    #[serde(default)]
+    pub points: Vec<DrillPoint>,
     /// Peck increment in project units; `null` for full-depth (non-peck) drilling.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peck_depth: Option<f64>,
@@ -140,6 +151,7 @@ mod tests {
             tool_id: tool_id(),
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
+                points: vec![],
                 peck_depth: Some(5.0),
             }),
         }
@@ -178,6 +190,7 @@ mod tests {
             tool_id: tool_id(),
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
+                points: vec![],
                 peck_depth: None,
             }),
         };
@@ -231,5 +244,32 @@ mod tests {
             params.get("compensationSide").is_some(),
             "compensationSide must be camelCase"
         );
+    }
+
+    #[test]
+    fn drill_point_serde_round_trip() {
+        let point = DrillPoint { x: 1.5, y: -2.75 };
+        let json = serde_json::to_string(&point).expect("serialize");
+        let recovered: DrillPoint = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(point, recovered);
+    }
+
+    #[test]
+    fn drill_params_with_points_round_trip() {
+        let params = DrillParams {
+            depth: 10.0,
+            points: vec![DrillPoint { x: 0.0, y: 0.0 }, DrillPoint { x: 5.0, y: 5.0 }],
+            peck_depth: None,
+        };
+        let json = serde_json::to_string(&params).expect("serialize");
+        let recovered: DrillParams = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(params, recovered);
+    }
+
+    #[test]
+    fn drill_params_points_defaults_to_empty_vec() {
+        let json = r#"{"depth": 10.0}"#;
+        let params: DrillParams = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(params.points, vec![], "points must default to empty vec");
     }
 }

@@ -500,6 +500,7 @@ mod tests {
             tool_id,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
+                points: vec![],
                 peck_depth: Some(5.0),
             }),
         };

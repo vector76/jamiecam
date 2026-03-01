@@ -322,6 +322,7 @@ mod tests {
             tool_id: tool_id.to_string(),
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
+                points: vec![],
                 peck_depth: Some(5.0),
             }),
         }
