@@ -1,4 +1,5 @@
 pub mod linking;
+pub mod operations;
 pub mod types;
 
 pub use linking::link_passes;
