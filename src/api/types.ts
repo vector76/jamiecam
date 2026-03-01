@@ -236,3 +236,20 @@ export interface ExportParams {
   programNumber?: number
   includeComments: boolean
 }
+
+/** Summary statistics returned after calculating a toolpath. */
+export interface ToolpathStats {
+  totalPointCount: number
+  totalPassCount: number
+  totalPathLengthMm: number
+}
+
+/** Line geometry data for rendering a toolpath in the 3-D viewport. */
+export interface LineGeometryData {
+  /** XYZ interleaved vertex positions — 3 values per vertex. */
+  positions: number[]
+  /** RGB interleaved vertex colours — 3 values per vertex. */
+  colours: number[]
+  /** Per-segment move type identifier — one value per line segment. */
+  types: number[]
+}

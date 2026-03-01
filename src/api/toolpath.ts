@@ -2,8 +2,28 @@
  * Typed wrappers around Tauri's invoke() for toolpath and G-code IPC commands.
  */
 
-import type { PostProcessorMeta, ExportParams } from './types'
+import type { PostProcessorMeta, ExportParams, ToolpathStats, LineGeometryData } from './types'
 import { typedInvoke } from './errors'
+
+/**
+ * Calculate the toolpath for the given operation and return summary statistics.
+ * @param operationId UUID string of the operation to calculate.
+ * @returns ToolpathStats with point count, pass count, and total path length.
+ * @throws AppError on backend failure.
+ */
+export async function calculateToolpath(operationId: string): Promise<ToolpathStats> {
+  return typedInvoke<ToolpathStats>('calculate_toolpath', { operationId })
+}
+
+/**
+ * Retrieve the line geometry data for a previously-calculated toolpath.
+ * @param operationId UUID string of the operation whose toolpath to retrieve.
+ * @returns LineGeometryData containing positions, colours, and move types.
+ * @throws AppError (kind "NotFound") if no toolpath has been computed for the operation.
+ */
+export async function getToolpathGeometry(operationId: string): Promise<LineGeometryData> {
+  return typedInvoke<LineGeometryData>('get_toolpath_geometry', { operationId })
+}
 
 /**
  * List all built-in post-processor definitions.
