@@ -300,6 +300,29 @@ describe('OperationListPanel — selection', () => {
   })
 })
 
+// ── Stale indicator ───────────────────────────────────────────────────────────
+
+describe('OperationListPanel — stale indicator', () => {
+  it('renders stale indicator when needsRecalculate is true', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    render(<OperationListPanel />)
+    expect(screen.getAllByLabelText('stale')).toHaveLength(2)
+  })
+
+  it('does not render stale indicator when needsRecalculate is false', () => {
+    const SNAPSHOT_NO_STALE: ProjectSnapshot = {
+      ...SNAPSHOT_WITH_OPS,
+      operations: [
+        { ...SNAPSHOT_WITH_OPS.operations[0], needsRecalculate: false },
+        { ...SNAPSHOT_WITH_OPS.operations[1], needsRecalculate: false },
+      ],
+    }
+    useProjectStore.setState({ snapshot: SNAPSHOT_NO_STALE })
+    render(<OperationListPanel />)
+    expect(screen.queryByLabelText('stale')).not.toBeInTheDocument()
+  })
+})
+
 // ── Calculate button ──────────────────────────────────────────────────────────
 
 describe('OperationListPanel — Calculate button', () => {
@@ -395,6 +418,19 @@ describe('OperationListPanel — Calculate button', () => {
       const notes = useProjectStore.getState().notifications
       expect(notes.some((n) => n.includes('3 passes') && n.includes('42 pts') && n.includes('150.5 mm'))).toBe(true)
     })
+  })
+
+  it('Calculate refreshes project snapshot after success', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue({ ...SNAPSHOT_WITH_STOCK, projectName: 'Updated' })
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+
+    await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
+    expect(useProjectStore.getState().snapshot?.projectName).toBe('Updated')
   })
 
   it('Calculate button click does not also select the row via row click', async () => {

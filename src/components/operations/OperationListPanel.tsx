@@ -53,6 +53,8 @@ export function OperationListPanel() {
       const stats = await calculateToolpath(id)
       const geometry = await getToolpathGeometry(id)
       setToolpathGeometry(geometry)
+      const snapshot = await getProjectSnapshot()
+      setSnapshot(snapshot)
       pushNotification(
         `Toolpath: ${stats.totalPassCount} passes, ${stats.totalPointCount} pts, ${stats.totalPathLengthMm.toFixed(1)} mm`
       )
@@ -141,6 +143,11 @@ export function OperationListPanel() {
               aria-label={`Toggle ${op.name}`}
             />
             <span style={{ flex: 1 }}>{op.name}</span>
+            {op.needsRecalculate && (
+              <span style={{ color: '#b45309', fontSize: '0.7em' }} aria-label="stale">
+                (stale)
+              </span>
+            )}
             <span style={{ fontSize: '0.75em', color: '#666' }}>{op.operationType}</span>
             <button
               onClick={(e) => { e.stopPropagation(); void handleDelete(op.id) }}
