@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-01. Based on git history (85 commits, branch `main`)._
+_Last updated: 2026-03-02. Based on git history (101 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -23,9 +23,18 @@ functionality. The pocket clearing, profile contouring, and drilling CAM
 algorithms, Clipper2 polygon integration, toolpath linking, planner, IPC
 calculate/geometry commands, toolpath visualization in the viewport, operation
 editor forms (pocket, profile, and drill), per-operation feed/speed overrides,
-and Calculate button are all implemented and tested end-to-end. Geometry
-selection is the main remaining item for Phase 1; progress events, cache
-invalidation, and toolpath persistence to `.jcam` are also outstanding.
+and Calculate button are all implemented and tested end-to-end. The toolpath
+cache system is complete: SHA-256 cache keys are computed and stored after
+calculate, toolpaths are persisted as JSON entries in the `.jcam` ZIP archive,
+restored on load, and displayed in the viewport immediately; `needs_recalculate`
+is computed via a real cache-key comparison and shown as a "(stale)" indicator
+in the UI. The tool library UI (`ToolLibraryPanel`), stock definition UI (`StockPanel`),
+and WCS panel (`WCSPanel`) are implemented and mounted in the right sidebar; all
+three panels are fully tested. Operation reorder controls (▲/▼ buttons per row)
+and a calculate loading state (in-flight '…' indicator with all Calculate
+buttons disabled while any calculation is running) are also implemented and
+tested in `OperationListPanel`. Geometry selection and progress events are the
+remaining items for Phase 1.
 
 ---
 
@@ -103,9 +112,9 @@ frontend types are in `src/api/types.ts`.
 - IPC commands: `get_wcs`, `set_wcs`
 - Frontend API wrappers in `src/api/stock.ts` (combined with stock commands)
 
-**Operations** (`97c6ac2`, `9c04c01`, updated `eebfd3d`)
+**Operations** (`97c6ac2`, `9c04c01`, updated `eebfd3d`, `f5e0efc`)
 - `Operation` struct (common fields: `id`, `name`, `enabled`, `tool_id`,
-  `spindle_speed_override`, `feed_rate_override`) +
+  `spindle_speed_override`, `feed_rate_override`, `cache: CacheState`) +
   `OperationParams` enum (`Profile`, `Pocket`, `Drill`) flattened alongside it
 - Project integration — operations stored in `Vec<Operation>`; each carries a
   UUID `id` field
@@ -232,7 +241,7 @@ immediately once algorithms are written.
 - Exercises full planner pipeline (50×50×10 mm stock, 10 mm flat endmill,
   depth=10/stepdown=2/stepover=50%); compares serialized toolpath JSON
   against committed golden fixture
-- Golden fixture: `tests/integration/pocket/toolpath.json` (2848 lines)
+- Golden fixture: `tests/integration/pocket/toolpath.json` (2847 lines)
 - `[[test]]` entries added to `src-tauri/Cargo.toml` for both
   `gcode_golden` and `pocket_golden`
 
@@ -255,7 +264,7 @@ immediately once algorithms are written.
 - Exercises full planner pipeline (50×50×10 mm stock, 6 mm flat endmill,
   depth=10/stepdown=2.5, Left compensation); 4 Z levels with one
   rectangular contour per level offset inward by 3 mm
-- Golden fixture: `tests/integration/profile/toolpath.json` (468 lines)
+- Golden fixture: `tests/integration/profile/toolpath.json` (467 lines)
 - `[[test]]` entry added to `src-tauri/Cargo.toml` for `profile_golden`
 
 **`DrillPoint` struct and `points` field** (`13b3bc7`)
@@ -280,11 +289,12 @@ immediately once algorithms are written.
 - `src-tauri/src/toolpath/operations/drill.rs`: `drill_passes(stock, params)`
 - For each hole in `params.points`, produces one `PassKind::Linking` pass
   (rapid to clearance height above the hole) and one `PassKind::Cutting` pass
-- Full-depth mode (no `peck_depth`): single `Feed` plunge to `drill_z`,
-  then `Rapid` retract to clearance
-- Peck mode (`peck_depth` set): repeated feed/retract cycles decrementing by
-  `peck_depth` until `drill_z` is reached; uses `f64::max` to avoid
-  overshooting the target depth
+- Each Cutting pass opens with a `Rapid` approach to clearance height, then:
+  full-depth mode (no `peck_depth`): `Feed` plunge to `drill_z`, `Rapid`
+  retract to clearance (3 cut points total)
+- Peck mode (`peck_depth` set): after the opening `Rapid`, repeated
+  feed/retract cycles decrementing by `peck_depth` until `drill_z` is
+  reached; uses `.max(drill_z)` to avoid overshooting the target depth
 - Returns `AppError::GeometryImport` if `params.points` is empty or if
   `peck_depth` is ≤ 0
 - 6 unit tests: empty-points error, zero/negative peck error, single
@@ -296,21 +306,23 @@ immediately once algorithms are written.
   (ungated — drill algorithm requires no geometry bindings)
 - Exercises full planner pipeline (50×50×10 mm stock, 5 mm drill, 5 holes,
   depth=10/peck_depth=3); validates peck cycling for each of 5 holes
-- Golden fixture: `tests/integration/drill/toolpath.json` (652 lines)
+- Golden fixture: `tests/integration/drill/toolpath.json` (651 lines)
 - `[[test]]` entry added to `src-tauri/Cargo.toml` for `drill_golden`
 
 ### IPC commands (calculate and geometry)
 
-**`calculate_toolpath`** and **`get_toolpath_geometry`** (`0c1d802`)
-- `calculate_toolpath_inner`: parses operation UUID; reads operation/stock/tool
-  under read lock; calls `planner::plan`; stores `Toolpath` under write lock;
-  returns `ToolpathStats`
+**`calculate_toolpath`** and **`get_toolpath_geometry`** (`0c1d802`, updated `e7b5da1`)
+- `calculate_toolpath_inner`: parses operation UUID; reads operation/stock/tool and captures model SHA under read lock; calls `planner::plan`; computes SHA-256 cache key; stores `Toolpath` and populates `operation.cache` (`key`, `valid`, `computed_at`, `stats`; `binary_file` remains `None`) under write lock; returns `ToolpathStats`
 - `get_toolpath_geometry_inner`: retrieves stored `Toolpath` and operation
   index (for palette colouring); converts passes to flat-array
   `LineGeometryData`; pre-allocates buffers using segment count
 - Both registered in `generate_handler!` list in `lib.rs`
-- Unit tests: NotFound with no operation, NotFound with no stock, stores
-  toolpath for pocket (gated), NotFound when no toolpath stored
+- Unit tests (all in `commands/toolpath.rs`): `list_post_processors_inner`
+  returns 4 entries; `calculate_toolpath_inner`: NotFound with no operation,
+  NotFound with no stock, stores toolpath for pocket and asserts cache fields
+  populated (gated); `get_toolpath_geometry_inner`: NotFound when no toolpath
+  stored; `get_gcode_preview_inner`: generates G-code containing rapid and
+  feed moves when toolpath exists
 
 ### UI (substantially complete for all three operation types)
 
@@ -331,18 +343,30 @@ immediately once algorithms are written.
 - Tests in `OperationEditorForm.test.tsx` cover pocket, profile, and drill
   forms; including add/remove point and override inputs
 
-**Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`)
+**Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`, `9706ff9`, `085504f`, `8491f7f`, `31e1286`)
 - Row click sets `selectedOperationId`; selected row highlighted
 - `OperationEditorForm` mounted below the list, driven by `selectedOperationId`
+- Checkbox per row toggles `enabled`: fetches full operation via
+  `listOperations()`, flips `enabled`, calls `editOperation`, refreshes snapshot
+- Delete button per row: calls `deleteOperation`, refreshes snapshot
+- Add operation buttons at the bottom (+ Profile, + Pocket, + Drill): disabled
+  when no tools exist; uses first available tool; calls `addOperation` with
+  sensible defaults, refreshes snapshot
+- Reorder buttons (▲/▼) per row: call `reorderOperations` to move the operation
+  up or down in the list; ▲ disabled for the first row, ▼ disabled for the last
 - Calculate button per row: enabled for pocket and profile operations when
   stock is defined; enabled for drill operations when stock is defined AND
   the operation has ≥ 1 drill point; calls `calculateToolpath` →
-  `getToolpathGeometry` → `setToolpathGeometry` and pushes a stats
-  notification string
+  `getToolpathGeometry` → `setToolpathGeometry` → `getProjectSnapshot` →
+  `setSnapshot` and pushes a stats notification string
+- Calculate loading state: a `calculatingId` state tracks the in-flight
+  operation ID; the active row's Calculate button shows '…' while calculating;
+  all Calculate buttons are disabled while any calculation is running
 - `drillPointCounts: Record<string, number>` state maintained via `useEffect`
-  that triggers a full `listOperations()` fetch whenever the operations list
-  changes; used to gate the Calculate button for drill rows
-- `stopPropagation` on checkbox, delete, and Calculate buttons
+  that short-circuits (resets to `{}`) when no drill operations exist, and
+  otherwise triggers a full `listOperations()` fetch whenever the operations
+  list changes; used to gate the Calculate button for drill rows
+- `stopPropagation` on checkbox, delete, reorder, and Calculate buttons
 
 **Toolpath visualization** (`63028d8`, `108548a`)
 - `src/viewport/toolpathLines.ts`: `buildToolpathLines(data)` builds
@@ -357,14 +381,17 @@ immediately once algorithms are written.
 - Frontend API: `calculateToolpath()` and `getToolpathGeometry()` wrappers
   added to `src/api/toolpath.ts`; `ToolpathStats` and `LineGeometryData`
   TypeScript interfaces added to `src/api/types.ts`
-- Tests: `toolpathLines.test.ts` (6 tests: null, empty, instance type,
-  attribute counts, vertexColors flag)
+- Tests: `toolpathLines.test.ts` (6 tests: null input, empty positions,
+  LineSegments instance type, position attribute count, color attribute count,
+  vertexColors on material)
 
 **Error notifications** (`42bd7dc`)
 - `Notifications` component in `src/components/common/Notifications.tsx`:
-  dismissible toasts for IPC errors
-- All IPC error paths in `OperationListPanel` route through the notification
-  system
+  dismissible toasts with auto-dismiss after 5 seconds
+- `usePushNotification` used by OperationListPanel, StockPanel, WCSPanel,
+  ToolLibraryPanel, OperationEditorForm, and GCodePreviewPanel; `Toolbar` uses
+  its own local `errorMsg: string | null` state and an inline dismissible banner
+  (not the shared notification system)
 - `selectedOperationId` + `setSelectedOperationId` + `usePushNotification` +
   `useSelectedOperationId` added to `projectStore.ts`
 
@@ -380,10 +407,97 @@ immediately once algorithms are written.
   `src/api/types.ts`
 - Panel mounted in `AppShell.tsx` sidebar below `OperationListPanel`
 
-**App shell** (`79c78bf`, updated `75733b9`)
+**Stock panel** (`1dc1b62`, `dba633a`)
+- `StockPanel` in `src/components/stock/StockPanel.tsx`: form UI for box stock
+  definition with six numeric inputs (origin X/Y/Z, width, depth, height)
+- Shows current stock dimensions (origin and size) when stock is defined; shows
+  "No stock defined" when null
+- "Set Stock" button calls `setStock(payload)` then refreshes the project
+  snapshot via `getProjectSnapshot()` → `setSnapshot()`
+- "Clear Stock" button (only rendered when stock is defined) calls
+  `setStock(null)` then refreshes the snapshot
+- Error notifications via `usePushNotification` for all failure paths
+- Tests (5): null state/"No stock defined", stock defined shows values and Clear
+  button, Set Stock submit calls correct payload, Clear Stock calls setStock(null),
+  error notification on Set Stock reject
+
+**WCS panel** (`cc8a5da`, `b45da2c`)
+- `WCSPanel` in `src/components/wcs/WCSPanel.tsx`: form UI for WCS origin
+  editing with three numeric inputs (origin X, Y, Z)
+- "Set WCS" button calls `setWcs(payload)` then refreshes the project snapshot
+- "Clear WCS" button calls `setWcs(null)` then refreshes the snapshot (only
+  rendered when a WCS is defined)
+- Error notifications via `usePushNotification` for all failure paths
+- Mounted in `AppShell` between `StockPanel` and `OperationListPanel`
+- Tests (`WCSPanel.test.tsx`): display, Set WCS, Clear WCS, error — 6 tests
+
+**Tool library panel** (`0859606`, `58f6965`)
+- `ToolLibraryPanel` in `src/components/tools/ToolLibraryPanel.tsx`: three-mode
+  component (list, add form, edit form) for managing the project tool library
+- List mode: renders a row per tool from the snapshot (name + type label + Edit
+  and Delete buttons); "Add Tool" button switches to add form
+- Add form: inputs for name, type (dropdown from 10 tool type values), material,
+  diameter, flute count, and optional default spindle speed / feed rate; submits
+  via `addTool()`, refreshes snapshot, returns to list mode; Cancel discards
+- Edit: clicking Edit fetches full tool data via `listTools()` and pre-populates
+  the shared `ToolForm` with existing values; submits via `editTool(id, input)`,
+  refreshes snapshot, returns to list
+- Delete: calls `deleteTool(id)` then refreshes snapshot
+- All mutations call `getProjectSnapshot()` → `setSnapshot()` on success
+- Error notifications via `usePushNotification` for all failure paths (addTool,
+  editTool, deleteTool, and listTools on edit click)
+- Tests (12): renders tool names/types, renders empty with null snapshot, opens
+  add form, submits add form, cancel add form, fetches and pre-populates edit
+  form, submits edit form with correct args, delete calls deleteTool + refreshes,
+  and error notification for each of the four error paths (addTool, editTool,
+  deleteTool, listTools on edit click)
+
+**App shell** (`79c78bf`, updated `75733b9`, `c302972`, `6a911ac`, `cc8a5da`)
 - `AppShell` layout with Toolbar + Viewport + right sidebar
-  (`OperationListPanel` + `GCodePreviewPanel`) + `Notifications`
-- `Toolbar` component with file operations (New, Open, Save, Save As)
+  (`ToolLibraryPanel` + `StockPanel` + `WCSPanel` + `OperationListPanel` + `GCodePreviewPanel`) + `Notifications`
+- `Toolbar` component with file operations (Open Model, New Project, Save Project, Open Project)
+- `handleOpenProject` calls `getToolpathGeometry` → `setToolpathGeometry` for
+  each non-stale operation after load so cached toolpaths appear in viewport
+  immediately; failures per-operation are caught and silently skipped
+
+### Toolpath cache system (complete)
+
+**SHA-256 cache key module** (`1a8475e`)
+- `src-tauri/src/toolpath/cache.rs`: `compute_cache_key(operation, tool, stock, model_sha, engine_version) -> String`
+- Key covers: operation geometry (all params), tool geometry (diameter, flute_count, material, type — excluding display-only `id`, `name`, `default_spindle_speed`, `default_feed_rate`), stock definition, optional model content SHA, engine version string
+- Feed/speed override fields (`spindle_speed_override`, `feed_rate_override`) intentionally excluded — changing overrides alone does not invalidate a cached toolpath
+- Returns `"sha256:<lowercase hex digest>"` format
+- 4 unit tests: stability (same inputs → same key), sensitivity to tool diameter change, operation param change, and model SHA presence/absence
+
+**CachedStats and CacheState data model** (`f5e0efc`)
+- `CachedStats` struct: `total_pass_count: u32`, `total_point_count: u32`, `total_path_length_mm: f64`; camelCase serde with `#[serde(default)]`
+- `CacheState` struct: `key: Option<String>`, `valid: bool`, `computed_at: Option<String>`, `stats: Option<CachedStats>`, `binary_file: Option<String>`; camelCase serde with `#[serde(default)]`
+- `cache: CacheState` field added to `Operation` struct with `#[serde(default)]` for backward compatibility with existing project files
+- 2 serde tests: `cache_field_defaults_when_absent`, `cache_state_round_trip`
+
+**Populate cache after successful calculate** (`e7b5da1`)
+- `calculate_toolpath_inner` captures model checksum during read-lock phase, computes SHA-256 cache key after `planner::plan` returns, then writes `key`, `valid: true`, `computed_at` (UTC ISO-8601 `SecondsFormat::Secs`), and `stats` into `operation.cache` inside the write-lock; `binary_file` is left `None` until the project is saved
+- Existing pocket toolpath test extended to assert all cache fields are correctly populated, including asserting `binary_file` remains `None`
+
+**Toolpath persistence in `.jcam`** (`46f98ed`, `9544226`)
+- `write_archive`: clones the operations list; for each cloned op with `cache.valid = true` and a matching toolpath in `project.toolpaths`, writes the toolpath JSON as `toolpaths/<uuid>.json` inside the ZIP and sets `cache.binary_file` on the clone; the clones (with `binary_file` set) are serialized into `project.json`; the live in-memory `project.operations` are unchanged — `binary_file` remains `None` in memory until the project is reloaded; operations with `cache.valid = false` are skipped; propagates `AppError::ProjectSave` on write errors
+- `load()`: after constructing the Project, iterates operations; for each with `cache.binary_file` set, reads and deserializes the toolpath JSON entry from the ZIP; missing or unparseable entries emit `tracing::warn` and are silently skipped — load never fails due to stale or absent toolpath data
+- 4 tests: `toolpath_entry_written_to_zip` (positive), `invalid_cache_not_written_to_zip` (negative), `round_trip_with_valid_toolpath` (full save/load cycle), `load_ignores_missing_toolpath_entry_gracefully`
+
+**Real cache-key comparison for `needs_recalculate`** (`edf9a61`)
+- `From<&Project> for ProjectSnapshot` now performs a real SHA-256 comparison instead of returning hardcoded `true`
+- Logic: short-circuits to `true` when `cache.key` is absent or `cache.valid` is false, or when the operation's tool or project stock is missing; otherwise recomputes the SHA-256 key and compares against stored key
+- 2 new tests: `snapshot_needs_recalculate_false_when_cache_key_current`, `snapshot_needs_recalculate_true_after_model_checksum_change`
+
+**Stale indicator in OperationListPanel** (`9706ff9`)
+- Rows with `needsRecalculate: true` display an amber "(stale)" label
+- Snapshot refreshed via `getProjectSnapshot()` after a successful toolpath calculate so the stale indicator clears immediately
+- 2 new tests: stale indicator rendering, post-calculate snapshot refresh
+
+**End-to-end cache integration test** (`89a3d90`)
+- `src-tauri/tests/toolpath_cache.rs`: 2 scenarios (ungated — uses drill operations requiring no geometry bindings): save/load round-trip preserves toolpath and cache validity; mutating a param after load marks operation stale
+- `[[test]]` entry added to `src-tauri/Cargo.toml`
+- `calculate_toolpath_inner` and `get_project_snapshot_inner` exposed as `pub` for integration test access
 
 ### Not yet implemented (Phase 1)
 
@@ -391,8 +505,6 @@ immediately once algorithms are written.
 |---|---|
 | Geometry selection | Click faces/edges in viewport; face fingerprinting |
 | Progress events | Tokio task progress → `emit()` → frontend progress bar |
-| Cache invalidation | SHA-256 cache key, stale detection; not implemented |
-| Toolpath binary format | `toolpaths/*.bin` in `.jcam`; toolpaths live in memory only |
 
 ---
 
@@ -412,27 +524,32 @@ encountered.
 | `src/viewport/scene.test.ts` | Three.js scene setup |
 | `src/viewport/controls.test.ts` | Camera controls |
 | `src/viewport/modelMesh.test.ts` | Mesh construction |
-| `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null, empty, instance type, attribute counts, vertexColors |
-| `src/store/projectStore.test.ts` | Zustand store actions (including `selectedOperationId`) |
+| `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null input, empty positions, LineSegments instance type, position attribute count, color attribute count, vertexColors on material — 6 tests |
+| `src/store/projectStore.test.ts` | Zustand store actions (including `selectedOperationId`, `useTools`, `useStock` selectors) |
 | `src/store/viewportStore.test.ts` | Viewport store (including `toolpathGeometry`) |
-| `src/components/toolbar/Toolbar.test.tsx` | Toolbar component |
-| `src/components/operations/OperationListPanel.test.tsx` | Operation list: selection, Calculate button (pocket/profile/drill 0-point disabled/1-point enabled), API calls, viewport store update, propagation |
-| `src/components/operations/OperationEditorForm.test.tsx` | Operation editor form: pocket, profile, and drill fields; tool select; save on blur/change; add/remove drill points; feed/speed override inputs |
-| `src/components/common/Notifications.test.tsx` | Error notification toasts |
-| `src/viewport/Viewport.test.tsx` | Viewport component mount/unmount, mesh updates |
+| `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
+| `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), reorder (7), calculate loading state (4) — 43 tests across 9 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (inputs/defaults/save-on-blur+change/overrides), pocket form (tool select/inputs/overrides/remount-on-id-change), tool change saves, input blur saves, drill form (inputs/add-point/remove-point/overrides), error handling — 23 tests across 7 describe blocks |
+| `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
+| `src/components/stock/StockPanel.test.tsx` | StockPanel: null state, stock defined, Set Stock submit, Clear Stock, error notification |
+| `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display, Set WCS, Clear WCS, error notification — 6 tests |
+| `src/components/tools/ToolLibraryPanel.test.tsx` | ToolLibraryPanel: rendering, add/cancel/submit form, edit pre-populate/submit, delete, error notifications (12 tests) |
+| `src/viewport/Viewport.test.tsx` | Viewport: mount/unmount (4), mesh updates — add/replace/remove ModelGroup, frameModel called (4); SceneManager mock includes `setToolpathLines` — 8 tests |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
-| `src/components/gcode/GCodePreviewPanel.test.tsx` | G-code preview panel |
+| `src/components/gcode/GCodePreviewPanel.test.tsx` | GCodePreviewPanel: placeholder when no op selected, placeholder when NotFound, renders G-code text, Export button calls exportGcode, PP selector populated from listPostProcessors — 5 tests |
 | `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean (doctest) |
 | `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i, linuxcnc |
 | `src-tauri/tests/pocket_golden.rs` | Golden-file integration: pocket algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/profile_golden.rs` | Golden-file integration: profile algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
+| `src-tauri/tests/toolpath_cache.rs` | End-to-end cache round-trip: save/load preserves toolpath + validity; param mutation marks stale (ungated; uses drill operations) |
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
-| `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot, toolpath (calculate, get_geometry, G-code preview) |
-| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors, non-peck geometry, peck Z-levels, multi-hole ordering |
+| `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot (incl. real `needs_recalculate` comparison + 2 new tests), toolpath (calculate + cache populate, get_geometry, G-code preview) |
+| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `cache.rs` key stability + sensitivity (4 tests), `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors, non-peck geometry, peck Z-levels, multi-hole ordering |
+| `src-tauri/src/project/` (inline) | `serialization.rs` round-trips, toolpath ZIP entry write (positive + negative), round-trip with valid toolpath, graceful load with missing entry |
 | `src-tauri/src/geometry/clipper.rs` (inline) | Stub path always; integration path (offset/boolean) gated on bindings |
-| `src-tauri/src/` (inline) | `error.rs` variants, `state.rs` defaults, `project/serialization.rs` round-trips |
+| `src-tauri/src/` (inline) | `error.rs` variants, `state.rs` defaults |
 
 Golden-file tests cover the post-processor output stage (G-code) and all three
 CAM algorithm output stages (pocket, profile, and drill toolpath JSON). The
@@ -453,13 +570,14 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
-| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum |
+| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum, `CacheState`, `CachedStats` |
 | `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData` |
 | `src-tauri/src/toolpath/linking.rs` | `link_passes()` — retract/traverse/descend between cutting passes |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — dispatches to algorithm, links passes, computes stats |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
 | `src-tauri/src/toolpath/operations/drill.rs` | Drill cycle algorithm (linking + cutting passes per hole, peck support) |
+| `src-tauri/src/toolpath/cache.rs` | `compute_cache_key()` — deterministic SHA-256 cache key for toolpath operations |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
 | `src-tauri/src/postprocessor/config.rs` | TOML schema deserialization + validation |
 | `src-tauri/src/postprocessor/formatter.rs` | Number formatting + template substitution |
@@ -478,7 +596,7 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/STL) |
 | `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape`, `OcctMesh` (with `Drop` impls) |
 | `src-tauri/src/geometry/ffi.rs` | FFI bindings module: includes bindgen output written to `$OUT_DIR` at build time |
-| `src-tauri/src/project/serialization.rs` | `.jcam` ZIP read/write |
+| `src-tauri/src/project/serialization.rs` | `.jcam` ZIP read/write; toolpath JSON persistence per operation |
 
 ### C++ geometry wrapper
 | File | Purpose |
@@ -510,17 +628,20 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
 | `src/api/operations.ts` | Operation CRUD IPC wrappers |
 | `src/api/toolpath.ts` | `listPostProcessors`, `getGcodePreview`, `exportGcode`, `calculateToolpath`, `getToolpathGeometry` |
-| `src/store/projectStore.ts` | Project Zustand store (incl. `selectedOperationId`) |
+| `src/store/projectStore.ts` | Project Zustand store (incl. `selectedOperationId`, `useTools`, `useStock`, `useWcs` selectors) |
 | `src/store/viewportStore.ts` | Viewport Zustand store (incl. `toolpathGeometry`) |
 | `src/viewport/scene.ts` | Three.js renderer + scene + `toolpathGroup` + `setToolpathLines()` |
 | `src/viewport/controls.ts` | OrbitControls (Z-up) |
 | `src/viewport/modelMesh.ts` | `MeshData` → `BufferGeometry` |
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
-| `src/components/operations/OperationListPanel.tsx` | Operation list: row selection, Calculate button, `OperationEditorForm` mount |
+| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations, row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
 | `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, and drill parameter forms; feed/speed override inputs; dynamic drill-points table |
+| `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
+| `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
+| `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
 | `src/components/toolbar/Toolbar.tsx` | File operation toolbar |
-| `src/components/common/Notifications.tsx` | IPC error toast/snackbar |
+| `src/components/common/Notifications.tsx` | Dismissible toast overlay with auto-dismiss after 5 s |
 | `src/components/gcode/GCodePreviewPanel.tsx` | G-code preview with PP selector + Export |
 
 ---
