@@ -10,6 +10,7 @@
 import { useState } from 'react'
 import { open, save } from '@tauri-apps/plugin-dialog'
 import * as api from '../../api/file'
+import { getToolpathGeometry } from '../../api/toolpath'
 import { useProjectStore } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
 import type { AppError, ProjectSnapshot } from '../../api/types'
@@ -34,6 +35,7 @@ export function Toolbar() {
 
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
   const setMeshData = useViewportStore((s) => s.setMeshData)
+  const setToolpathGeometry = useViewportStore((s) => s.setToolpathGeometry)
 
   function dismissError() {
     setErrorMsg(null)
@@ -104,6 +106,16 @@ export function Toolbar() {
         setMeshData(meshData)
       } else {
         setMeshData(null)
+      }
+      for (const op of snapshot.operations) {
+        if (!op.needsRecalculate) {
+          try {
+            const geometry = await getToolpathGeometry(op.id)
+            setToolpathGeometry(geometry)
+          } catch {
+            // Non-fatal: toolpath may not be available; leave viewport as-is.
+          }
+        }
       }
       await updateWindowTitle(snapshot)
     } catch (e: unknown) {

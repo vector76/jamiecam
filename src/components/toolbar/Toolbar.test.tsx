@@ -9,7 +9,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Toolbar } from './Toolbar'
 import { useProjectStore } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
-import type { MeshData, ProjectSnapshot } from '../../api/types'
+import type { MeshData, ProjectSnapshot, LineGeometryData } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -26,6 +26,10 @@ vi.mock('../../api/file', () => ({
   getProjectSnapshot: vi.fn(),
 }))
 
+vi.mock('../../api/toolpath', () => ({
+  getToolpathGeometry: vi.fn(),
+}))
+
 // Dynamic import inside updateWindowTitle — mock the whole module.
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: vi.fn(() => ({ setTitle: vi.fn() })),
@@ -34,19 +38,24 @@ vi.mock('@tauri-apps/api/window', () => ({
 // Import mocked modules for control in tests.
 const { open, save } = await import('@tauri-apps/plugin-dialog')
 const api = await import('../../api/file')
+const toolpathApi = await import('../../api/toolpath')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2] }
 const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
 const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
+const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 0, 0], colours: [1, 0, 0, 1, 0, 0], types: [1] }
+const OP_ID = 'op-1'
+const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }] }
+const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }] }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks()
   useProjectStore.setState({ snapshot: null })
-  useViewportStore.setState({ meshData: null, orbitTarget: [0, 0, 0], zoom: 1 })
+  useViewportStore.setState({ meshData: null, toolpathGeometry: null, orbitTarget: [0, 0, 0], zoom: 1 })
 })
 
 // ── Open Model ────────────────────────────────────────────────────────────────
@@ -249,5 +258,28 @@ describe('Toolbar — Open Project', () => {
     fireEvent.click(screen.getByRole('button', { name: /open project/i }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+  })
+
+  it('calls getToolpathGeometry for non-stale operations and updates viewport', async () => {
+    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
+    vi.mocked(api.loadProject).mockResolvedValue(SNAPSHOT_WITH_OP)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
+
+    await waitFor(() => expect(toolpathApi.getToolpathGeometry).toHaveBeenCalledWith(OP_ID))
+    expect(useViewportStore.getState().toolpathGeometry).toEqual(LINE_GEOMETRY)
+  })
+
+  it('skips getToolpathGeometry for stale operations', async () => {
+    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
+    vi.mocked(api.loadProject).mockResolvedValue(SNAPSHOT_WITH_STALE_OP)
+
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
+
+    await waitFor(() => expect(api.loadProject).toHaveBeenCalled())
+    expect(toolpathApi.getToolpathGeometry).not.toHaveBeenCalled()
   })
 })
