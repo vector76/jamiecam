@@ -10,7 +10,7 @@
 import { useState, useEffect } from 'react'
 import { useOperations, useProjectStore, useSelectedOperationId, useStock, useTools } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
-import { addOperation, deleteOperation, editOperation, listOperations } from '../../api/operations'
+import { addOperation, deleteOperation, editOperation, listOperations, reorderOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry } from '../../api/toolpath'
@@ -29,6 +29,7 @@ export function OperationListPanel() {
   const noTools = tools.length === 0
 
   const [drillPointCounts, setDrillPointCounts] = useState<Record<string, number>>({})
+  const [calculatingId, setCalculatingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!operations.some(o => o.operationType === 'drill')) { setDrillPointCounts({}); return }
@@ -49,6 +50,7 @@ export function OperationListPanel() {
   // ── Calculate toolpath ────────────────────────────────────────────────────
 
   async function handleCalculate(id: string) {
+    setCalculatingId(id)
     try {
       const stats = await calculateToolpath(id)
       const geometry = await getToolpathGeometry(id)
@@ -59,6 +61,7 @@ export function OperationListPanel() {
         `Toolpath: ${stats.totalPassCount} passes, ${stats.totalPointCount} pts, ${stats.totalPathLengthMm.toFixed(1)} mm`
       )
     } catch (e) { handleError(e) }
+    finally { setCalculatingId(null) }
   }
 
   // ── Toggle enabled ────────────────────────────────────────────────────────
@@ -86,6 +89,22 @@ export function OperationListPanel() {
   async function handleDelete(id: string) {
     try {
       await deleteOperation(id)
+      const snapshot = await getProjectSnapshot()
+      setSnapshot(snapshot)
+    } catch (e) { handleError(e) }
+  }
+
+  // ── Reorder ───────────────────────────────────────────────────────────────
+
+  async function handleReorder(id: string, direction: 'up' | 'down') {
+    const idx = operations.findIndex((o) => o.id === id)
+    if (idx < 0) return
+    const newIds = operations.map((o) => o.id)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= newIds.length) return
+    ;[newIds[idx], newIds[swapIdx]] = [newIds[swapIdx], newIds[idx]]
+    try {
+      await reorderOperations(newIds)
       const snapshot = await getProjectSnapshot()
       setSnapshot(snapshot)
     } catch (e) { handleError(e) }
@@ -150,6 +169,16 @@ export function OperationListPanel() {
             )}
             <span style={{ fontSize: '0.75em', color: '#666' }}>{op.operationType}</span>
             <button
+              onClick={(e) => { e.stopPropagation(); void handleReorder(op.id, 'up') }}
+              disabled={operations.indexOf(op) === 0}
+              aria-label={`Move up ${op.name}`}
+            >▲</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); void handleReorder(op.id, 'down') }}
+              disabled={operations.indexOf(op) === operations.length - 1}
+              aria-label={`Move down ${op.name}`}
+            >▼</button>
+            <button
               onClick={(e) => { e.stopPropagation(); void handleDelete(op.id) }}
               aria-label={`Delete ${op.name}`}
             >
@@ -157,10 +186,10 @@ export function OperationListPanel() {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); void handleCalculate(op.id) }}
-              disabled={!stock || (op.operationType === 'drill' ? (drillPointCounts[op.id] ?? 0) < 1 : false)}
+              disabled={!stock || (op.operationType === 'drill' ? (drillPointCounts[op.id] ?? 0) < 1 : false) || calculatingId !== null}
               aria-label={`Calculate ${op.name}`}
             >
-              Calc
+              {calculatingId === op.id ? '…' : 'Calc'}
             </button>
           </div>
         ))}
