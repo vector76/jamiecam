@@ -113,6 +113,8 @@ mod tests {
             name: "Pocket Op".to_string(),
             enabled: true,
             tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -134,6 +136,8 @@ mod tests {
             name: "Profile Op".to_string(),
             enabled: true,
             tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: 2.5,
@@ -155,6 +159,8 @@ mod tests {
             name: "Profile Op".to_string(),
             enabled: true,
             tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 5.0,
                 stepdown: 2.0,

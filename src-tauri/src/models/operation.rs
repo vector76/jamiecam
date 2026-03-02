@@ -98,6 +98,12 @@ pub struct Operation {
     pub enabled: bool,
     /// The tool assigned to this operation.
     pub tool_id: Uuid,
+    /// Optional spindle speed override in RPM; `null` to use the tool default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spindle_speed_override: Option<u32>,
+    /// Optional feed rate override in mm/min; `null` to use the tool default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed_rate_override: Option<f64>,
     /// Type and parameters specific to this operation kind.
     #[serde(flatten)]
     pub params: OperationParams,
@@ -121,6 +127,8 @@ mod tests {
             name: "Outer Profile".to_string(),
             enabled: true,
             tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: 2.5,
@@ -135,6 +143,8 @@ mod tests {
             name: "Rough Pocket".to_string(),
             enabled: true,
             tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 15.0,
                 stepdown: 3.0,
@@ -149,6 +159,8 @@ mod tests {
             name: "Drill Holes".to_string(),
             enabled: true,
             tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -188,6 +200,8 @@ mod tests {
             name: "Full-Depth Drill".to_string(),
             enabled: true,
             tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -271,5 +285,77 @@ mod tests {
         let json = r#"{"depth": 10.0}"#;
         let params: DrillParams = serde_json::from_str(json).expect("deserialize");
         assert_eq!(params.points, vec![], "points must default to empty vec");
+    }
+
+    #[test]
+    fn operation_override_fields_absent_when_none() {
+        let op = Operation {
+            id: Uuid::new_v4(),
+            name: "Test".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 5.0,
+                stepdown: 1.0,
+                stepover_percent: 50.0,
+            }),
+        };
+        let value = serde_json::to_value(&op).expect("to_value");
+        assert!(
+            value.get("spindleSpeedOverride").is_none(),
+            "spindleSpeedOverride must be absent when None"
+        );
+        assert!(
+            value.get("feedRateOverride").is_none(),
+            "feedRateOverride must be absent when None"
+        );
+    }
+
+    #[test]
+    fn operation_override_fields_present_when_set() {
+        let op = Operation {
+            id: Uuid::new_v4(),
+            name: "Test".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: Some(12000),
+            feed_rate_override: Some(800.0),
+            params: OperationParams::Pocket(PocketParams {
+                depth: 5.0,
+                stepdown: 1.0,
+                stepover_percent: 50.0,
+            }),
+        };
+        let value = serde_json::to_value(&op).expect("to_value");
+        assert_eq!(
+            value["spindleSpeedOverride"], 12000,
+            "spindleSpeedOverride must be 12000"
+        );
+        assert_eq!(
+            value["feedRateOverride"], 800.0,
+            "feedRateOverride must be 800.0"
+        );
+    }
+
+    #[test]
+    fn operation_override_fields_default_to_none_when_absent() {
+        let json = r#"{
+            "id": "aaaa0000-0000-0000-0000-000000000001",
+            "name": "Test",
+            "toolId": "7f3c1a00-0000-0000-0000-000000000001",
+            "type": "pocket",
+            "params": { "depth": 5.0, "stepdown": 1.0, "stepoverPercent": 50.0 }
+        }"#;
+        let op: Operation = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            op.spindle_speed_override.is_none(),
+            "spindle_speed_override must default to None"
+        );
+        assert!(
+            op.feed_rate_override.is_none(),
+            "feed_rate_override must default to None"
+        );
     }
 }

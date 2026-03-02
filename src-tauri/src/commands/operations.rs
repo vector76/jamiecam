@@ -37,6 +37,12 @@ pub struct OperationInput {
     pub enabled: Option<bool>,
     /// UUID string of the tool assigned to this operation.
     pub tool_id: String,
+    /// Optional spindle speed override in RPM; `null` to use the tool default.
+    #[serde(default)]
+    pub spindle_speed_override: Option<u32>,
+    /// Optional feed rate override in mm/min; `null` to use the tool default.
+    #[serde(default)]
+    pub feed_rate_override: Option<f64>,
     /// Type-discriminated parameters (`"type"` + `"params"` at the same level).
     #[serde(flatten)]
     pub params: OperationParams,
@@ -69,6 +75,8 @@ pub(crate) fn add_operation_inner(
         name: input.name,
         enabled: input.enabled.unwrap_or(true),
         tool_id: tool_uuid,
+        spindle_speed_override: input.spindle_speed_override,
+        feed_rate_override: input.feed_rate_override,
         params: input.params,
     };
     project.operations.push(op.clone());
@@ -111,6 +119,8 @@ pub(crate) fn edit_operation_inner(
         entry.enabled = enabled;
     }
     entry.tool_id = tool_uuid;
+    entry.spindle_speed_override = input.spindle_speed_override;
+    entry.feed_rate_override = input.feed_rate_override;
     entry.params = input.params;
 
     Ok(entry.clone())
@@ -294,6 +304,8 @@ mod tests {
             name: name.to_string(),
             enabled: None,
             tool_id: tool_id.to_string(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: 2.5,
@@ -307,6 +319,8 @@ mod tests {
             name: name.to_string(),
             enabled: None,
             tool_id: tool_id.to_string(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 15.0,
                 stepdown: 3.0,
@@ -320,6 +334,8 @@ mod tests {
             name: name.to_string(),
             enabled: None,
             tool_id: tool_id.to_string(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -359,6 +375,8 @@ mod tests {
                 name: "Renamed".to_string(),
                 enabled: Some(false),
                 tool_id: tid.clone(),
+                spindle_speed_override: None,
+                feed_rate_override: None,
                 params: OperationParams::Pocket(PocketParams {
                     depth: 8.0,
                     stepdown: 2.0,

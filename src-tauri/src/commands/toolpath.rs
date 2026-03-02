@@ -285,6 +285,8 @@ mod tests {
             name: "Pocket".to_string(),
             enabled: true,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -331,6 +333,8 @@ mod tests {
             name: "Pocket".to_string(),
             enabled: true,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -401,6 +405,8 @@ mod tests {
             name: "Rough Pocket".to_string(),
             enabled: true,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,

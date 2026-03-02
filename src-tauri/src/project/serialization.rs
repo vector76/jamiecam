@@ -476,6 +476,8 @@ mod tests {
             name: "Outer Profile".to_string(),
             enabled: true,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: 2.5,
@@ -487,6 +489,8 @@ mod tests {
             name: "Rough Pocket".to_string(),
             enabled: true,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 15.0,
                 stepdown: 3.0,
@@ -498,6 +502,8 @@ mod tests {
             name: "Drill Holes".to_string(),
             enabled: false,
             tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
