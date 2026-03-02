@@ -43,7 +43,7 @@ pub struct OperationSummary {
     pub operation_type: String,
     /// Whether the operation is active in the toolpath.
     pub enabled: bool,
-    /// Placeholder for Phase 1 cache invalidation; always `true` in Phase 0.
+    /// Whether the cached toolpath is stale and must be recalculated before use.
     pub needs_recalculate: bool,
 }
 
@@ -90,19 +90,40 @@ impl From<&Project> for ProjectSnapshot {
             })
             .collect();
 
+        let model_sha = p.source_model.as_ref().map(|m| m.checksum.as_str());
+
         let operations = p
             .operations
             .iter()
-            .map(|op| OperationSummary {
-                id: op.id,
-                name: op.name.clone(),
-                operation_type: match &op.params {
-                    OperationParams::Profile(_) => "profile".to_string(),
-                    OperationParams::Pocket(_) => "pocket".to_string(),
-                    OperationParams::Drill(_) => "drill".to_string(),
-                },
-                enabled: op.enabled,
-                needs_recalculate: true,
+            .map(|op| {
+                let needs_recalculate = if op.cache.key.is_none() || !op.cache.valid {
+                    true
+                } else if let (Some(tool), Some(stock)) = (
+                    p.tools.iter().find(|t| t.id == op.tool_id),
+                    p.stock.as_ref(),
+                ) {
+                    let current_key = crate::toolpath::cache::compute_cache_key(
+                        op,
+                        tool,
+                        stock,
+                        model_sha,
+                        env!("CARGO_PKG_VERSION"),
+                    );
+                    op.cache.key.as_deref() != Some(&current_key)
+                } else {
+                    true
+                };
+                OperationSummary {
+                    id: op.id,
+                    name: op.name.clone(),
+                    operation_type: match &op.params {
+                        OperationParams::Profile(_) => "profile".to_string(),
+                        OperationParams::Pocket(_) => "pocket".to_string(),
+                        OperationParams::Drill(_) => "drill".to_string(),
+                    },
+                    enabled: op.enabled,
+                    needs_recalculate,
+                }
             })
             .collect();
 
@@ -146,7 +167,7 @@ pub async fn get_project_snapshot(
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CacheState, CompensationSide, OperationParams, PocketParams, ProfileParams,
+        CacheState, CompensationSide, DrillParams, OperationParams, PocketParams, ProfileParams,
     };
     use crate::models::stock::{BoxDimensions, Vec3};
     use crate::models::wcs::WorkCoordinateSystem;
@@ -386,6 +407,164 @@ mod tests {
         assert_eq!(snap.operations[1].operation_type, "profile");
         assert!(!snap.operations[1].enabled);
         assert!(snap.operations[1].needs_recalculate);
+    }
+
+    #[test]
+    fn snapshot_needs_recalculate_false_when_cache_key_current() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        // Build the operation with default (empty) cache first to compute the key.
+        let op = Operation {
+            id: op_id,
+            name: "Drill Op".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 10.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = Tool {
+            id: tool_id,
+            name: "6mm Drill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 6.0,
+            flute_count: 2,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 100.0,
+            depth: 80.0,
+            height: 20.0,
+        });
+
+        let expected_key = crate::toolpath::cache::compute_cache_key(
+            &op,
+            &tool,
+            &stock,
+            None,
+            env!("CARGO_PKG_VERSION"),
+        );
+
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.tools.push(tool);
+            p.stock = Some(stock);
+            p.operations.push(Operation {
+                cache: CacheState {
+                    key: Some(expected_key),
+                    valid: true,
+                    ..CacheState::default()
+                },
+                ..op
+            });
+        }
+
+        let snap = get_project_snapshot_inner(&state.project).expect("snapshot");
+        assert!(!snap.operations[0].needs_recalculate);
+    }
+
+    #[test]
+    fn snapshot_needs_recalculate_true_after_model_checksum_change() {
+        use crate::geometry::MeshData;
+        use crate::state::LoadedModel;
+        use std::path::PathBuf;
+
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let op = Operation {
+            id: op_id,
+            name: "Drill Op".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 10.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = Tool {
+            id: tool_id,
+            name: "6mm Drill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 6.0,
+            flute_count: 2,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 100.0,
+            depth: 80.0,
+            height: 20.0,
+        });
+
+        let key_a = crate::toolpath::cache::compute_cache_key(
+            &op,
+            &tool,
+            &stock,
+            Some("checksum-A"),
+            env!("CARGO_PKG_VERSION"),
+        );
+
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.source_model = Some(LoadedModel {
+                path: PathBuf::from("/model.step"),
+                checksum: "checksum-A".to_string(),
+                mesh_data: MeshData {
+                    vertices: vec![],
+                    normals: vec![],
+                    indices: vec![],
+                },
+            });
+            p.tools.push(tool);
+            p.stock = Some(stock);
+            p.operations.push(Operation {
+                cache: CacheState {
+                    key: Some(key_a),
+                    valid: true,
+                    ..CacheState::default()
+                },
+                ..op
+            });
+        }
+
+        // With checksum-A in cache and matching model — should not need recalculate.
+        let snap = get_project_snapshot_inner(&state.project).expect("snapshot");
+        assert!(!snap.operations[0].needs_recalculate);
+
+        // Change the model checksum — cache key no longer matches.
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.source_model.as_mut().unwrap().checksum = "checksum-B".to_string();
+        }
+
+        let snap2 = get_project_snapshot_inner(&state.project).expect("snapshot");
+        assert!(snap2.operations[0].needs_recalculate);
     }
 
     #[test]
