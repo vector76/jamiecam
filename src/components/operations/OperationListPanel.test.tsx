@@ -316,13 +316,36 @@ describe('OperationListPanel — Calculate button', () => {
     expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).not.toBeDisabled()
   })
 
-  it('Calculate is disabled for drill operations even when stock is defined', () => {
-    const drillOp = { id: 'dddd-0001', name: 'Drill Op', operationType: 'drill' as const, enabled: true, needsRecalculate: false }
+  it('Calculate is disabled for drill operations even when stock is defined', async () => {
+    const DRILL_OP_ID = 'dddd-0001'
+    const drillOp = { id: DRILL_OP_ID, name: 'Drill Op', operationType: 'drill' as const, enabled: true, needsRecalculate: false }
+    const fullDrillOp: Operation = { id: DRILL_OP_ID, name: 'Drill Op', enabled: true, toolId: TOOL_ID, type: 'drill', params: { depth: 10.0, points: [] } }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([fullDrillOp])
     useProjectStore.setState({
       snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [drillOp] }
     })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: 'Calculate Drill Op' })).toBeDisabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Drill Op' })).toBeDisabled())
+  })
+
+  it('Calculate is disabled for a drill operation with 0 points (even if stock is set)', async () => {
+    const DRILL_OP_ID = 'dddd-0001'
+    const drillOp = { id: DRILL_OP_ID, name: 'Drill Op', operationType: 'drill' as const, enabled: true, needsRecalculate: false }
+    const fullDrillOp: Operation = { id: DRILL_OP_ID, name: 'Drill Op', enabled: true, toolId: TOOL_ID, type: 'drill', params: { depth: 10.0, points: [] } }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([fullDrillOp])
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [drillOp] } })
+    render(<OperationListPanel />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Drill Op' })).toBeDisabled())
+  })
+
+  it('Calculate is enabled for a drill operation when stock is set and points list is non-empty', async () => {
+    const DRILL_OP_ID = 'dddd-0001'
+    const drillOp = { id: DRILL_OP_ID, name: 'Drill Op', operationType: 'drill' as const, enabled: true, needsRecalculate: false }
+    const fullDrillOp: Operation = { id: DRILL_OP_ID, name: 'Drill Op', enabled: true, toolId: TOOL_ID, type: 'drill', params: { depth: 10.0, points: [{ x: 10, y: 20 }] } }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([fullDrillOp])
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [drillOp] } })
+    render(<OperationListPanel />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Drill Op' })).not.toBeDisabled())
   })
 
   it('Calculate is disabled when stock is null even for pocket operations', () => {

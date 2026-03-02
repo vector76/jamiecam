@@ -7,6 +7,7 @@
  * using the first available tool; they are disabled when no tools exist.
  */
 
+import { useState, useEffect } from 'react'
 import { useOperations, useProjectStore, useSelectedOperationId, useStock, useTools } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
 import { addOperation, deleteOperation, editOperation, listOperations } from '../../api/operations'
@@ -14,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput } from '../../api/types'
+import type { OperationInput, DrillParams } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -26,6 +27,19 @@ export function OperationListPanel() {
   const pushNotification = useProjectStore((s) => s.pushNotification)
   const setToolpathGeometry = useViewportStore((s) => s.setToolpathGeometry)
   const noTools = tools.length === 0
+
+  const [drillPointCounts, setDrillPointCounts] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    if (!operations.some(o => o.operationType === 'drill')) { setDrillPointCounts({}); return }
+    listOperations().then(full => {
+      const counts: Record<string, number> = {}
+      for (const op of full) {
+        if (op.type === 'drill') counts[op.id] = (op.params as DrillParams).points.length
+      }
+      setDrillPointCounts(counts)
+    }).catch(handleError)
+  }, [operations])
 
   function handleError(e: unknown) {
     const err = toAppError(e)
@@ -136,7 +150,7 @@ export function OperationListPanel() {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); void handleCalculate(op.id) }}
-              disabled={(op.operationType !== 'pocket' && op.operationType !== 'profile') || !stock}
+              disabled={!stock || (op.operationType === 'drill' ? (drillPointCounts[op.id] ?? 0) < 1 : false)}
               aria-label={`Calculate ${op.name}`}
             >
               Calc

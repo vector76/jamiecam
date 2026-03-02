@@ -15,7 +15,7 @@ import { useTools, useProjectStore } from '../../store/projectStore'
 import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
-import type { Operation, OperationInput, PocketParams, ProfileParams } from '../../api/types'
+import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams } from '../../api/types'
 
 interface Props {
   operationId: string | null
@@ -119,6 +119,49 @@ export function OperationEditorForm({ operationId }: Props) {
             <option value="center">Center</option>
             <option value="right">Right</option>
           </select>
+        </div>
+      </div>
+    )
+  }
+
+  if (operation.type === 'drill') {
+    const params = operation.params as DrillParams
+    const points = params.points
+    return (
+      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-tool">Tool</label>
+          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+            {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-depth">Depth (mm)</label>
+          <input id="oef-depth" type="number" defaultValue={params.depth}
+            onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-peck-depth">Peck depth (mm)</label>
+          <input id="oef-peck-depth" type="number" defaultValue={params.peckDepth ?? ''}
+            onBlur={(e) => void save({ params: { ...params, peckDepth: e.target.value === '' ? undefined : parseFloat(e.target.value) } })} />
+        </div>
+        <div>
+          {points.map((pt, i) => (
+            <div key={i}>
+              <input id={`oef-point-x-${i}`} type="number" defaultValue={pt.x}
+                onBlur={(e) => {
+                  const updated = points.map((p, j) => j === i ? { ...p, x: parseFloat(e.target.value) } : p)
+                  void save({ params: { ...params, points: updated } })
+                }} />
+              <input id={`oef-point-y-${i}`} type="number" defaultValue={pt.y}
+                onBlur={(e) => {
+                  const updated = points.map((p, j) => j === i ? { ...p, y: parseFloat(e.target.value) } : p)
+                  void save({ params: { ...params, points: updated } })
+                }} />
+              <button onClick={() => void save({ params: { ...params, points: points.filter((_, j) => j !== i) } })}>Remove</button>
+            </div>
+          ))}
+          <button onClick={() => void save({ params: { ...params, points: [...points, { x: 0, y: 0 }] } })}>Add point</button>
         </div>
       </div>
     )

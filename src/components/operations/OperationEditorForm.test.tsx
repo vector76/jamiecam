@@ -30,6 +30,7 @@ const TOOL_ID_A = 'aaaaaaaa-0000-0000-0000-000000000001'
 const TOOL_ID_B = 'aaaaaaaa-0000-0000-0000-000000000002'
 const POCKET_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000001'
 const PROFILE_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000002'
+const DRILL_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000003'
 
 const POCKET_OP: Operation = {
   id: POCKET_OP_ID,
@@ -47,6 +48,15 @@ const PROFILE_OP: Operation = {
   toolId: TOOL_ID_A,
   type: 'profile',
   params: { depth: 10.0, stepdown: 2.5, compensationSide: 'left' },
+}
+
+const DRILL_OP: Operation = {
+  id: DRILL_OP_ID,
+  name: 'Drill',
+  enabled: true,
+  toolId: TOOL_ID_A,
+  type: 'drill',
+  params: { depth: 10.0, peckDepth: 3.0, points: [] },
 }
 
 const SNAPSHOT_BASE: ProjectSnapshot = {
@@ -278,6 +288,61 @@ describe('OperationEditorForm — input blur saves', () => {
     await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
       POCKET_OP_ID,
       expect.objectContaining({ params: expect.objectContaining({ stepoverPercent: 40 }) }),
+    ))
+  })
+})
+
+// ── Drill form rendering ──────────────────────────────────────────────────────
+
+describe('OperationEditorForm — drill form', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+  })
+
+  it('drill form renders tool select, depth, and peck depth inputs', async () => {
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Peck depth (mm)')).toBeInTheDocument()
+  })
+
+  it('Add point button appends a new row to the points list', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(DRILL_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Add point')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Add point'))
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      DRILL_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ points: [{ x: 0, y: 0 }] }) }),
+    ))
+  })
+
+  it('Remove button removes the correct row from the points list', async () => {
+    const DRILL_OP_WITH_POINTS: Operation = {
+      ...DRILL_OP,
+      params: { depth: 10.0, peckDepth: 3.0, points: [{ x: 10, y: 20 }, { x: 30, y: 40 }] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP_WITH_POINTS])
+    vi.mocked(opsApi.editOperation).mockResolvedValue(DRILL_OP_WITH_POINTS)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+
+    await waitFor(() => {
+      const removeButtons = screen.getAllByText('Remove')
+      expect(removeButtons).toHaveLength(2)
+    })
+
+    fireEvent.click(screen.getAllByText('Remove')[0])
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      DRILL_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ points: [{ x: 30, y: 40 }] }) }),
     ))
   })
 })
