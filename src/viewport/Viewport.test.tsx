@@ -31,6 +31,7 @@ vi.mock('./scene', () => ({
     scene: new THREE.Scene(),
     dispose: vi.fn(),
     frameModel: vi.fn(),
+    setToolpathLines: vi.fn(),
   })),
 }))
 
@@ -44,7 +45,7 @@ function latestMgr() {
   const results = vi.mocked(SceneManager).mock.results
   const last = results.at(-1)
   if (!last || last.type !== 'return') throw new Error('SceneManager not yet constructed')
-  return last.value as unknown as { scene: THREE.Scene; dispose: ReturnType<typeof vi.fn>; frameModel: ReturnType<typeof vi.fn> }
+  return last.value as unknown as { scene: THREE.Scene; dispose: ReturnType<typeof vi.fn>; frameModel: ReturnType<typeof vi.fn>; setToolpathLines: ReturnType<typeof vi.fn> }
 }
 
 const QUAD_MESH: MeshData = {
