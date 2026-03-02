@@ -138,6 +138,28 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         embedded: false,
     });
 
+    // Write toolpath ZIP entries for operations with a valid cache, and record
+    // the in-archive path in each operation's cache.binary_file so the
+    // serialised project.json carries the correct path.
+    let mut ops = project.operations.clone();
+    for op in &mut ops {
+        if op.cache.valid {
+            if let Some(toolpath) = project.toolpaths.get(&op.id) {
+                let entry_path = format!("toolpaths/{}.json", op.id);
+                let tp_json = serde_json::to_string(toolpath).map_err(|e| {
+                    AppError::ProjectSave(format!("cannot serialize toolpath: {e}"))
+                })?;
+                zip.start_file(&entry_path, opts).map_err(|e| {
+                    AppError::ProjectSave(format!("cannot create toolpath ZIP entry: {e}"))
+                })?;
+                zip.write_all(tp_json.as_bytes()).map_err(|e| {
+                    AppError::ProjectSave(format!("cannot write toolpath entry: {e}"))
+                })?;
+                op.cache.binary_file = Some(entry_path);
+            }
+        }
+    }
+
     let pf = ProjectFile {
         schema_version: 1,
         app_version: APP_VERSION.to_string(),
@@ -152,7 +174,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         stock: project.stock.clone(),
         wcs: project.wcs.clone(),
         tools: project.tools.clone(),
-        operations: project.operations.clone(),
+        operations: ops,
     };
 
     // Serialize and write project.json.
@@ -460,6 +482,143 @@ mod tests {
         assert_eq!(loaded.wcs.len(), 1);
         assert_eq!(loaded.wcs[0].id, wcs_id);
         assert_eq!(loaded.wcs[0].name, "G54");
+    }
+
+    #[test]
+    fn toolpath_entry_written_to_zip() {
+        use crate::models::operation::{CacheState, DrillParams, OperationParams};
+        use crate::models::Operation;
+        use crate::toolpath::Toolpath;
+
+        let tool_id = Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap();
+        let op_id = Uuid::parse_str("dddd0000-0000-0000-0000-000000000004").unwrap();
+
+        let op = Operation {
+            id: op_id,
+            name: "Test Drill".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 10.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState {
+                key: Some("sha256:abc123".to_string()),
+                valid: true,
+                computed_at: Some("2026-03-01T00:00:00Z".to_string()),
+                stats: None,
+                binary_file: None,
+            },
+        };
+
+        let toolpath = Toolpath {
+            operation_id: op_id,
+            tool_number: 1,
+            spindle_speed: 12000.0,
+            feed_rate: 500.0,
+            passes: vec![],
+        };
+
+        let mut project = Project::default();
+        project.operations.push(op);
+        project.toolpaths.insert(op_id, toolpath);
+
+        let tmp = std::env::temp_dir().join("jcam_test_toolpath_entry.jcam");
+        save(&project, &tmp).expect("save should succeed");
+
+        let expected_entry = format!("toolpaths/{op_id}.json");
+
+        // Verify the toolpath entry exists in the ZIP.
+        {
+            let file = std::fs::File::open(&tmp).unwrap();
+            let mut archive = zip::ZipArchive::new(file).expect("valid ZIP");
+            assert!(
+                archive.by_name(&expected_entry).is_ok(),
+                "toolpath ZIP entry {expected_entry} must exist"
+            );
+        }
+
+        // Verify binary_file path appears in the deserialized project.json.
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(loaded.operations.len(), 1);
+        assert_eq!(
+            loaded.operations[0].cache.binary_file.as_deref(),
+            Some(expected_entry.as_str()),
+            "binary_file must be set in the persisted operation"
+        );
+    }
+
+    #[test]
+    fn invalid_cache_not_written_to_zip() {
+        use crate::models::operation::{CacheState, DrillParams, OperationParams};
+        use crate::models::Operation;
+        use crate::toolpath::Toolpath;
+
+        let tool_id = Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap();
+        let op_id = Uuid::parse_str("eeee0000-0000-0000-0000-000000000005").unwrap();
+
+        let op = Operation {
+            id: op_id,
+            name: "Stale Drill".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 10.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState {
+                key: Some("sha256:stale".to_string()),
+                valid: false,
+                computed_at: None,
+                stats: None,
+                binary_file: None,
+            },
+        };
+
+        let toolpath = Toolpath {
+            operation_id: op_id,
+            tool_number: 1,
+            spindle_speed: 12000.0,
+            feed_rate: 500.0,
+            passes: vec![],
+        };
+
+        let mut project = Project::default();
+        project.operations.push(op);
+        project.toolpaths.insert(op_id, toolpath);
+
+        let tmp = std::env::temp_dir().join("jcam_test_invalid_cache.jcam");
+        save(&project, &tmp).expect("save should succeed");
+
+        let not_expected_entry = format!("toolpaths/{op_id}.json");
+
+        // Verify no toolpath ZIP entry was written for the invalid-cache op.
+        {
+            let file = std::fs::File::open(&tmp).unwrap();
+            let mut archive = zip::ZipArchive::new(file).expect("valid ZIP");
+            assert!(
+                archive.by_name(&not_expected_entry).is_err(),
+                "toolpath ZIP entry must NOT exist for cache.valid=false"
+            );
+        }
+
+        // Verify binary_file remains None after round-trip.
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(loaded.operations.len(), 1);
+        assert!(
+            loaded.operations[0].cache.binary_file.is_none(),
+            "binary_file must remain None for cache.valid=false"
+        );
     }
 
     #[test]
