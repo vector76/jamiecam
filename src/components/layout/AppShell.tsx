@@ -10,6 +10,8 @@ import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
 import { Notifications } from '../common/Notifications'
 import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
+import { ToolLibraryPanel } from '../tools/ToolLibraryPanel'
+import { StockPanel } from '../stock/StockPanel'
 
 export function AppShell() {
   return (
@@ -18,6 +20,8 @@ export function AppShell() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Viewport style={{ flex: 1 }} />
         <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <ToolLibraryPanel />
+          <StockPanel />
           <OperationListPanel />
           <GCodePreviewPanel />
         </div>
