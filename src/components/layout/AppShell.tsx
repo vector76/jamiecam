@@ -12,6 +12,7 @@ import { Notifications } from '../common/Notifications'
 import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
 import { ToolLibraryPanel } from '../tools/ToolLibraryPanel'
 import { StockPanel } from '../stock/StockPanel'
+import { WCSPanel } from '../wcs/WCSPanel'
 
 export function AppShell() {
   return (
@@ -22,6 +23,7 @@ export function AppShell() {
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <ToolLibraryPanel />
           <StockPanel />
+          <WCSPanel />
           <OperationListPanel />
           <GCodePreviewPanel />
         </div>

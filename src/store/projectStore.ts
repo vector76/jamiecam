@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand'
-import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary } from '../api/types'
+import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary, WorkCoordinateSystem } from '../api/types'
 
 interface ProjectState {
   /** Most-recently-fetched project snapshot, or null before the first fetch. */
@@ -57,6 +57,7 @@ export const useModelChecksum = (): string | null =>
 // to see a changed value and trigger an infinite re-render loop).
 const EMPTY_OPERATIONS: OperationSummary[] = []
 const EMPTY_TOOLS: ToolSummary[] = []
+const EMPTY_WCS: WorkCoordinateSystem[] = []
 
 /**
  * Selector hook: returns the operation summary list, or an empty array.
@@ -81,6 +82,14 @@ export const useTools = (): ToolSummary[] =>
  */
 export const useStock = (): StockDefinition | null =>
   useProjectStore((state) => state.snapshot?.stock ?? null)
+
+/**
+ * Selector hook: returns the WCS list, or an empty array.
+ *
+ * Re-renders the component only when the wcs array reference changes.
+ */
+export const useWcs = (): WorkCoordinateSystem[] =>
+  useProjectStore((state) => state.snapshot?.wcs ?? EMPTY_WCS)
 
 /**
  * Selector hook: returns the active notification messages array.
