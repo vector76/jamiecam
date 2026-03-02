@@ -103,7 +103,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         },
     });
 
-    Ok(Project {
+    let mut project = Project {
         name: pf.project.name,
         description: pf.project.description,
         units: pf.project.units,
@@ -116,7 +116,36 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         tools: pf.tools,
         operations: pf.operations,
         toolpaths: std::collections::HashMap::new(),
-    })
+    };
+
+    // Restore persisted toolpaths for operations that have a binary_file reference.
+    for op in &project.operations {
+        if let Some(ref path) = op.cache.binary_file {
+            match archive.by_name(path) {
+                Ok(mut entry) => {
+                    let mut s = String::new();
+                    match entry.read_to_string(&mut s) {
+                        Ok(_) => match serde_json::from_str::<crate::toolpath::Toolpath>(&s) {
+                            Ok(tp) => {
+                                project.toolpaths.insert(op.id, tp);
+                            }
+                            Err(e) => {
+                                tracing::warn!("failed to parse toolpath {path}: {e}");
+                            }
+                        },
+                        Err(e) => {
+                            tracing::warn!("failed to read toolpath entry {path}: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("toolpath entry {path} missing: {e}");
+                }
+            }
+        }
+    }
+
+    Ok(project)
 }
 
 /// Write the ZIP archive to `path` (the temp file location).
@@ -704,5 +733,135 @@ mod tests {
             "enabled=false must round-trip"
         );
         assert_eq!(loaded.operations[2].params, op_drill.params);
+    }
+
+    #[test]
+    fn round_trip_with_valid_toolpath() {
+        use crate::models::operation::{CacheState, DrillParams, OperationParams};
+        use crate::models::Operation;
+        use crate::toolpath::Toolpath;
+
+        let tool_id = Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap();
+        let op_id = Uuid::parse_str("f1110000-0000-0000-0000-000000000001").unwrap();
+
+        let op = Operation {
+            id: op_id,
+            name: "Drill Round-Trip".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 8.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState {
+                key: Some("sha256:validkey".to_string()),
+                valid: true,
+                computed_at: Some("2026-03-01T00:00:00Z".to_string()),
+                stats: None,
+                binary_file: None,
+            },
+        };
+
+        let toolpath = Toolpath {
+            operation_id: op_id,
+            tool_number: 2,
+            spindle_speed: 10000.0,
+            feed_rate: 300.0,
+            passes: vec![],
+        };
+
+        let mut project = Project::default();
+        project.operations.push(op);
+        project.toolpaths.insert(op_id, toolpath.clone());
+
+        let tmp = std::env::temp_dir().join("jcam_test_round_trip_valid_toolpath.jcam");
+        save(&project, &tmp).expect("save should succeed");
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert!(
+            loaded.toolpaths.contains_key(&op_id),
+            "toolpath must be restored after round-trip"
+        );
+        assert_eq!(
+            loaded.toolpaths[&op_id], toolpath,
+            "restored toolpath must equal the original"
+        );
+    }
+
+    #[test]
+    fn load_ignores_missing_toolpath_entry_gracefully() {
+        use crate::models::operation::{CacheState, DrillParams, OperationParams};
+        use crate::models::Operation;
+
+        let tool_id = Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap();
+        let op_id = Uuid::parse_str("f2220000-0000-0000-0000-000000000002").unwrap();
+
+        // The op has a binary_file reference to a path that will not exist in
+        // the ZIP, because we build the archive manually without writing that entry.
+        let op = Operation {
+            id: op_id,
+            name: "Ghost Drill".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 5.0,
+                points: vec![],
+                peck_depth: None,
+            }),
+            cache: CacheState {
+                key: Some("sha256:ghost".to_string()),
+                valid: false,
+                computed_at: None,
+                stats: None,
+                binary_file: Some("toolpaths/nonexistent.json".to_string()),
+            },
+        };
+
+        // Build the ZIP manually: write project.json with the binary_file
+        // reference but omit the actual toolpath entry.
+        let tmp = std::env::temp_dir().join("jcam_test_missing_toolpath_entry.jcam");
+        {
+            use crate::project::types::{ProjectFile, ProjectMeta};
+            let ops = vec![op];
+            let pf = ProjectFile {
+                schema_version: 1,
+                app_version: "0.0.0".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                modified_at: "2026-01-01T00:00:00Z".to_string(),
+                project: ProjectMeta {
+                    name: "Ghost".to_string(),
+                    description: String::new(),
+                    units: "mm".to_string(),
+                },
+                source_model: None,
+                stock: None,
+                wcs: vec![],
+                tools: vec![],
+                operations: ops,
+            };
+            let json = serde_json::to_string_pretty(&pf).unwrap();
+            let file = std::fs::File::create(&tmp).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file(PROJECT_JSON, opts).unwrap();
+            zip.write_all(json.as_bytes()).unwrap();
+            // Deliberately omit "toolpaths/nonexistent.json".
+            zip.finish().unwrap();
+        }
+
+        let result = load(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+
+        let loaded = result.expect("load must succeed even when toolpath entry is absent");
+        assert!(
+            loaded.toolpaths.is_empty(),
+            "toolpaths must be empty when ZIP entry is missing"
+        );
     }
 }
