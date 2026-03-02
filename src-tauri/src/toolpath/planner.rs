@@ -9,34 +9,28 @@ use crate::toolpath::{
 };
 
 /// Generate a [`Toolpath`] and [`ToolpathStats`] for the given operation.
-///
-/// Returns [`AppError::NotFound`] for operation types that are not yet
-/// supported (Drill).
 pub fn plan(
     operation: &Operation,
     tool: &Tool,
     stock: &StockDefinition,
 ) -> Result<(Toolpath, ToolpathStats), AppError> {
-    // Step 1: Generate cutting passes based on operation type.
-    let passes = match &operation.params {
-        OperationParams::Pocket(params) => {
-            operations::pocket::pocket_passes(stock, params, tool.diameter)?
-        }
-        OperationParams::Profile(params) => {
-            operations::profile::profile_passes(stock, params, tool.diameter)?
-        }
-        OperationParams::Drill(_) => {
-            return Err(AppError::NotFound(
-                "operation type not supported".to_string(),
-            ));
-        }
-    };
-
-    // Step 2: Compute clearance height and link passes.
+    // Step 1: Compute clearance height.
     let stock_top_z = match stock {
         StockDefinition::Box(b) => b.origin.z + b.height,
     };
-    let linked_passes = linking::link_passes(passes, tool.diameter, stock_top_z + 5.0);
+
+    // Step 2: Generate cutting passes based on operation type.
+    let linked_passes = match &operation.params {
+        OperationParams::Pocket(params) => {
+            let passes = operations::pocket::pocket_passes(stock, params, tool.diameter)?;
+            linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
+        }
+        OperationParams::Profile(params) => {
+            let passes = operations::profile::profile_passes(stock, params, tool.diameter)?;
+            linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
+        }
+        OperationParams::Drill(params) => operations::drill::drill_passes(stock, params)?,
+    };
 
     // Step 3: Compute stats.
     let total_pass_count = linked_passes.len();
@@ -55,11 +49,20 @@ pub fn plan(
         .sum();
 
     // Step 4: Assemble Toolpath.
+    let spindle_speed = operation
+        .spindle_speed_override
+        .map(|v| v as f64)
+        .or_else(|| tool.default_spindle_speed.map(|v| v as f64))
+        .unwrap_or(8000.0);
+    let feed_rate = operation
+        .feed_rate_override
+        .or(tool.default_feed_rate)
+        .unwrap_or(500.0);
     let toolpath = Toolpath {
         operation_id: operation.id,
         tool_number: 1,
-        spindle_speed: tool.default_spindle_speed.unwrap_or(8000) as f64,
-        feed_rate: tool.default_feed_rate.unwrap_or(500.0),
+        spindle_speed,
+        feed_rate,
         passes: linked_passes,
     };
 
@@ -76,7 +79,7 @@ pub fn plan(
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CompensationSide, OperationParams, PocketParams, ProfileParams,
+        CompensationSide, DrillParams, DrillPoint, OperationParams, PocketParams, ProfileParams,
     };
     use crate::models::stock::BoxDimensions;
     use crate::models::tool::ToolType;
@@ -170,5 +173,90 @@ mod tests {
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
         assert!(plan(&operation, &tool, &stock).is_err());
+    }
+
+    fn make_drill_operation(
+        spindle_speed_override: Option<u32>,
+        feed_rate_override: Option<f64>,
+    ) -> Operation {
+        Operation {
+            id: Uuid::nil(),
+            name: "Drill Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            spindle_speed_override,
+            feed_rate_override,
+            params: OperationParams::Drill(DrillParams {
+                depth: 5.0,
+                peck_depth: None,
+                points: vec![DrillPoint { x: 10.0, y: 10.0 }],
+            }),
+        }
+    }
+
+    #[test]
+    fn plan_uses_spindle_speed_override_when_set() {
+        let operation = make_drill_operation(Some(12000), None);
+        let tool = Tool {
+            default_spindle_speed: Some(8000),
+            ..make_tool_10mm()
+        };
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.spindle_speed, 12000.0);
+    }
+
+    #[test]
+    fn plan_uses_tool_default_when_no_spindle_override() {
+        let operation = make_drill_operation(None, None);
+        let tool = Tool {
+            default_spindle_speed: Some(9000),
+            ..make_tool_10mm()
+        };
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.spindle_speed, 9000.0);
+    }
+
+    #[test]
+    fn plan_uses_hardcoded_spindle_fallback_when_neither_set() {
+        let operation = make_drill_operation(None, None);
+        let tool = make_tool_10mm(); // default_spindle_speed: None
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.spindle_speed, 8000.0);
+    }
+
+    #[test]
+    fn plan_uses_feed_rate_override_when_set() {
+        let operation = make_drill_operation(None, Some(800.0));
+        let tool = Tool {
+            default_feed_rate: Some(500.0),
+            ..make_tool_10mm()
+        };
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.feed_rate, 800.0);
+    }
+
+    #[test]
+    fn plan_uses_tool_default_feed_rate_when_no_override() {
+        let operation = make_drill_operation(None, None);
+        let tool = Tool {
+            default_feed_rate: Some(300.0),
+            ..make_tool_10mm()
+        };
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.feed_rate, 300.0);
+    }
+
+    #[test]
+    fn plan_uses_hardcoded_feed_rate_fallback_when_neither_set() {
+        let operation = make_drill_operation(None, None);
+        let tool = make_tool_10mm(); // default_feed_rate: None
+        let stock = make_stock_50x50x10();
+        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        assert_eq!(toolpath.feed_rate, 500.0);
     }
 }
