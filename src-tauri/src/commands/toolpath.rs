@@ -76,15 +76,18 @@ pub(crate) fn get_gcode_preview_inner(
 /// 1. Parses `operation_id` as a UUID.
 /// 2. Reads the operation, stock, and tool from the project (all must exist).
 /// 3. Calls [`crate::toolpath::planner::plan`] to generate the toolpath.
-/// 4. Stores the result in `project.toolpaths`.
-/// 5. Returns statistics about the generated toolpath.
+/// 4. Computes a deterministic SHA-256 cache key from the operation, tool, stock,
+///    optional model checksum, and engine version.
+/// 5. Stores the toolpath in `project.toolpaths` and populates `operation.cache`
+///    with the key, validity flag, UTC timestamp, and summary stats.
+/// 6. Returns statistics about the generated toolpath.
 pub(crate) fn calculate_toolpath_inner(
     operation_id: &str,
     project_lock: &RwLock<Project>,
 ) -> Result<ToolpathStats, AppError> {
     let op_uuid = parse_entity_id(operation_id, "operation")?;
 
-    let (operation, tool, stock) = {
+    let (operation, tool, stock, model_sha) = {
         let project = read_project(project_lock)?;
 
         let operation = project
@@ -106,14 +109,39 @@ pub(crate) fn calculate_toolpath_inner(
             .ok_or_else(|| AppError::NotFound(format!("tool {} not found", operation.tool_id)))?
             .clone();
 
-        (operation, tool, stock)
+        let model_sha = project.source_model.as_ref().map(|m| m.checksum.clone());
+
+        (operation, tool, stock, model_sha)
     }; // read lock released here
 
     let (toolpath, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock)?;
 
+    let key = crate::toolpath::cache::compute_cache_key(
+        &operation,
+        &tool,
+        &stock,
+        model_sha.as_deref(),
+        env!("CARGO_PKG_VERSION"),
+    );
+
     {
         let mut project = write_project(project_lock)?;
         project.toolpaths.insert(op_uuid, toolpath);
+        if let Some(op) = project.operations.iter_mut().find(|o| o.id == op_uuid) {
+            op.cache = crate::models::operation::CacheState {
+                key: Some(key),
+                valid: true,
+                computed_at: Some(
+                    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                ),
+                stats: Some(crate::models::operation::CachedStats {
+                    total_pass_count: stats.total_pass_count as u32,
+                    total_point_count: stats.total_point_count as u32,
+                    total_path_length_mm: stats.total_path_length_mm,
+                }),
+                binary_file: None,
+            };
+        }
     } // write lock released here
 
     Ok(stats)
@@ -370,6 +398,38 @@ mod tests {
         assert!(
             project.toolpaths.contains_key(&op_id),
             "toolpath should be stored in project"
+        );
+
+        let op = project
+            .operations
+            .iter()
+            .find(|o| o.id == op_id)
+            .expect("operation must still exist");
+        assert!(op.cache.valid, "cache.valid should be true after calculate");
+        assert!(
+            op.cache
+                .key
+                .as_deref()
+                .map(|k| k.starts_with("sha256:"))
+                .unwrap_or(false),
+            "cache.key should start with 'sha256:'"
+        );
+        assert!(
+            op.cache.computed_at.is_some(),
+            "cache.computed_at should be set"
+        );
+        let cached_stats = op.cache.stats.as_ref().expect("cache.stats should be set");
+        assert_eq!(
+            cached_stats.total_pass_count, stats.total_pass_count as u32,
+            "cached pass count must match returned stats"
+        );
+        assert_eq!(
+            cached_stats.total_point_count, stats.total_point_count as u32,
+            "cached point count must match returned stats"
+        );
+        assert!(
+            op.cache.binary_file.is_none(),
+            "binary_file should remain None"
         );
     }
 
