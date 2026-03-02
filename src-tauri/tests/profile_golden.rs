@@ -1,6 +1,8 @@
 #![cfg(cam_geometry_bindings)]
 
-use jamiecam_lib::models::operation::{CompensationSide, OperationParams, ProfileParams};
+use jamiecam_lib::models::operation::{
+    CacheState, CompensationSide, OperationParams, ProfileParams,
+};
 use jamiecam_lib::models::stock::BoxDimensions;
 use jamiecam_lib::models::tool::ToolType;
 use jamiecam_lib::models::{Operation, StockDefinition, Tool, Vec3};
@@ -44,6 +46,7 @@ fn profile_algorithm_golden_matches() {
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
         }),
+        cache: CacheState::default(),
     };
 
     let (toolpath, _stats) = planner::plan(&operation, &tool, &stock).expect("plan should succeed");

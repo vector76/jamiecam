@@ -1,4 +1,4 @@
-use jamiecam_lib::models::operation::{DrillParams, DrillPoint, OperationParams};
+use jamiecam_lib::models::operation::{CacheState, DrillParams, DrillPoint, OperationParams};
 use jamiecam_lib::models::stock::BoxDimensions;
 use jamiecam_lib::models::tool::ToolType;
 use jamiecam_lib::models::{Operation, StockDefinition, Tool, Vec3};
@@ -48,6 +48,7 @@ fn drill_algorithm_golden_matches() {
                 DrillPoint { x: 20.0, y: 20.0 },
             ],
         }),
+        cache: CacheState::default(),
     };
 
     let (toolpath, _stats) = planner::plan(&operation, &tool, &stock).expect("plan should succeed");

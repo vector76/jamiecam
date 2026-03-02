@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-01. Based on git history (77 commits, branch `main`)._
+_Last updated: 2026-03-01. Based on git history (85 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -19,11 +19,13 @@ WCS, and operations is fully implemented on both the Rust backend and the
 TypeScript frontend. The post-processor engine and G-code export pipeline are
 complete, including four built-in post-processor configs, golden-file
 integration tests, IPC commands, and a G-code preview panel with export
-functionality. The pocket clearing and profile contouring CAM algorithms, Clipper2 polygon
-integration, toolpath linking, planner, IPC calculate/geometry commands,
-toolpath visualization in the viewport, operation editor forms (pocket and
-profile), and Calculate button are also implemented and tested end-to-end.
-Drilling and geometry selection are the main remaining items for Phase 1.
+functionality. The pocket clearing, profile contouring, and drilling CAM
+algorithms, Clipper2 polygon integration, toolpath linking, planner, IPC
+calculate/geometry commands, toolpath visualization in the viewport, operation
+editor forms (pocket, profile, and drill), per-operation feed/speed overrides,
+and Calculate button are all implemented and tested end-to-end. Geometry
+selection is the main remaining item for Phase 1; progress events, cache
+invalidation, and toolpath persistence to `.jcam` are also outstanding.
 
 ---
 
@@ -101,12 +103,13 @@ frontend types are in `src/api/types.ts`.
 - IPC commands: `get_wcs`, `set_wcs`
 - Frontend API wrappers in `src/api/stock.ts` (combined with stock commands)
 
-**Operations** (`97c6ac2`, `9c04c01`)
-- `Operation` struct (common fields: `id`, `name`, `enabled`, `tool_id`) +
+**Operations** (`97c6ac2`, `9c04c01`, updated `eebfd3d`)
+- `Operation` struct (common fields: `id`, `name`, `enabled`, `tool_id`,
+  `spindle_speed_override`, `feed_rate_override`) +
   `OperationParams` enum (`Profile`, `Pocket`, `Drill`) flattened alongside it
 - Project integration — operations stored in `Vec<Operation>`; each carries a
   UUID `id` field
-- `ProjectSnapshot` carries full operations list to frontend (`7695e8b`)
+- `ProjectSnapshot` carries `Vec<OperationSummary>` (id, name, operationType, enabled, needsRecalculate) to frontend (`7695e8b`)
 - IPC commands: `add_operation`, `edit_operation`, `delete_operation`,
   `reorder_operations`, `list_operations`
 - Frontend API wrappers in `src/api/operations.ts`
@@ -167,7 +170,7 @@ immediately once algorithms are written.
 - Golden files: `tests/integration/golden_gcode/fanuc-0i/simple_pocket.nc`,
   `linuxcnc/simple_pocket.nc`
 
-### CAM algorithms (complete for pocket and profile; drill pending)
+### CAM algorithms (complete for pocket, profile, and drill)
 
 **Clipper2 C++ implementation** (`4700298`)
 - `cg_poly_offset` and `cg_poly_boolean` stubs replaced with real Clipper2
@@ -209,14 +212,19 @@ immediately once algorithms are written.
 - Unit tests (all gated on `cam_geometry_bindings`): Z-level count,
   non-empty output for valid tool, error propagation for oversized tool
 
-**Toolpath planner** (`3babbb6`, updated `1b405df`)
+**Toolpath planner** (`3babbb6`, updated `1b405df`, `b529693`)
 - `src-tauri/src/toolpath/planner.rs`: `plan(operation, tool, stock)`
-- Dispatches to `pocket_passes` or `profile_passes` then `link_passes`;
-  assembles `Toolpath` with `ToolpathStats`
-- Drill returns `AppError::NotFound` ("operation type not supported"); no
-  unit test for this path
+- Dispatches to `pocket_passes` or `profile_passes` (then `link_passes`)
+  or `drill_passes` (no link pass wrapping); assembles `Toolpath` and
+  computes `ToolpathStats` separately; returns both as a tuple
+- Feed/speed override logic: operation-level `spindle_speed_override` /
+  `feed_rate_override` take priority over tool defaults, which fall back to
+  hardcoded values (8000 RPM / 500 mm/min)
 - Unit tests: stats non-zero for Pocket and Profile (gated on bindings);
-  error for Profile without geometry bindings (stub path)
+  error for Profile without geometry bindings (stub path); six tests
+  covering all override/fallback combinations for spindle speed and feed rate
+  (ungated — use a drill operation with a single point so no geometry
+  bindings are needed)
 
 **Pocket algorithm golden file test** (`f52cdc5`)
 - `src-tauri/tests/pocket_golden.rs`: `pocket_algorithm_golden_matches`
@@ -250,6 +258,47 @@ immediately once algorithms are written.
 - Golden fixture: `tests/integration/profile/toolpath.json` (468 lines)
 - `[[test]]` entry added to `src-tauri/Cargo.toml` for `profile_golden`
 
+**`DrillPoint` struct and `points` field** (`13b3bc7`)
+- `DrillPoint { x: f64, y: f64 }` struct added to `src-tauri/src/models/operation.rs`
+- `points: Vec<DrillPoint>` field with `#[serde(default)]` added to `DrillParams`
+- 3 serde unit tests: round-trip, non-empty points, default-to-empty behaviour
+
+**Feed/speed override fields on `Operation`** (`eebfd3d`)
+- `spindle_speed_override: Option<u32>` and `feed_rate_override: Option<f64>`
+  added to `Operation` struct and `OperationInput`
+- `#[serde(default, skip_serializing_if = "Option::is_none")]` on both
+  fields — absent from JSON when `None` (skip_serializing_if), and default
+  to `None` when absent on deserialize (default); both halves needed for
+  backward compatibility with existing project files
+- Wired through `add_operation_inner` and `edit_operation_inner`; all
+  existing `Operation` / `OperationInput` struct literals across the codebase
+  updated
+- 3 serde unit tests: absent when `None`, present when set, defaults to
+  `None` on deserialize when field is absent
+
+**Drill algorithm** (`3169f31`)
+- `src-tauri/src/toolpath/operations/drill.rs`: `drill_passes(stock, params)`
+- For each hole in `params.points`, produces one `PassKind::Linking` pass
+  (rapid to clearance height above the hole) and one `PassKind::Cutting` pass
+- Full-depth mode (no `peck_depth`): single `Feed` plunge to `drill_z`,
+  then `Rapid` retract to clearance
+- Peck mode (`peck_depth` set): repeated feed/retract cycles decrementing by
+  `peck_depth` until `drill_z` is reached; uses `f64::max` to avoid
+  overshooting the target depth
+- Returns `AppError::GeometryImport` if `params.points` is empty or if
+  `peck_depth` is ≤ 0
+- 6 unit tests: empty-points error, zero/negative peck error, single
+  non-peck hole geometry (Z values and move kinds), peck hole Z-levels
+  (7-point sequence for 3 pecks), two-hole pass ordering and linking structure
+
+**Drill algorithm golden file test** (`7e436df`)
+- `src-tauri/tests/drill_golden.rs`: `drill_algorithm_golden_matches`
+  (ungated — drill algorithm requires no geometry bindings)
+- Exercises full planner pipeline (50×50×10 mm stock, 5 mm drill, 5 holes,
+  depth=10/peck_depth=3); validates peck cycling for each of 5 holes
+- Golden fixture: `tests/integration/drill/toolpath.json` (652 lines)
+- `[[test]]` entry added to `src-tauri/Cargo.toml` for `drill_golden`
+
 ### IPC commands (calculate and geometry)
 
 **`calculate_toolpath`** and **`get_toolpath_geometry`** (`0c1d802`)
@@ -263,25 +312,36 @@ immediately once algorithms are written.
 - Unit tests: NotFound with no operation, NotFound with no stock, stores
   toolpath for pocket (gated), NotFound when no toolpath stored
 
-### UI (substantially complete for pocket and profile workflows)
+### UI (substantially complete for all three operation types)
 
-**Operation editor form** (`53c4f49`, updated `70e8318`)
+**Operation editor form** (`53c4f49`, updated `70e8318`, `1318d96`, `bec3737`)
 - `OperationEditorForm` in `src/components/operations/OperationEditorForm.tsx`
 - Pocket operations: tool select (saves on change) + depth / stepdown /
-  stepover number inputs (save on blur via `editOperation`)
+  stepover / spindle speed override / feed rate override inputs (save on blur)
 - Profile operations: tool select (saves on change) + depth / stepdown /
-  compensation side (Left/Center/Right) select (saves on change)
-- Drill: "coming soon" placeholder
-- Uses `key={operation.id}` on the rendered div to remount uncontrolled inputs when the selected operation changes
-- Tests in `OperationEditorForm.test.tsx` cover pocket and profile forms
+  compensation side (Left/Center/Right) select + spindle speed override /
+  feed rate override inputs (save on blur)
+- Drill operations: tool select + depth + peck depth + spindle speed override /
+  feed rate override + dynamic drill-points table (Add Point / Remove per row,
+  each row has X and Y inputs that save on blur)
+- `save()` base always carries current `spindleSpeedOverride` and
+  `feedRateOverride` values to prevent silent clearing on unrelated saves
+- Uses `key={operation.id}` on the rendered div to remount uncontrolled
+  inputs when the selected operation changes
+- Tests in `OperationEditorForm.test.tsx` cover pocket, profile, and drill
+  forms; including add/remove point and override inputs
 
-**Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`)
+**Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`)
 - Row click sets `selectedOperationId`; selected row highlighted
 - `OperationEditorForm` mounted below the list, driven by `selectedOperationId`
 - Calculate button per row: enabled for pocket and profile operations when
-  stock is defined; drill operations remain disabled; calls
-  `calculateToolpath` → `getToolpathGeometry` → `setToolpathGeometry` and
-  pushes a stats notification string
+  stock is defined; enabled for drill operations when stock is defined AND
+  the operation has ≥ 1 drill point; calls `calculateToolpath` →
+  `getToolpathGeometry` → `setToolpathGeometry` and pushes a stats
+  notification string
+- `drillPointCounts: Record<string, number>` state maintained via `useEffect`
+  that triggers a full `listOperations()` fetch whenever the operations list
+  changes; used to gate the Calculate button for drill rows
 - `stopPropagation` on checkbox, delete, and Calculate buttons
 
 **Toolpath visualization** (`63028d8`, `108548a`)
@@ -330,11 +390,9 @@ immediately once algorithms are written.
 | Item | Notes |
 |---|---|
 | Geometry selection | Click faces/edges in viewport; face fingerprinting |
-| Drilling algorithm | Planner returns `NotFound`; CAM logic not written |
 | Progress events | Tokio task progress → `emit()` → frontend progress bar |
 | Cache invalidation | SHA-256 cache key, stale detection; not implemented |
 | Toolpath binary format | `toolpaths/*.bin` in `.jcam`; toolpaths live in memory only |
-| Feeds and speeds | Per-operation override of tool defaults not implemented |
 
 ---
 
@@ -358,8 +416,8 @@ encountered.
 | `src/store/projectStore.test.ts` | Zustand store actions (including `selectedOperationId`) |
 | `src/store/viewportStore.test.ts` | Viewport store (including `toolpathGeometry`) |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar component |
-| `src/components/operations/OperationListPanel.test.tsx` | Operation list: selection, Calculate button, API calls, viewport store update, propagation |
-| `src/components/operations/OperationEditorForm.test.tsx` | Operation editor form: pocket and profile fields, tool select, save on blur/change |
+| `src/components/operations/OperationListPanel.test.tsx` | Operation list: selection, Calculate button (pocket/profile/drill 0-point disabled/1-point enabled), API calls, viewport store update, propagation |
+| `src/components/operations/OperationEditorForm.test.tsx` | Operation editor form: pocket, profile, and drill fields; tool select; save on blur/change; add/remove drill points; feed/speed override inputs |
 | `src/components/common/Notifications.test.tsx` | Error notification toasts |
 | `src/viewport/Viewport.test.tsx` | Viewport component mount/unmount, mesh updates |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
@@ -368,16 +426,18 @@ encountered.
 | `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i, linuxcnc |
 | `src-tauri/tests/pocket_golden.rs` | Golden-file integration: pocket algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/profile_golden.rs` | Golden-file integration: profile algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
+| `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot, toolpath (calculate, get_geometry, G-code preview) |
-| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `linking.rs` pass wrapping, `planner.rs` dispatch, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse |
+| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors, non-peck geometry, peck Z-levels, multi-hole ordering |
 | `src-tauri/src/geometry/clipper.rs` (inline) | Stub path always; integration path (offset/boolean) gated on bindings |
 | `src-tauri/src/` (inline) | `error.rs` variants, `state.rs` defaults, `project/serialization.rs` round-trips |
 
-Golden-file tests now cover both the post-processor output stage (G-code) and
-the CAM algorithm output stage (pocket and profile toolpath JSON). Drill
-algorithm golden files do not yet exist — the algorithm is not implemented.
+Golden-file tests cover the post-processor output stage (G-code) and all three
+CAM algorithm output stages (pocket, profile, and drill toolpath JSON). The
+pocket and profile golden tests are gated on `cam_geometry_bindings`; the drill
+golden test is ungated since drilling requires no geometry bindings.
 
 ---
 
@@ -399,6 +459,7 @@ algorithm golden files do not yet exist — the algorithm is not implemented.
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — dispatches to algorithm, links passes, computes stats |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
+| `src-tauri/src/toolpath/operations/drill.rs` | Drill cycle algorithm (linking + cutting passes per hole, peck support) |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
 | `src-tauri/src/postprocessor/config.rs` | TOML schema deserialization + validation |
 | `src-tauri/src/postprocessor/formatter.rs` | Number formatting + template substitution |
@@ -438,6 +499,7 @@ algorithm golden files do not yet exist — the algorithm is not implemented.
 | `tests/integration/golden_gcode/linuxcnc/simple_pocket.nc` | Golden G-code output for LinuxCNC |
 | `tests/integration/pocket/toolpath.json` | Golden pocket algorithm output (50×50×10 mm, 10 mm tool) |
 | `tests/integration/profile/toolpath.json` | Golden profile algorithm output (50×50×10 mm, 6 mm tool, Left compensation) |
+| `tests/integration/drill/toolpath.json` | Golden drill algorithm output (50×50×10 mm, 5 mm drill, 5 holes, 3 mm peck) |
 
 ### TypeScript frontend
 | File | Purpose |
@@ -456,7 +518,7 @@ algorithm golden files do not yet exist — the algorithm is not implemented.
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
 | `src/components/operations/OperationListPanel.tsx` | Operation list: row selection, Calculate button, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket and profile parameter forms (tool, depth, stepdown, stepover / compensation side) |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, and drill parameter forms; feed/speed override inputs; dynamic drill-points table |
 | `src/components/toolbar/Toolbar.tsx` | File operation toolbar |
 | `src/components/common/Notifications.tsx` | IPC error toast/snackbar |
 | `src/components/gcode/GCodePreviewPanel.tsx` | G-code preview with PP selector + Export |
