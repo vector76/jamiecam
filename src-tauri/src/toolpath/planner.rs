@@ -79,7 +79,8 @@ pub fn plan(
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CompensationSide, DrillParams, DrillPoint, OperationParams, PocketParams, ProfileParams,
+        CacheState, CompensationSide, DrillParams, DrillPoint, OperationParams, PocketParams,
+        ProfileParams,
     };
     use crate::models::stock::BoxDimensions;
     use crate::models::tool::ToolType;
@@ -123,6 +124,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
@@ -146,6 +148,7 @@ mod tests {
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
             }),
+            cache: CacheState::default(),
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
@@ -169,6 +172,7 @@ mod tests {
                 stepdown: 2.0,
                 compensation_side: CompensationSide::Left,
             }),
+            cache: CacheState::default(),
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
@@ -191,6 +195,7 @@ mod tests {
                 peck_depth: None,
                 points: vec![DrillPoint { x: 10.0, y: 10.0 }],
             }),
+            cache: CacheState::default(),
         }
     }
 

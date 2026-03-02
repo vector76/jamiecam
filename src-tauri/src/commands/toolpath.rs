@@ -244,7 +244,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::models::{
-        operation::{OperationParams, PocketParams},
+        operation::{CacheState, OperationParams, PocketParams},
         tool::ToolType,
         Operation, Tool, Vec3,
     };
@@ -292,6 +292,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
 
         {
@@ -340,6 +341,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
 
         let stock = crate::models::StockDefinition::Box(BoxDimensions {
@@ -412,6 +414,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
 
         let toolpath = Toolpath {

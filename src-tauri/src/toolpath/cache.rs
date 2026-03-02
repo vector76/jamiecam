@@ -65,7 +65,7 @@ pub fn compute_cache_key(
 mod tests {
     use super::*;
     use crate::models::{
-        operation::{CompensationSide, Operation, OperationParams, ProfileParams},
+        operation::{CacheState, CompensationSide, Operation, OperationParams, ProfileParams},
         stock::{BoxDimensions, StockDefinition, Vec3},
         tool::{Tool, ToolType},
     };
@@ -97,6 +97,7 @@ mod tests {
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
             }),
+            cache: CacheState::default(),
         }
     }
 

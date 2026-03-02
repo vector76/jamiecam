@@ -146,7 +146,7 @@ pub async fn get_project_snapshot(
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CompensationSide, OperationParams, PocketParams, ProfileParams,
+        CacheState, CompensationSide, OperationParams, PocketParams, ProfileParams,
     };
     use crate::models::stock::{BoxDimensions, Vec3};
     use crate::models::wcs::WorkCoordinateSystem;
@@ -356,6 +356,7 @@ mod tests {
                     stepdown: 3.0,
                     stepover_percent: 45.0,
                 }),
+                cache: CacheState::default(),
             });
             p.operations.push(Operation {
                 id: Uuid::new_v4(),
@@ -369,6 +370,7 @@ mod tests {
                     stepdown: 2.5,
                     compensation_side: CompensationSide::Left,
                 }),
+                cache: CacheState::default(),
             });
         }
 

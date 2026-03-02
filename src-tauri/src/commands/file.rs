@@ -429,7 +429,7 @@ mod tests {
 
     fn make_export_state() -> (AppState, uuid::Uuid) {
         use crate::models::{
-            operation::{OperationParams, PocketParams},
+            operation::{CacheState, OperationParams, PocketParams},
             tool::ToolType,
             Operation, Tool, Vec3,
         };
@@ -464,6 +464,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
 
         let toolpath = Toolpath {
@@ -529,7 +530,7 @@ mod tests {
     #[test]
     fn export_gcode_inner_returns_not_found_when_toolpath_absent() {
         use crate::models::{
-            operation::{OperationParams, PocketParams},
+            operation::{CacheState, OperationParams, PocketParams},
             Operation,
         };
         use uuid::Uuid;
@@ -549,6 +550,7 @@ mod tests {
                 stepdown: 2.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
 
         {

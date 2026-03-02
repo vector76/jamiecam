@@ -107,10 +107,38 @@ pub struct Operation {
     /// Type and parameters specific to this operation kind.
     #[serde(flatten)]
     pub params: OperationParams,
+    #[serde(default)]
+    pub cache: CacheState,
 }
 
 fn default_enabled() -> bool {
     true
+}
+
+/// Stats snapshot stored alongside the cache key.
+/// Uses u32 for counts (not usize) for cross-platform serialisation stability.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CachedStats {
+    pub total_pass_count: u32,
+    pub total_point_count: u32,
+    pub total_path_length_mm: f64,
+}
+
+/// Records the cache key and validity state for an operation's toolpath.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CacheState {
+    /// SHA-256 key computed at last successful calculate, e.g. "sha256:abc...".
+    pub key: Option<String>,
+    /// True when the stored toolpath is considered current.
+    pub valid: bool,
+    /// UTC ISO-8601 timestamp of last successful calculate.
+    pub computed_at: Option<String>,
+    /// Summary stats from the last successful calculate.
+    pub stats: Option<CachedStats>,
+    /// ZIP-internal path where the toolpath is persisted, e.g. "toolpaths/<uuid>.json".
+    pub binary_file: Option<String>,
 }
 
 #[cfg(test)]
@@ -134,6 +162,7 @@ mod tests {
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
             }),
+            cache: CacheState::default(),
         }
     }
 
@@ -150,6 +179,7 @@ mod tests {
                 stepdown: 3.0,
                 stepover_percent: 45.0,
             }),
+            cache: CacheState::default(),
         }
     }
 
@@ -166,6 +196,7 @@ mod tests {
                 points: vec![],
                 peck_depth: Some(5.0),
             }),
+            cache: CacheState::default(),
         }
     }
 
@@ -207,6 +238,7 @@ mod tests {
                 points: vec![],
                 peck_depth: None,
             }),
+            cache: CacheState::default(),
         };
         let value = serde_json::to_value(&op).expect("to_value");
         let params = &value["params"];
@@ -301,6 +333,7 @@ mod tests {
                 stepdown: 1.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
         let value = serde_json::to_value(&op).expect("to_value");
         assert!(
@@ -327,6 +360,7 @@ mod tests {
                 stepdown: 1.0,
                 stepover_percent: 50.0,
             }),
+            cache: CacheState::default(),
         };
         let value = serde_json::to_value(&op).expect("to_value");
         assert_eq!(
@@ -357,5 +391,49 @@ mod tests {
             op.feed_rate_override.is_none(),
             "feed_rate_override must default to None"
         );
+    }
+
+    #[test]
+    fn cache_field_defaults_when_absent() {
+        let json = r#"{
+            "id": "aaaa0000-0000-0000-0000-000000000001",
+            "name": "Test",
+            "toolId": "7f3c1a00-0000-0000-0000-000000000001",
+            "type": "pocket",
+            "params": { "depth": 5.0, "stepdown": 1.0, "stepoverPercent": 50.0 }
+        }"#;
+        let op: Operation = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(op.cache, CacheState::default());
+    }
+
+    #[test]
+    fn cache_state_round_trip() {
+        let op = Operation {
+            id: Uuid::parse_str("aaaa0000-0000-0000-0000-000000000001").unwrap(),
+            name: "Cached Op".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 5.0,
+                stepdown: 1.0,
+                stepover_percent: 50.0,
+            }),
+            cache: CacheState {
+                key: Some("sha256:abcdef1234567890".to_string()),
+                valid: true,
+                computed_at: Some("2026-03-01T00:00:00Z".to_string()),
+                stats: Some(CachedStats {
+                    total_pass_count: 3,
+                    total_point_count: 150,
+                    total_path_length_mm: 1234.5,
+                }),
+                binary_file: Some("toolpaths/some-uuid.json".to_string()),
+            },
+        };
+        let json = serde_json::to_string(&op).expect("serialize");
+        let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(op, recovered);
     }
 }

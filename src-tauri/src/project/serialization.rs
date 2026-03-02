@@ -465,7 +465,7 @@ mod tests {
     #[test]
     fn round_trip_project_with_operations() {
         use crate::models::operation::{
-            CompensationSide, DrillParams, OperationParams, PocketParams, ProfileParams,
+            CacheState, CompensationSide, DrillParams, OperationParams, PocketParams, ProfileParams,
         };
         use crate::models::Operation;
 
@@ -483,6 +483,7 @@ mod tests {
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
             }),
+            cache: CacheState::default(),
         };
         let op_pocket = Operation {
             id: Uuid::parse_str("bbbb0000-0000-0000-0000-000000000002").unwrap(),
@@ -496,6 +497,7 @@ mod tests {
                 stepdown: 3.0,
                 stepover_percent: 45.0,
             }),
+            cache: CacheState::default(),
         };
         let op_drill = Operation {
             id: Uuid::parse_str("cccc0000-0000-0000-0000-000000000003").unwrap(),
@@ -509,6 +511,7 @@ mod tests {
                 points: vec![],
                 peck_depth: Some(5.0),
             }),
+            cache: CacheState::default(),
         };
 
         let mut project = Project::default();

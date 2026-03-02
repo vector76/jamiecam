@@ -15,7 +15,7 @@ use std::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::models::operation::OperationParams;
+use crate::models::operation::{CacheState, OperationParams};
 use crate::models::Operation;
 use crate::state::{AppState, Project};
 
@@ -78,6 +78,7 @@ pub(crate) fn add_operation_inner(
         spindle_speed_override: input.spindle_speed_override,
         feed_rate_override: input.feed_rate_override,
         params: input.params,
+        cache: CacheState::default(),
     };
     project.operations.push(op.clone());
     Ok(op)
