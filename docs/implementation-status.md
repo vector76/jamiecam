@@ -424,12 +424,18 @@ immediately once algorithms are written.
 **WCS panel** (`cc8a5da`, `b45da2c`)
 - `WCSPanel` in `src/components/wcs/WCSPanel.tsx`: form UI for WCS origin
   editing with three numeric inputs (origin X, Y, Z)
-- "Set WCS" button calls `setWcs(payload)` then refreshes the project snapshot
-- "Clear WCS" button calls `setWcs(null)` then refreshes the snapshot (only
-  rendered when a WCS is defined)
+- "Set WCS" button calls `setWcs([payload])` then refreshes the project snapshot;
+  when a WCS already exists, it merges the edited origin into the existing record;
+  when no WCS exists, it generates a new UUID and uses G54/standard-axis defaults
+- "Clear WCS" button calls `setWcs([])` (empty array) then refreshes the snapshot
+  (only rendered when a WCS is defined)
 - Error notifications via `usePushNotification` for all failure paths
 - Mounted in `AppShell` between `StockPanel` and `OperationListPanel`
-- Tests (`WCSPanel.test.tsx`): display, Set WCS, Clear WCS, error — 6 tests
+- Tests (`WCSPanel.test.tsx`): display when empty ('No WCS defined' / no Clear
+  button), display with WCS (shows origin values / Clear button present), Set WCS
+  when updating existing record, Set WCS when creating a new record (checks
+  generated UUID + default axes), Clear WCS calls `setWcs([])` and refreshes,
+  error notification when `setWcs` rejects — 6 tests
 
 **Tool library panel** (`0859606`, `58f6965`)
 - `ToolLibraryPanel` in `src/components/tools/ToolLibraryPanel.tsx`: three-mode
@@ -487,12 +493,12 @@ immediately once algorithms are written.
 **Real cache-key comparison for `needs_recalculate`** (`edf9a61`)
 - `From<&Project> for ProjectSnapshot` now performs a real SHA-256 comparison instead of returning hardcoded `true`
 - Logic: short-circuits to `true` when `cache.key` is absent or `cache.valid` is false, or when the operation's tool or project stock is missing; otherwise recomputes the SHA-256 key and compares against stored key
-- 2 new tests: `snapshot_needs_recalculate_false_when_cache_key_current`, `snapshot_needs_recalculate_true_after_model_checksum_change`
+- Tests: `snapshot_needs_recalculate_false_when_cache_key_current`, `snapshot_needs_recalculate_true_after_model_checksum_change`
 
 **Stale indicator in OperationListPanel** (`9706ff9`)
 - Rows with `needsRecalculate: true` display an amber "(stale)" label
 - Snapshot refreshed via `getProjectSnapshot()` after a successful toolpath calculate so the stale indicator clears immediately
-- 2 new tests: stale indicator rendering, post-calculate snapshot refresh
+- Tests: stale indicator rendering, post-calculate snapshot refresh
 
 **End-to-end cache integration test** (`89a3d90`)
 - `src-tauri/tests/toolpath_cache.rs`: 2 scenarios (ungated — uses drill operations requiring no geometry bindings): save/load round-trip preserves toolpath and cache validity; mutating a param after load marks operation stale
@@ -521,19 +527,19 @@ encountered.
 
 | Test file | Coverage |
 |---|---|
-| `src/viewport/scene.test.ts` | Three.js scene setup |
-| `src/viewport/controls.test.ts` | Camera controls |
-| `src/viewport/modelMesh.test.ts` | Mesh construction |
+| `src/viewport/scene.test.ts` | SceneManager: scene graph (lights, GridHelper), cameras (perspective/orthographic, Z-up, FOV, clip planes), OrbitControls config, dispose (idempotent), frameModel — 22 tests across 5 describe blocks |
+| `src/viewport/controls.test.ts` | `createAxisTriad`: returns named Group, 3 ArrowHelper children, correct axis directions and colours (red/green/blue), independent instances — 11 tests |
+| `src/viewport/modelMesh.test.ts` | `buildModelMesh`: returns THREE.Mesh, vertex/index counts, position attribute data, normals, bounding sphere, MeshStandardMaterial, single-triangle edge case — 9 tests |
 | `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null input, empty positions, LineSegments instance type, position attribute count, color attribute count, vertexColors on material — 6 tests |
-| `src/store/projectStore.test.ts` | Zustand store actions (including `selectedOperationId`, `useTools`, `useStock` selectors) |
-| `src/store/viewportStore.test.ts` | Viewport store (including `toolpathGeometry`) |
+| `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks |
+| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`), `setMeshData`, `setOrbitTarget`, `setZoom` — 13 tests across 4 describe blocks |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), reorder (7), calculate loading state (4) — 43 tests across 9 describe blocks |
 | `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (inputs/defaults/save-on-blur+change/overrides), pocket form (tool select/inputs/overrides/remount-on-id-change), tool change saves, input blur saves, drill form (inputs/add-point/remove-point/overrides), error handling — 23 tests across 7 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
-| `src/components/stock/StockPanel.test.tsx` | StockPanel: null state, stock defined, Set Stock submit, Clear Stock, error notification |
-| `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display, Set WCS, Clear WCS, error notification — 6 tests |
-| `src/components/tools/ToolLibraryPanel.test.tsx` | ToolLibraryPanel: rendering, add/cancel/submit form, edit pre-populate/submit, delete, error notifications (12 tests) |
+| `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
+| `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
+| `src/components/tools/ToolLibraryPanel.test.tsx` | ToolLibraryPanel: rendering, add/cancel/submit form, edit pre-populate/submit, delete, error notifications — 12 tests |
 | `src/viewport/Viewport.test.tsx` | Viewport: mount/unmount (4), mesh updates — add/replace/remove ModelGroup, frameModel called (4); SceneManager mock includes `setToolpathLines` — 8 tests |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
 | `src/components/gcode/GCodePreviewPanel.test.tsx` | GCodePreviewPanel: placeholder when no op selected, placeholder when NotFound, renders G-code text, Export button calls exportGcode, PP selector populated from listPostProcessors — 5 tests |
@@ -544,7 +550,7 @@ encountered.
 | `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
 | `src-tauri/tests/toolpath_cache.rs` | End-to-end cache round-trip: save/load preserves toolpath + validity; param mutation marks stale (ungated; uses drill operations) |
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
-| `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot (incl. real `needs_recalculate` comparison + 2 new tests), toolpath (calculate + cache populate, get_geometry, G-code preview) |
+| `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate, get_geometry, G-code preview) |
 | `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip |
 | `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `cache.rs` key stability + sensitivity (4 tests), `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors, non-peck geometry, peck Z-levels, multi-hole ordering |
 | `src-tauri/src/project/` (inline) | `serialization.rs` round-trips, toolpath ZIP entry write (positive + negative), round-trip with valid toolpath, graceful load with missing entry |
