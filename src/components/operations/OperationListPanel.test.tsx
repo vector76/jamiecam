@@ -19,6 +19,7 @@ vi.mock('../../api/operations', () => ({
   deleteOperation: vi.fn(),
   addOperation: vi.fn(),
   listOperations: vi.fn(),
+  reorderOperations: vi.fn(),
 }))
 
 vi.mock('../../api/file', () => ({
@@ -500,5 +501,70 @@ describe('OperationListPanel — calculate loading state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
     await waitFor(() => expect(useProjectStore.getState().notifications).toContain('calc error'))
     expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).not.toBeDisabled()
+  })
+})
+
+// ── Reorder ───────────────────────────────────────────────────────────────────
+
+describe('OperationListPanel — reorder', () => {
+  it('up button is disabled for first operation', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Move up Outer Profile' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move down Outer Profile' })).not.toBeDisabled()
+  })
+
+  it('down button is disabled for last operation', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Move down Rough Pocket' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move up Rough Pocket' })).not.toBeDisabled()
+  })
+
+  it('up click on second operation calls reorderOperations with swapped order', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    vi.mocked(opsApi.reorderOperations).mockResolvedValue(undefined)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move up Rough Pocket' }))
+    await waitFor(() => expect(opsApi.reorderOperations).toHaveBeenCalledWith([OP2_ID, OP1_ID]))
+  })
+
+  it('down click on first operation calls reorderOperations with swapped order', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    vi.mocked(opsApi.reorderOperations).mockResolvedValue(undefined)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move down Outer Profile' }))
+    await waitFor(() => expect(opsApi.reorderOperations).toHaveBeenCalledWith([OP2_ID, OP1_ID]))
+  })
+
+  it('snapshot is refreshed after successful reorder', async () => {
+    const updated = { ...SNAPSHOT_WITH_OPS, projectName: 'After Reorder' }
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    vi.mocked(opsApi.reorderOperations).mockResolvedValue(undefined)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(updated)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move down Outer Profile' }))
+    await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
+    expect(useProjectStore.getState().snapshot?.projectName).toBe('After Reorder')
+  })
+
+  it('error notification pushed when reorderOperations rejects', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    vi.mocked(opsApi.reorderOperations).mockRejectedValue({ kind: 'SaveFailed', message: 'reorder error' })
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move down Outer Profile' }))
+    await waitFor(() => expect(useProjectStore.getState().notifications).toContain('reorder error'))
+  })
+
+  it('reorder button click does not trigger row selection', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS, selectedOperationId: null })
+    vi.mocked(opsApi.reorderOperations).mockResolvedValue(undefined)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Move down Outer Profile' }))
+    await waitFor(() => expect(opsApi.reorderOperations).toHaveBeenCalled())
+    expect(useProjectStore.getState().selectedOperationId).toBeNull()
   })
 })
