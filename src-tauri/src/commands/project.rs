@@ -146,7 +146,7 @@ impl From<&Project> for ProjectSnapshot {
 /// Testable inner logic for [`get_project_snapshot`].
 ///
 /// Acquires a READ lock on `project_lock` and returns a [`ProjectSnapshot`].
-pub(crate) fn get_project_snapshot_inner(
+pub fn get_project_snapshot_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<ProjectSnapshot, AppError> {
     let project = read_project(project_lock)?;

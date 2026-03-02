@@ -58,6 +58,10 @@ path = "tests/profile_golden.rs"
 name = "drill_golden"
 path = "tests/drill_golden.rs"
 
+[[test]]
+name = "toolpath_cache"
+path = "tests/toolpath_cache.rs"
+
 [features]
 # this feature is used for production builds or when `devtools` feature is not
 # enabled, which is the case when cargo test is run

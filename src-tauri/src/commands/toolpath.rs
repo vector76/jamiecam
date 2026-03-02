@@ -81,7 +81,7 @@ pub(crate) fn get_gcode_preview_inner(
 /// 5. Stores the toolpath in `project.toolpaths` and populates `operation.cache`
 ///    with the key, validity flag, UTC timestamp, and summary stats.
 /// 6. Returns statistics about the generated toolpath.
-pub(crate) fn calculate_toolpath_inner(
+pub fn calculate_toolpath_inner(
     operation_id: &str,
     project_lock: &RwLock<Project>,
 ) -> Result<ToolpathStats, AppError> {
