@@ -52,6 +52,8 @@ export function OperationEditorForm({ operationId }: Props) {
         toolId: operation.toolId,
         type: operation.type,
         params: operation.params,
+        spindleSpeedOverride: operation.spindleSpeedOverride,
+        feedRateOverride: operation.feedRateOverride,
         ...patch,
       }
       await editOperation(operationId!, input)
@@ -87,6 +89,16 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
             onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
         </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
+          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+            onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
+          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+            onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
+        </div>
       </div>
     )
   }
@@ -120,6 +132,16 @@ export function OperationEditorForm({ operationId }: Props) {
             <option value="right">Right</option>
           </select>
         </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
+          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+            onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
+          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+            onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
+        </div>
       </div>
     )
   }
@@ -144,6 +166,16 @@ export function OperationEditorForm({ operationId }: Props) {
           <label htmlFor="oef-peck-depth">Peck depth (mm)</label>
           <input id="oef-peck-depth" type="number" defaultValue={params.peckDepth ?? ''}
             onBlur={(e) => void save({ params: { ...params, peckDepth: e.target.value === '' ? undefined : parseFloat(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
+          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+            onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
+          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+            onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
         </div>
         <div>
           {points.map((pt, i) => (

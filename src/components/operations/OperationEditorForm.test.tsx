@@ -160,6 +160,13 @@ describe('OperationEditorForm — profile form', () => {
       expect.objectContaining({ params: expect.objectContaining({ stepdown: 1.5 }) }),
     ))
   })
+
+  it('spindle speed and feed rate override inputs are present on the profile form', async () => {
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
+  })
 })
 
 // ── Pocket form rendering ──────────────────────────────────────────────────────
@@ -184,6 +191,13 @@ describe('OperationEditorForm — pocket form', () => {
     expect(screen.getByLabelText('Floor depth (mm)')).toHaveValue(5)
     expect(screen.getByLabelText('Step-down (mm)')).toHaveValue(1)
     expect(screen.getByLabelText('Stepover (%)')).toHaveValue(50)
+  })
+
+  it('spindle speed and feed rate override inputs are present on the pocket form', async () => {
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
   })
 
   it('resets input values when operationId changes to a different pocket operation', async () => {
@@ -320,6 +334,13 @@ describe('OperationEditorForm — drill form', () => {
       DRILL_OP_ID,
       expect.objectContaining({ params: expect.objectContaining({ points: [{ x: 0, y: 0 }] }) }),
     ))
+  })
+
+  it('spindle speed and feed rate override inputs are present on the drill form', async () => {
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
   })
 
   it('Remove button removes the correct row from the points list', async () => {
