@@ -446,3 +446,59 @@ describe('OperationListPanel — Calculate button', () => {
     expect(useProjectStore.getState().selectedOperationId).toBeNull()
   })
 })
+
+// ── Calculate loading state ───────────────────────────────────────────────────
+
+describe('OperationListPanel — calculate loading state', () => {
+  it('shows loading label on active row while calculation is in flight', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    let resolveCalc: () => void
+    const deferred = new Promise<ToolpathStats>((res) => { resolveCalc = () => res(TOOLPATH_STATS) })
+    vi.mocked(toolpathApi.calculateToolpath).mockReturnValue(deferred)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+    // before resolving: button text changes to loading indicator and is disabled
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toHaveTextContent('…'))
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeDisabled()
+    // resolve promise and verify label reverts
+    resolveCalc!()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toHaveTextContent('Calc'))
+  })
+
+  it('all other Calculate buttons are disabled while any calculation is in flight', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    const deferred = new Promise<ToolpathStats>(() => { /* never resolves */ })
+    vi.mocked(toolpathApi.calculateToolpath).mockReturnValue(deferred)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+    // OP1's button should also be disabled while OP2 is calculating
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).toBeDisabled())
+  })
+
+  it('Calculate button re-enabled after successful calculation', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    let resolveCalc: () => void
+    const deferred = new Promise<ToolpathStats>((res) => { resolveCalc = () => res(TOOLPATH_STATS) })
+    vi.mocked(toolpathApi.calculateToolpath).mockReturnValue(deferred)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+    resolveCalc!()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Outer Profile' })).not.toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).not.toBeDisabled()
+  })
+
+  it('Calculate button re-enabled after calculation error', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.calculateToolpath).mockRejectedValue({ kind: 'CalcFailed', message: 'calc error' })
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
+    await waitFor(() => expect(useProjectStore.getState().notifications).toContain('calc error'))
+    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).not.toBeDisabled()
+  })
+})
