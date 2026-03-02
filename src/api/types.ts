@@ -131,10 +131,17 @@ export interface PocketParams {
   stepoverPercent: number
 }
 
+/** A single drill hole position. */
+export interface DrillPoint {
+  x: number
+  y: number
+}
+
 /** Parameters for a Drill operation. */
 export interface DrillParams {
   depth: number
   peckDepth?: number
+  points: DrillPoint[]
 }
 
 /**
@@ -150,6 +157,8 @@ export interface Operation {
   toolId: string
   type: 'profile' | 'pocket' | 'drill'
   params: ProfileParams | PocketParams | DrillParams
+  spindleSpeedOverride?: number | null
+  feedRateOverride?: number | null
 }
 
 /**
@@ -164,6 +173,8 @@ export interface OperationInput {
   toolId: string
   type: 'profile' | 'pocket' | 'drill'
   params: ProfileParams | PocketParams | DrillParams
+  spindleSpeedOverride?: number | null
+  feedRateOverride?: number | null
 }
 
 /** A compact operation summary included in ProjectSnapshot. */

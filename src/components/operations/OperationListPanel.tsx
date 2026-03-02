@@ -87,7 +87,7 @@ export function OperationListPanel() {
     } else if (type === 'pocket') {
       params = { depth: 1.0, stepdown: 0.5, stepoverPercent: 50.0 }
     } else {
-      params = { depth: 10.0 }
+      params = { depth: 10.0, points: [] }
     }
 
     const input: OperationInput = {

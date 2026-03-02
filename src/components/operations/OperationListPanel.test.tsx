@@ -189,7 +189,7 @@ describe('OperationListPanel — add buttons', () => {
 
   it('add drill calls addOperation with type drill', async () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
-    const drillOp: Operation = { id: 'new-id', name: 'New drill', enabled: true, toolId: TOOL_ID, type: 'drill', params: { depth: 10.0 } }
+    const drillOp: Operation = { id: 'new-id', name: 'New drill', enabled: true, toolId: TOOL_ID, type: 'drill', params: { depth: 10.0, points: [] } }
     vi.mocked(opsApi.addOperation).mockResolvedValue(drillOp)
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
