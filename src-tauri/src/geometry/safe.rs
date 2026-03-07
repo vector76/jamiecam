@@ -1,7 +1,7 @@
 //! Safe Rust wrappers around the raw cam_geometry C API.
 //!
-//! All `unsafe` code in the geometry module is isolated here. Every type in
-//! this file upholds Rust's safety invariants at the boundary with the C++
+//! All `unsafe` code for RAII handle management is isolated here. Every type
+//! in this file upholds Rust's safety invariants at the boundary with the C++
 //! handle registry.
 
 use std::path::Path;
@@ -60,6 +60,20 @@ pub struct OcctShape {
 }
 
 impl OcctShape {
+    /// Return the raw handle id for use by sibling modules within `geometry`.
+    pub(super) fn raw_id(&self) -> u64 {
+        self.id
+    }
+
+    /// Construct an `OcctShape` from a raw id — for use in unit tests only.
+    #[cfg(test)]
+    pub fn new_for_test(id: u64) -> Self {
+        OcctShape {
+            id,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
     /// Load a STEP file from `path`.
     ///
     /// Returns [`GeometryError::FileNotFound`] if the path does not exist on disk.

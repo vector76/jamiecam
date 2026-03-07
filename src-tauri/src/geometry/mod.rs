@@ -7,20 +7,24 @@
 //! ├── ffi.rs      — raw bindgen-generated extern "C" declarations (private)
 //! ├── safe.rs     — safe RAII wrappers for OCCT (shapes, meshes)
 //! ├── clipper.rs  — safe wrappers for Clipper2 2D polygon operations
+//! ├── faces.rs    — face index API, fingerprinting, enumerate_faces helper
 //! └── importer.rs — high-level import dispatcher (STEP/IGES/STL → MeshData)
 //! ```
 //!
-//! All `unsafe` code is isolated in `safe.rs` and `clipper.rs`. Code outside
-//! the `geometry` module should only use the types re-exported from here.
+//! All `unsafe` code is isolated in `safe.rs`, `clipper.rs`, and `faces.rs`.
+//! Code outside the `geometry` module should only use the types re-exported
+//! from here.
 
 // Raw bindings are private — callers use the safe wrappers below.
 mod ffi;
 
 pub mod clipper;
+pub mod faces;
 pub mod importer;
 pub mod safe;
 
 pub use clipper::{poly_boolean, poly_offset, BoolOp};
+pub use faces::{enumerate_faces, face_boundary, face_fingerprint, FaceDescriptor, FaceInfo};
 pub use importer::import;
 pub use safe::{GeometryError, MeshData, OcctMesh, OcctShape};
 
