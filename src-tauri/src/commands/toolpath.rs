@@ -600,6 +600,200 @@ mod tests {
         );
     }
 
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn calculate_toolpath_inner_with_geometry_selection_bounds_passes_within_face() {
+        use crate::models::operation::PocketParams;
+        use crate::models::stock::BoxDimensions;
+        use crate::models::StockDefinition;
+
+        let project_lock = std::sync::RwLock::new(crate::state::Project::default());
+
+        // Load the box.step fixture.
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/box.step");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(crate::commands::file::open_model_inner(
+            fixture,
+            &project_lock,
+        ))
+        .expect("open_model_inner should succeed");
+
+        // Get the faces and take the first fingerprint.
+        let faces = crate::commands::geometry::get_model_faces_inner(&project_lock)
+            .expect("get_model_faces_inner should succeed");
+        assert!(!faces.is_empty(), "box.step must have at least one face");
+        let first_fingerprint = faces[0].fingerprint.clone();
+
+        // Set up stock clearly larger than any single face of the test box.
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: -200.0,
+                y: -200.0,
+                z: 0.0,
+            },
+            width: 400.0,
+            depth: 400.0,
+            height: 50.0,
+        });
+
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let tool = Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+
+        let operation = Operation {
+            id: op_id,
+            name: "Geo-Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 5.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+                geometry: Some(vec![first_fingerprint]),
+            }),
+            cache: CacheState::default(),
+        };
+
+        {
+            let mut project = project_lock.write().expect("write lock");
+            project.tools.push(tool);
+            project.operations.push(operation);
+            project.stock = Some(stock);
+        }
+
+        let stats = calculate_toolpath_inner(&op_id.to_string(), &project_lock, None)
+            .expect("calculate_toolpath_inner with geometry selection should succeed");
+        assert!(stats.total_pass_count > 0, "expected non-zero pass count");
+
+        // Verify that the passes' XY extents are strictly smaller than stock extents.
+        let project = project_lock.read().expect("read lock");
+        let toolpath = project
+            .toolpaths
+            .get(&op_id)
+            .expect("toolpath must be stored");
+        let all_cuts: Vec<_> = toolpath.passes.iter().flat_map(|p| p.cuts.iter()).collect();
+        assert!(!all_cuts.is_empty(), "toolpath must have cut points");
+
+        let x_min = all_cuts
+            .iter()
+            .map(|c| c.position.x)
+            .fold(f64::INFINITY, f64::min);
+        let x_max = all_cuts
+            .iter()
+            .map(|c| c.position.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let y_min = all_cuts
+            .iter()
+            .map(|c| c.position.y)
+            .fold(f64::INFINITY, f64::min);
+        let y_max = all_cuts
+            .iter()
+            .map(|c| c.position.y)
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        let pass_width = x_max - x_min;
+        let pass_depth = y_max - y_min;
+
+        // The face boundary must be smaller than the 400×400 stock.
+        assert!(
+            pass_width < 400.0,
+            "passes X extent ({pass_width}) must be smaller than stock width (400)"
+        );
+        assert!(
+            pass_depth < 400.0,
+            "passes Y extent ({pass_depth}) must be smaller than stock depth (400)"
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn calculate_toolpath_inner_with_invalid_fingerprint_returns_geometry_import_error() {
+        use crate::models::operation::PocketParams;
+        use crate::models::stock::BoxDimensions;
+        use crate::models::StockDefinition;
+
+        let project_lock = std::sync::RwLock::new(crate::state::Project::default());
+
+        // Load the box.step fixture.
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/box.step");
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(crate::commands::file::open_model_inner(
+            fixture,
+            &project_lock,
+        ))
+        .expect("open_model_inner should succeed");
+
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 100.0,
+            depth: 100.0,
+            height: 20.0,
+        });
+
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let tool = Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+
+        // "deadbeef" repeated 8 times = 64 hex chars (not a valid face fingerprint).
+        let bogus_fingerprint = "deadbeef".repeat(8);
+        assert_eq!(bogus_fingerprint.len(), 64);
+
+        let operation = Operation {
+            id: op_id,
+            name: "Invalid-Geo-Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 5.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+                geometry: Some(vec![bogus_fingerprint]),
+            }),
+            cache: CacheState::default(),
+        };
+
+        {
+            let mut project = project_lock.write().expect("write lock");
+            project.tools.push(tool);
+            project.operations.push(operation);
+            project.stock = Some(stock);
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &project_lock, None);
+        assert!(
+            matches!(result, Err(AppError::GeometryImport(_))),
+            "expected GeometryImport error for invalid fingerprint, got: {result:?}"
+        );
+    }
+
     #[test]
     fn calculate_toolpath_inner_emits_progress_events() {
         use crate::models::operation::{DrillParams, DrillPoint};
