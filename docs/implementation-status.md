@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-02. Based on git history (101 commits, branch `main`)._
+_Last updated: 2026-03-06. Based on git history (101 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -53,7 +53,7 @@ remaining items for Phase 1.
 | C++ build system (`CMakeLists.txt`) + doctest fixtures | Done | `2de44e7` |
 | Rust `build.rs` — bindgen + C++ compile + link | Done | `bd98b92` |
 | Safe Rust geometry types (`OcctShape`, `OcctMesh`, `Drop`) | Done | `c7a35d3` |
-| Rust geometry loaders (STEP, STL dispatch) | Done | `c4efd9b` |
+| Rust geometry loaders (STEP, IGES, STL dispatch) | Done | `c4efd9b` |
 | Rust tessellator (B-rep → triangle mesh) | Done | `c4efd9b` |
 | `AppState` with `RwLock<Project>` | Done | `b0ea703` |
 | `AppError` (thiserror + adjacently-tagged serde) | Done | `b0ea703` |
@@ -151,9 +151,10 @@ immediately once algorithms are written.
   spindle speed, coordinate words (1e-6 mm tolerance), plane, distance mode
 - `postprocessor/program.rs` — full program assembler: header, tool changes,
   pass emission, footer, percent delimiters; returns `NotSupported` (not panic)
-  for 5-axis paths or unsupported cycle types
+  when a 5-axis tool orientation is encountered
 - `postprocessor/mod.rs` — public API: `PostProcessor::builtin()`,
-  `from_file()`, `list_builtins()`, `generate()`; `PostProcessorMeta` struct
+  `from_file()`, `list_builtins()`, `generate()`; `PostProcessorMeta` struct;
+  `PostProcessorError` enum (`Config`, `NotSupported`, `ArcError`)
 
 **Built-in post-processor configs** (`2afdc6f`)
 - `fanuc-0i.toml` — Fanuc 0i-MD/MF, metric, `\r\n` EOL, IJK arcs, canned
@@ -287,8 +288,10 @@ immediately once algorithms are written.
 
 **Drill algorithm** (`3169f31`)
 - `src-tauri/src/toolpath/operations/drill.rs`: `drill_passes(stock, params)`
-- For each hole in `params.points`, produces one `PassKind::Linking` pass
-  (rapid to clearance height above the hole) and one `PassKind::Cutting` pass
+- For each hole in `params.points`, produces one `PassKind::Linking` pass and
+  one `PassKind::Cutting` pass; the first hole's Linking is a single rapid to
+  clearance above that hole; subsequent holes get two rapids — lift to clearance
+  above the previous hole, then traverse to clearance above the current hole
 - Each Cutting pass opens with a `Rapid` approach to clearance height, then:
   full-depth mode (no `peck_depth`): `Feed` plunge to `drill_z`, `Rapid`
   retract to clearance (3 cut points total)
@@ -316,7 +319,7 @@ immediately once algorithms are written.
 - `get_toolpath_geometry_inner`: retrieves stored `Toolpath` and operation
   index (for palette colouring); converts passes to flat-array
   `LineGeometryData`; pre-allocates buffers using segment count
-- Both registered in `generate_handler!` list in `lib.rs`
+- Both registered in `tauri::generate_handler!` list in `lib.rs`
 - Unit tests (all in `commands/toolpath.rs`): `list_post_processors_inner`
   returns 4 entries; `calculate_toolpath_inner`: NotFound with no operation,
   NotFound with no stock, stores toolpath for pocket and asserts cache fields
@@ -393,7 +396,8 @@ immediately once algorithms are written.
   its own local `errorMsg: string | null` state and an inline dismissible banner
   (not the shared notification system)
 - `selectedOperationId` + `setSelectedOperationId` + `usePushNotification` +
-  `useSelectedOperationId` added to `projectStore.ts`
+  `useSelectedOperationId` + `useNotifications` (returns active notification
+  messages array) + `dismissNotification` added to `projectStore.ts`
 
 **G-code preview panel** (`75733b9`, `3b94300`)
 - `GCodePreviewPanel` in `src/components/gcode/GCodePreviewPanel.tsx`:
@@ -531,8 +535,8 @@ encountered.
 | `src/viewport/controls.test.ts` | `createAxisTriad`: returns named Group, 3 ArrowHelper children, correct axis directions and colours (red/green/blue), independent instances — 11 tests |
 | `src/viewport/modelMesh.test.ts` | `buildModelMesh`: returns THREE.Mesh, vertex/index counts, position attribute data, normals, bounding sphere, MeshStandardMaterial, single-triangle edge case — 9 tests |
 | `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null input, empty positions, LineSegments instance type, position attribute count, color attribute count, vertexColors on material — 6 tests |
-| `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks |
-| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`), `setMeshData`, `setOrbitTarget`, `setZoom` — 13 tests across 4 describe blocks |
+| `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks. Note: `useWcs`, `useNotifications`, and `useSelectedOperationId` selectors are implemented but not directly tested here (covered implicitly via component tests). |
+| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`), `setMeshData`, `setOrbitTarget`, `setZoom` — 13 tests across 4 describe blocks. Note: `toolpathGeometry` and `setToolpathGeometry` are not directly tested here (covered implicitly via Viewport component tests). |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), reorder (7), calculate loading state (4) — 43 tests across 9 describe blocks |
 | `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (inputs/defaults/save-on-blur+change/overrides), pocket form (tool select/inputs/overrides/remount-on-id-change), tool change saves, input blur saves, drill form (inputs/add-point/remove-point/overrides), error handling — 23 tests across 7 describe blocks |
@@ -571,14 +575,14 @@ golden test is ungated since drilling requires no geometry bindings.
 |---|---|
 | `src-tauri/src/main.rs` | Thin binary entry point (calls `lib.rs::run()`) |
 | `src-tauri/src/lib.rs` | Tauri app init, IPC command registration |
-| `src-tauri/src/state.rs` | `AppState`, `RwLock<Project>`, `Project.toolpaths` |
+| `src-tauri/src/state.rs` | `AppState`, `Project` (in-memory document with all fields), `LoadedModel` (path + checksum + `MeshData`), `UserPreferences` (recent files list, not yet persisted); `Project.toolpaths: HashMap<Uuid, Toolpath>` |
 | `src-tauri/src/error.rs` | `AppError` enum (thiserror, adjacently-tagged serde); variants: `FileNotFound`, `GeometryImport`, `Io`, `ProjectLoad`, `ProjectSave`, `UnsupportedFormat`, `NotFound`, `PostProcessor` |
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
-| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum, `CacheState`, `CachedStats` |
+| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`), `ProfileParams`, `PocketParams`, `DrillParams`, `DrillPoint`, `CompensationSide`, `CacheState`, `CachedStats` |
 | `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData` |
-| `src-tauri/src/toolpath/linking.rs` | `link_passes()` — retract/traverse/descend between cutting passes |
+| `src-tauri/src/toolpath/linking.rs` | `link_passes()` — lift/traverse/descend between cutting passes |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — dispatches to algorithm, links passes, computes stats |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
@@ -591,17 +595,18 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src-tauri/src/postprocessor/arcs.rs` | IJK and R-format arc computation |
 | `src-tauri/src/postprocessor/modal.rs` | Modal G-code state suppression |
 | `src-tauri/src/postprocessor/program.rs` | Full G-code program assembler |
-| `src-tauri/src/postprocessor/mod.rs` | `PostProcessor` public API |
+| `src-tauri/src/postprocessor/mod.rs` | `PostProcessor` public API; `PostProcessorError` enum (variants: `Config`, `NotSupported`, `ArcError`; `Assembly` declared but unused); `PostProcessorMeta` struct; re-exports `program::ToolInfo` |
 | `src-tauri/src/postprocessor/builtins/` | `fanuc-0i.toml`, `linuxcnc.toml`, `mach4.toml`, `grbl.toml` |
 | `src-tauri/src/commands/file.rs` | `open_model`, `save_project`, `load_project`, `new_project`, `export_gcode` |
 | `src-tauri/src/commands/toolpath.rs` | `list_post_processors`, `get_gcode_preview`, `calculate_toolpath`, `get_toolpath_geometry` |
 | `src-tauri/src/commands/tools.rs` | Tool CRUD commands |
 | `src-tauri/src/commands/stock.rs` | Stock/WCS commands |
-| `src-tauri/src/commands/operations.rs` | Operation CRUD commands |
-| `src-tauri/src/commands/project.rs` | `get_project_snapshot` |
-| `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/STL) |
-| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape`, `OcctMesh` (with `Drop` impls) |
+| `src-tauri/src/commands/operations.rs` | Operation CRUD commands; `OperationInput` (add/edit input type) |
+| `src-tauri/src/commands/project.rs` | `get_project_snapshot`; `ProjectSnapshot`, `ToolSummary`, `OperationSummary` IPC output types |
+| `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/IGES/STL) |
+| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape`, `OcctMesh` (with `Drop` impls); `MeshData` struct; `GeometryError` enum |
 | `src-tauri/src/geometry/ffi.rs` | FFI bindings module: includes bindgen output written to `$OUT_DIR` at build time |
+| `src-tauri/src/project/types.rs` | On-disk serialization types: `ProjectMeta`, `SourceModelRef`, `ProjectFile` (mirrors `project.json` schema; distinct from the in-memory `Project` in `state.rs`) |
 | `src-tauri/src/project/serialization.rs` | `.jcam` ZIP read/write; toolpath JSON persistence per operation |
 
 ### C++ geometry wrapper
@@ -634,7 +639,7 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
 | `src/api/operations.ts` | Operation CRUD IPC wrappers |
 | `src/api/toolpath.ts` | `listPostProcessors`, `getGcodePreview`, `exportGcode`, `calculateToolpath`, `getToolpathGeometry` |
-| `src/store/projectStore.ts` | Project Zustand store (incl. `selectedOperationId`, `useTools`, `useStock`, `useWcs` selectors) |
+| `src/store/projectStore.ts` | Project Zustand store; selector hooks: `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock`, `useWcs`, `useNotifications`, `useSelectedOperationId`, `usePushNotification` |
 | `src/store/viewportStore.ts` | Viewport Zustand store (incl. `toolpathGeometry`) |
 | `src/viewport/scene.ts` | Three.js renderer + scene + `toolpathGroup` + `setToolpathLines()` |
 | `src/viewport/controls.ts` | OrbitControls (Z-up) |
