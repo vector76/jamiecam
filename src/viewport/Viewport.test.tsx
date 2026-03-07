@@ -29,9 +29,11 @@ vi.stubGlobal('ResizeObserver', MockResizeObserver)
 vi.mock('./scene', () => ({
   SceneManager: vi.fn().mockImplementation(() => ({
     scene: new THREE.Scene(),
+    camera: new THREE.PerspectiveCamera(),
     dispose: vi.fn(),
     frameModel: vi.fn(),
     setToolpathLines: vi.fn(),
+    setOrbitEnabled: vi.fn(),
   })),
 }))
 
@@ -60,7 +62,15 @@ const QUAD_MESH: MeshData = {
 beforeEach(() => {
   vi.mocked(SceneManager).mockClear()
   // Reset viewport store to empty state before each test.
-  useViewportStore.setState({ meshData: null, orbitTarget: [0, 0, 0], zoom: 1 })
+  useViewportStore.setState({
+    meshData: null,
+    orbitTarget: [0, 0, 0],
+    zoom: 1,
+    selectionMode: false,
+    hoveredFaceIdx: null,
+    selectedFaceFingerprints: [],
+    faceDescriptors: [],
+  })
 })
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -156,5 +166,17 @@ describe('Viewport — mesh updates', () => {
 
     const group = scene.children.find((c) => c.name === 'ModelGroup')
     expect(group).toBeUndefined()
+  })
+})
+
+describe('Viewport — face selection mode', () => {
+  it('entering selection mode does not throw', async () => {
+    const { container } = render(<Viewport />)
+
+    await act(async () => {
+      useViewportStore.getState().setSelectionMode(true)
+    })
+
+    expect(container.firstChild).toBeInstanceOf(HTMLDivElement)
   })
 })

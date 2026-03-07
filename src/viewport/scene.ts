@@ -117,6 +117,16 @@ export class SceneManager {
 
   // ── Public API ───────────────────────────────────────────────────────────
 
+  /** Expose the active camera for external raycasting. */
+  get camera(): THREE.PerspectiveCamera {
+    return this.perspectiveCamera
+  }
+
+  /** Enable or disable orbit controls (e.g. during face-selection mode). */
+  setOrbitEnabled(enabled: boolean): void {
+    this.controls.enabled = enabled
+  }
+
   /**
    * Position the perspective camera so that `boundingSphere` fills the
    * viewport with a comfortable margin.  Updates the orbit target to the

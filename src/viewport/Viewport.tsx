@@ -23,9 +23,27 @@ export function Viewport({ style }: ViewportProps) {
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
   const toolpathLinesRef = useRef<THREE.LineSegments | null>(null)
+  const highlightMeshRef = useRef<THREE.Mesh | null>(null)
 
   const meshData = useViewportStore((state) => state.meshData)
   const toolpathGeometry = useViewportStore((state) => state.toolpathGeometry)
+  const selectionMode = useViewportStore((state) => state.selectionMode)
+  const hoveredFaceIdx = useViewportStore((state) => state.hoveredFaceIdx)
+  const selectedFaceFingerprints = useViewportStore((state) => state.selectedFaceFingerprints)
+  const faceDescriptors = useViewportStore((state) => state.faceDescriptors)
+  const setHoveredFaceIdx = useViewportStore((state) => state.setHoveredFaceIdx)
+  const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
+
+  // Mutable refs to avoid stale closures in mount-registered event handlers.
+  const selectionModeRef = useRef(selectionMode)
+  const hoveredFaceIdxRef = useRef(hoveredFaceIdx)
+  const faceDescriptorsRef = useRef(faceDescriptors)
+  const meshDataRef = useRef(meshData)
+
+  useEffect(() => { selectionModeRef.current = selectionMode }, [selectionMode])
+  useEffect(() => { hoveredFaceIdxRef.current = hoveredFaceIdx }, [hoveredFaceIdx])
+  useEffect(() => { faceDescriptorsRef.current = faceDescriptors }, [faceDescriptors])
+  useEffect(() => { meshDataRef.current = meshData }, [meshData])
 
   // ── Mount / unmount ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -41,7 +59,61 @@ export function Viewport({ style }: ViewportProps) {
     const triad = createAxisTriad()
     mgr.scene.add(triad)
 
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
+
+    function onMouseMove(event: MouseEvent) {
+      if (!selectionModeRef.current) return
+      if (!container) return
+      const md = meshDataRef.current
+      if (!md) return
+      const currentMgr = mgrRef.current
+      if (!currentMgr) return
+      const group = modelGroupRef.current
+      if (!group) return
+
+      const rect = container.getBoundingClientRect()
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+      raycaster.setFromCamera(pointer, currentMgr.camera)
+      const meshes: THREE.Object3D[] = []
+      group.traverse((obj) => { if (obj instanceof THREE.Mesh) meshes.push(obj) })
+      const intersects = raycaster.intersectObjects(meshes, false)
+
+      if (intersects.length > 0) {
+        const hit = intersects[0]
+        const triIdx = hit.faceIndex!
+        const fg = md.faceGroups
+        let foundFaceIdx: number | null = null
+        for (let i = 0; i < fg.length; i++) {
+          if (triIdx >= fg[i].startTriangle && triIdx < fg[i].startTriangle + fg[i].triangleCount) {
+            foundFaceIdx = i
+            break
+          }
+        }
+        setHoveredFaceIdx(foundFaceIdx)
+      } else {
+        setHoveredFaceIdx(null)
+      }
+    }
+
+    function onClick() {
+      if (!selectionModeRef.current) return
+      const hovered = hoveredFaceIdxRef.current
+      if (hovered === null) return
+      const desc = faceDescriptorsRef.current.find((d) => d.faceIdx === hovered)
+      if (desc) {
+        toggleFaceSelection(desc.fingerprint)
+      }
+    }
+
+    container.addEventListener('mousemove', onMouseMove)
+    container.addEventListener('click', onClick)
+
     return () => {
+      container.removeEventListener('mousemove', onMouseMove)
+      container.removeEventListener('click', onClick)
       mgrRef.current = null
       mgr.dispose()
       if (container.contains(canvas)) container.removeChild(canvas)
@@ -78,6 +150,108 @@ export function Viewport({ style }: ViewportProps) {
       mgr.frameModel(boundingSphere)
     }
   }, [meshData])
+
+  // ── Selection mode effect ──────────────────────────────────────────────────
+  useEffect(() => {
+    const mgr = mgrRef.current
+
+    // Always tear down any existing overlay first (handles meshData swap during
+    // selection mode, or exiting selection mode).  Remove shared position/normal
+    // attributes before disposing so their GPU buffers aren't freed — they're
+    // still owned by the model mesh geometry.
+    if (highlightMeshRef.current) {
+      const geo = highlightMeshRef.current.geometry
+      geo.deleteAttribute('position')
+      geo.deleteAttribute('normal')
+      geo.dispose()
+      ;(highlightMeshRef.current.material as THREE.Material).dispose()
+      mgr?.scene.remove(highlightMeshRef.current)
+      highlightMeshRef.current = null
+    }
+
+    if (selectionMode && meshData) {
+      mgr?.setOrbitEnabled(false)
+      const modelMesh = modelGroupRef.current?.children.find(
+        (c) => c instanceof THREE.Mesh,
+      ) as THREE.Mesh | undefined
+      if (modelMesh && mgr) {
+        const overlayGeo = new THREE.BufferGeometry()
+        overlayGeo.setAttribute('position', modelMesh.geometry.getAttribute('position'))
+        overlayGeo.setAttribute('normal', modelMesh.geometry.getAttribute('normal'))
+        const mat = new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0.4,
+          depthTest: false,
+          vertexColors: true,
+        })
+        const overlay = new THREE.Mesh(overlayGeo, mat)
+        overlay.renderOrder = 1
+        mgr.scene.add(overlay)
+        highlightMeshRef.current = overlay
+      }
+    } else {
+      mgr?.setOrbitEnabled(true)
+      setHoveredFaceIdx(null)
+    }
+  }, [selectionMode, meshData])
+
+  // ── Highlight rebuild effect ───────────────────────────────────────────────
+  useEffect(() => {
+    const overlay = highlightMeshRef.current
+    if (!selectionMode || !overlay || !meshData) return
+
+    const { faceGroups, indices } = meshData
+    const vertexCount = meshData.vertices.length / 3
+    const hoveredGroup = hoveredFaceIdx !== null ? faceGroups[hoveredFaceIdx] : null
+
+    const selectedFaceIndices = new Set(
+      faceDescriptors
+        .filter((d) => selectedFaceFingerprints.includes(d.fingerprint))
+        .map((d) => d.faceIdx),
+    )
+
+    // Build index array: hovered face triangles first, then selected.
+    const indexParts: number[] = []
+    if (hoveredGroup) {
+      for (let t = hoveredGroup.startTriangle; t < hoveredGroup.startTriangle + hoveredGroup.triangleCount; t++) {
+        indexParts.push(indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2])
+      }
+    }
+    for (const fi of selectedFaceIndices) {
+      if (fi === hoveredFaceIdx) continue
+      const fg = faceGroups[fi]
+      if (!fg) continue
+      for (let t = fg.startTriangle; t < fg.startTriangle + fg.triangleCount; t++) {
+        indexParts.push(indices[t * 3], indices[t * 3 + 1], indices[t * 3 + 2])
+      }
+    }
+
+    // Build per-vertex color array for the full geometry.
+    const colors = new Float32Array(vertexCount * 3)
+    // Selected faces: blue (0, 0.4, 1) — set first so hovered can override.
+    for (const fi of selectedFaceIndices) {
+      const fg = faceGroups[fi]
+      if (!fg) continue
+      for (let t = fg.startTriangle; t < fg.startTriangle + fg.triangleCount; t++) {
+        for (let k = 0; k < 3; k++) {
+          const vi = indices[t * 3 + k]
+          colors[vi * 3] = 0; colors[vi * 3 + 1] = 0.4; colors[vi * 3 + 2] = 1
+        }
+      }
+    }
+    // Hovered face: yellow (1, 1, 0) — overrides selected color on shared vertices.
+    if (hoveredGroup) {
+      for (let t = hoveredGroup.startTriangle; t < hoveredGroup.startTriangle + hoveredGroup.triangleCount; t++) {
+        for (let k = 0; k < 3; k++) {
+          const vi = indices[t * 3 + k]
+          colors[vi * 3] = 1; colors[vi * 3 + 1] = 1; colors[vi * 3 + 2] = 0
+        }
+      }
+    }
+
+    overlay.geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(indexParts), 1))
+    overlay.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  }, [selectionMode, hoveredFaceIdx, selectedFaceFingerprints, faceDescriptors, meshData])
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%', ...style }} />
 }
