@@ -11,6 +11,7 @@
  */
 
 import type {
+  FaceDescriptor,
   MeshData,
   Operation,
   OperationInput,
@@ -18,6 +19,7 @@ import type {
   StockDefinition,
   Tool,
   ToolInput,
+  ToolpathProgressEvent,
   WorkCoordinateSystem,
 } from './types'
 
@@ -163,4 +165,20 @@ export async function reorderOperations(_ids: string[]): Promise<void> {
 /** Mock: returns an empty operation list. */
 export async function listOperations(): Promise<Operation[]> {
   return []
+}
+
+// ── Geometry commands ─────────────────────────────────────────────────────────
+
+/** Mock: returns an empty face descriptor list. */
+export async function getModelFaces(): Promise<FaceDescriptor[]> {
+  return []
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+
+/** Mock: no-op listener (returns an immediate unsubscribe function). */
+export async function listenToolpathProgress(
+  _handler: (event: ToolpathProgressEvent) => void
+): Promise<() => void> {
+  return () => {}
 }

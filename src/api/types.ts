@@ -259,6 +259,22 @@ export interface ToolpathStats {
   totalPathLengthMm: number
 }
 
+/** Descriptor for a single B-rep face returned by get_model_faces. */
+export interface FaceDescriptor {
+  fingerprint: string
+  faceIdx: number
+  centroid: [number, number, number]
+  normal: [number, number, number]
+  area: number
+}
+
+/** Progress event emitted during toolpath calculation. */
+export interface ToolpathProgressEvent {
+  operationId: string
+  percent: number
+  message: string
+}
+
 /** Line geometry data for rendering a toolpath in the 3-D viewport. */
 export interface LineGeometryData {
   /** XYZ interleaved vertex positions — 3 values per vertex. */

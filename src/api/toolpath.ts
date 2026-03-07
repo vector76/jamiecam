@@ -2,8 +2,9 @@
  * Typed wrappers around Tauri's invoke() for toolpath and G-code IPC commands.
  */
 
-import type { PostProcessorMeta, ExportParams, ToolpathStats, LineGeometryData } from './types'
+import type { PostProcessorMeta, ExportParams, ToolpathStats, LineGeometryData, ToolpathProgressEvent } from './types'
 import { typedInvoke } from './errors'
+import { listen } from '@tauri-apps/api/event'
 
 /**
  * Calculate the toolpath for the given operation and return summary statistics.
@@ -52,4 +53,15 @@ export async function getGcodePreview(operationId: string, postProcessorId: stri
  */
 export async function exportGcode(params: ExportParams): Promise<void> {
   return typedInvoke<void>('export_gcode', { params })
+}
+
+/**
+ * Subscribe to toolpath calculation progress events from the backend.
+ * @param handler Callback invoked with each ToolpathProgressEvent.
+ * @returns Unsubscribe function — call it to stop listening.
+ */
+export async function listenToolpathProgress(
+  handler: (event: ToolpathProgressEvent) => void
+): Promise<() => void> {
+  return listen<ToolpathProgressEvent>('toolpath:progress', (e) => handler(e.payload))
 }

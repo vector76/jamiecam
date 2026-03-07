@@ -1,5 +1,5 @@
 import { useViewportStore } from './viewportStore'
-import type { MeshData } from '../api/types'
+import type { FaceDescriptor, MeshData } from '../api/types'
 
 const MESH: MeshData = {
   vertices: [0, 1, 2, 3, 4, 5],
@@ -15,6 +15,10 @@ beforeEach(() => {
     orbitTarget: [0, 0, 0],
     zoom: 1,
     displayMode: 'Shaded',
+    selectionMode: false,
+    hoveredFaceIdx: null,
+    selectedFaceFingerprints: [],
+    faceDescriptors: [],
   })
 })
 
@@ -90,5 +94,84 @@ describe('viewportStore — setZoom', () => {
     useViewportStore.getState().setZoom(3)
     useViewportStore.getState().setZoom(1.5)
     expect(useViewportStore.getState().zoom).toBe(1.5)
+  })
+})
+
+describe('viewportStore — selection state initial values', () => {
+  it('starts with selectionMode false', () => {
+    expect(useViewportStore.getState().selectionMode).toBe(false)
+  })
+
+  it('starts with hoveredFaceIdx null', () => {
+    expect(useViewportStore.getState().hoveredFaceIdx).toBeNull()
+  })
+
+  it('starts with empty selectedFaceFingerprints', () => {
+    expect(useViewportStore.getState().selectedFaceFingerprints).toEqual([])
+  })
+
+  it('starts with empty faceDescriptors', () => {
+    expect(useViewportStore.getState().faceDescriptors).toEqual([])
+  })
+})
+
+describe('viewportStore — setSelectionMode', () => {
+  it('sets selectionMode to true', () => {
+    useViewportStore.getState().setSelectionMode(true)
+    expect(useViewportStore.getState().selectionMode).toBe(true)
+  })
+
+  it('setting false clears hoveredFaceIdx and faceDescriptors but preserves selectedFaceFingerprints', () => {
+    const descriptor: FaceDescriptor = {
+      fingerprint: 'fp-abc',
+      faceIdx: 0,
+      centroid: [0, 0, 0],
+      normal: [0, 0, 1],
+      area: 1.0,
+    }
+    useViewportStore.setState({
+      selectionMode: true,
+      hoveredFaceIdx: 2,
+      selectedFaceFingerprints: ['fp-abc'],
+      faceDescriptors: [descriptor],
+    })
+    useViewportStore.getState().setSelectionMode(false)
+    const state = useViewportStore.getState()
+    expect(state.selectionMode).toBe(false)
+    expect(state.hoveredFaceIdx).toBeNull()
+    expect(state.faceDescriptors).toEqual([])
+    expect(state.selectedFaceFingerprints).toEqual(['fp-abc'])
+  })
+})
+
+describe('viewportStore — toggleFaceSelection', () => {
+  it('adds a fingerprint not already present', () => {
+    useViewportStore.getState().toggleFaceSelection('fp-1')
+    expect(useViewportStore.getState().selectedFaceFingerprints).toEqual(['fp-1'])
+  })
+
+  it('removes a fingerprint already present', () => {
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
+    useViewportStore.getState().toggleFaceSelection('fp-1')
+    expect(useViewportStore.getState().selectedFaceFingerprints).toEqual(['fp-2'])
+  })
+})
+
+describe('viewportStore — clearFaceSelection', () => {
+  it('empties the fingerprint list', () => {
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
+    useViewportStore.getState().clearFaceSelection()
+    expect(useViewportStore.getState().selectedFaceFingerprints).toEqual([])
+  })
+})
+
+describe('viewportStore — setFaceDescriptors', () => {
+  it('stores the provided array', () => {
+    const descriptors: FaceDescriptor[] = [
+      { fingerprint: 'fp-1', faceIdx: 0, centroid: [1, 2, 3], normal: [0, 0, 1], area: 4.5 },
+      { fingerprint: 'fp-2', faceIdx: 1, centroid: [4, 5, 6], normal: [1, 0, 0], area: 2.0 },
+    ]
+    useViewportStore.getState().setFaceDescriptors(descriptors)
+    expect(useViewportStore.getState().faceDescriptors).toEqual(descriptors)
   })
 })

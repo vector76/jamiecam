@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand'
-import type { MeshData, LineGeometryData } from '../api/types'
+import type { MeshData, LineGeometryData, FaceDescriptor } from '../api/types'
 
 interface ViewportState {
   /** Tessellated mesh currently loaded into the viewport, or null. */
@@ -23,6 +23,14 @@ interface ViewportState {
    * Phase 0: only 'Shaded' is supported; additional modes added later.
    */
   displayMode: 'Shaded'
+  /** Whether face-selection mode is active. */
+  selectionMode: boolean
+  /** Index of the face currently under the cursor, or null. */
+  hoveredFaceIdx: number | null
+  /** Fingerprints of all currently selected faces. */
+  selectedFaceFingerprints: string[]
+  /** Face descriptors for the currently loaded model. */
+  faceDescriptors: FaceDescriptor[]
   /** Replace the displayed mesh (pass null to clear the viewport). */
   setMeshData: (m: MeshData | null) => void
   /** Replace the displayed toolpath geometry (pass null to clear). */
@@ -31,6 +39,16 @@ interface ViewportState {
   setOrbitTarget: (x: number, y: number, z: number) => void
   /** Set the camera zoom level. */
   setZoom: (z: number) => void
+  /** Enable or disable face-selection mode. Disabling clears hover and descriptors. */
+  setSelectionMode: (mode: boolean) => void
+  /** Update the hovered face index. */
+  setHoveredFaceIdx: (idx: number | null) => void
+  /** Add or remove a face fingerprint from the selection. */
+  toggleFaceSelection: (fingerprint: string) => void
+  /** Clear all selected face fingerprints. */
+  clearFaceSelection: () => void
+  /** Replace the face descriptor list. */
+  setFaceDescriptors: (descriptors: FaceDescriptor[]) => void
 }
 
 export const useViewportStore = create<ViewportState>((set) => ({
@@ -39,8 +57,24 @@ export const useViewportStore = create<ViewportState>((set) => ({
   orbitTarget: [0, 0, 0],
   zoom: 1,
   displayMode: 'Shaded',
+  selectionMode: false,
+  hoveredFaceIdx: null,
+  selectedFaceFingerprints: [],
+  faceDescriptors: [],
   setMeshData: (meshData) => set({ meshData }),
   setToolpathGeometry: (toolpathGeometry) => set({ toolpathGeometry }),
   setOrbitTarget: (x, y, z) => set({ orbitTarget: [x, y, z] }),
   setZoom: (zoom) => set({ zoom }),
+  setSelectionMode: (mode) => set(() => mode
+    ? { selectionMode: true }
+    : { selectionMode: false, hoveredFaceIdx: null, faceDescriptors: [] }
+  ),
+  setHoveredFaceIdx: (idx) => set({ hoveredFaceIdx: idx }),
+  toggleFaceSelection: (fp) => set((s) =>
+    s.selectedFaceFingerprints.includes(fp)
+      ? { selectedFaceFingerprints: s.selectedFaceFingerprints.filter(f => f !== fp) }
+      : { selectedFaceFingerprints: [...s.selectedFaceFingerprints, fp] }
+  ),
+  clearFaceSelection: () => set({ selectedFaceFingerprints: [] }),
+  setFaceDescriptors: (faceDescriptors) => set({ faceDescriptors }),
 }))
