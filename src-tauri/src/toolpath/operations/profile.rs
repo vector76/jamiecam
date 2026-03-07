@@ -6,7 +6,6 @@
 use crate::error::AppError;
 use crate::geometry::poly_offset;
 use crate::models::operation::{CompensationSide, ProfileParams};
-use crate::models::stock::BoxDimensions;
 use crate::models::{StockDefinition, Vec3};
 use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
 
@@ -24,29 +23,16 @@ pub fn profile_passes(
     stock: &StockDefinition,
     params: &ProfileParams,
     tool_diameter: f64,
+    boundary: &[(f64, f64)],
 ) -> Result<Vec<Pass>, AppError> {
-    let StockDefinition::Box(BoxDimensions {
-        origin,
-        width,
-        depth,
-        height,
-    }) = stock;
-    let (width, depth, height) = (*width, *depth, *height);
-
-    let stock_top_z = origin.z + height;
+    let StockDefinition::Box(b) = stock;
+    let stock_top_z = b.origin.z + b.height;
     let floor_z = stock_top_z - params.depth;
 
-    let boundary: Vec<(f64, f64)> = vec![
-        (origin.x, origin.y),
-        (origin.x + width, origin.y),
-        (origin.x + width, origin.y + depth),
-        (origin.x, origin.y + depth),
-    ];
-
     let contour: Vec<(f64, f64)> = match params.compensation_side {
-        CompensationSide::Left => poly_offset(&boundary, -(tool_diameter / 2.0), 0.01)?,
-        CompensationSide::Right => poly_offset(&boundary, tool_diameter / 2.0, 0.01)?,
-        CompensationSide::Center => boundary,
+        CompensationSide::Left => poly_offset(boundary, -(tool_diameter / 2.0), 0.01)?,
+        CompensationSide::Right => poly_offset(boundary, tool_diameter / 2.0, 0.01)?,
+        CompensationSide::Center => boundary.to_vec(),
     };
 
     let mut passes = Vec::new();
@@ -100,6 +86,16 @@ mod tests {
         })
     }
 
+    fn make_boundary(stock: &StockDefinition) -> Vec<(f64, f64)> {
+        let StockDefinition::Box(b) = stock;
+        vec![
+            (b.origin.x, b.origin.y),
+            (b.origin.x + b.width, b.origin.y),
+            (b.origin.x + b.width, b.origin.y + b.depth),
+            (b.origin.x, b.origin.y + b.depth),
+        ]
+    }
+
     #[test]
     fn profile_z_levels_count() {
         // stock 50×50×10, depth=10, stepdown=2.5, Left compensation, tool 6mm
@@ -110,7 +106,9 @@ mod tests {
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
         };
-        let passes = profile_passes(&stock, &params, 6.0).expect("profile_passes should succeed");
+        let boundary = make_boundary(&stock);
+        let passes =
+            profile_passes(&stock, &params, 6.0, &boundary).expect("profile_passes should succeed");
 
         let mut z_set = std::collections::HashSet::new();
         for pass in &passes {
@@ -135,7 +133,9 @@ mod tests {
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
         };
-        let passes = profile_passes(&stock, &params, 6.0).expect("profile_passes should succeed");
+        let boundary = make_boundary(&stock);
+        let passes =
+            profile_passes(&stock, &params, 6.0, &boundary).expect("profile_passes should succeed");
         assert!(!passes.is_empty(), "expected non-empty Vec<Pass>");
     }
 
@@ -148,7 +148,8 @@ mod tests {
             stepdown: 2.0,
             compensation_side: CompensationSide::Left,
         };
-        let result = profile_passes(&stock, &params, 20.0);
+        let boundary = make_boundary(&stock);
+        let result = profile_passes(&stock, &params, 20.0, &boundary);
         assert!(
             result.is_err(),
             "expected Err when tool diameter exceeds stock"
@@ -169,9 +170,11 @@ mod tests {
             stepdown: 5.0,
             compensation_side: CompensationSide::Center,
         };
-        let passes_left = profile_passes(&stock, &params_left, 6.0).expect("Left should succeed");
+        let boundary = make_boundary(&stock);
+        let passes_left =
+            profile_passes(&stock, &params_left, 6.0, &boundary).expect("Left should succeed");
         let passes_center =
-            profile_passes(&stock, &params_center, 6.0).expect("Center should succeed");
+            profile_passes(&stock, &params_center, 6.0, &boundary).expect("Center should succeed");
 
         let x_left = passes_left[0].cuts[0].position.x;
         let x_center = passes_center[0].cuts[0].position.x;
@@ -206,8 +209,9 @@ mod tests_no_bindings {
             stepdown: 5.0,
             compensation_side: CompensationSide::Center,
         };
-        let passes =
-            profile_passes(&stock, &params, 6.0).expect("Center compensation should never fail");
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary)
+            .expect("Center compensation should never fail");
         assert!(!passes.is_empty());
         // First cut point x must equal raw boundary origin x (0.0), not an offset value.
         let first_x = passes[0].cuts[0].position.x;

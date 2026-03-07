@@ -6,7 +6,6 @@
 use crate::error::AppError;
 use crate::geometry::poly_offset;
 use crate::models::operation::PocketParams;
-use crate::models::stock::BoxDimensions;
 use crate::models::{StockDefinition, Vec3};
 use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
 
@@ -22,24 +21,11 @@ pub fn pocket_passes(
     stock: &StockDefinition,
     params: &PocketParams,
     tool_diameter: f64,
+    boundary: &[(f64, f64)],
 ) -> Result<Vec<Pass>, AppError> {
-    let StockDefinition::Box(BoxDimensions {
-        origin,
-        width,
-        depth,
-        height,
-    }) = stock;
-    let (width, depth, height) = (*width, *depth, *height);
-
-    let stock_top_z = origin.z + height;
+    let StockDefinition::Box(b) = stock;
+    let stock_top_z = b.origin.z + b.height;
     let floor_z = stock_top_z - params.depth;
-
-    let boundary: Vec<(f64, f64)> = vec![
-        (origin.x, origin.y),
-        (origin.x + width, origin.y),
-        (origin.x + width, origin.y + depth),
-        (origin.x, origin.y + depth),
-    ];
 
     let stepover = tool_diameter * params.stepover_percent / 100.0;
     let mut passes = Vec::new();
@@ -50,7 +36,7 @@ pub fn pocket_passes(
 
         // First contour: inward offset by tool radius. The `?` propagates
         // collapse as AppError::GeometryImport via From<GeometryError>.
-        let first_contour = poly_offset(&boundary, -(tool_diameter / 2.0), 0.01)?;
+        let first_contour = poly_offset(boundary, -(tool_diameter / 2.0), 0.01)?;
         passes.push(contour_pass(&first_contour, current_z));
 
         // Subsequent concentric contours: offset inward by stepover until
@@ -106,6 +92,16 @@ mod tests {
         })
     }
 
+    fn make_boundary(stock: &StockDefinition) -> Vec<(f64, f64)> {
+        let StockDefinition::Box(b) = stock;
+        vec![
+            (b.origin.x, b.origin.y),
+            (b.origin.x + b.width, b.origin.y),
+            (b.origin.x + b.width, b.origin.y + b.depth),
+            (b.origin.x, b.origin.y + b.depth),
+        ]
+    }
+
     #[test]
     fn pocket_z_levels_count() {
         // stock 50×50×10, depth=10, stepdown=2 → at least 5 distinct Z levels
@@ -115,7 +111,9 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
         };
-        let passes = pocket_passes(&stock, &params, 5.0).expect("pocket_passes should succeed");
+        let boundary = make_boundary(&stock);
+        let passes =
+            pocket_passes(&stock, &params, 5.0, &boundary).expect("pocket_passes should succeed");
 
         let mut z_set = std::collections::HashSet::new();
         for pass in &passes {
@@ -139,7 +137,9 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
         };
-        let passes = pocket_passes(&stock, &params, 10.0).expect("pocket_passes should succeed");
+        let boundary = make_boundary(&stock);
+        let passes =
+            pocket_passes(&stock, &params, 10.0, &boundary).expect("pocket_passes should succeed");
         assert!(!passes.is_empty(), "expected non-empty Vec<Pass>");
     }
 
@@ -152,7 +152,8 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
         };
-        let result = pocket_passes(&stock, &params, 20.0);
+        let boundary = make_boundary(&stock);
+        let result = pocket_passes(&stock, &params, 20.0, &boundary);
         assert!(
             result.is_err(),
             "expected Err when tool diameter exceeds stock"

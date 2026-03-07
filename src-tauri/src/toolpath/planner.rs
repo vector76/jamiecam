@@ -14,19 +14,26 @@ pub fn plan(
     tool: &Tool,
     stock: &StockDefinition,
 ) -> Result<(Toolpath, ToolpathStats), AppError> {
-    // Step 1: Compute clearance height.
-    let stock_top_z = match stock {
-        StockDefinition::Box(b) => b.origin.z + b.height,
-    };
+    // Step 1: Compute clearance height and stock boundary.
+    let StockDefinition::Box(b) = stock;
+    let stock_top_z = b.origin.z + b.height;
+    let stock_boundary: Vec<(f64, f64)> = vec![
+        (b.origin.x, b.origin.y),
+        (b.origin.x + b.width, b.origin.y),
+        (b.origin.x + b.width, b.origin.y + b.depth),
+        (b.origin.x, b.origin.y + b.depth),
+    ];
 
     // Step 2: Generate cutting passes based on operation type.
     let linked_passes = match &operation.params {
         OperationParams::Pocket(params) => {
-            let passes = operations::pocket::pocket_passes(stock, params, tool.diameter)?;
+            let passes =
+                operations::pocket::pocket_passes(stock, params, tool.diameter, &stock_boundary)?;
             linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
         }
         OperationParams::Profile(params) => {
-            let passes = operations::profile::profile_passes(stock, params, tool.diameter)?;
+            let passes =
+                operations::profile::profile_passes(stock, params, tool.diameter, &stock_boundary)?;
             linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
         }
         OperationParams::Drill(params) => operations::drill::drill_passes(stock, params)?,
