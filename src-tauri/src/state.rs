@@ -22,6 +22,9 @@ pub struct LoadedModel {
     pub checksum: String,
     /// Tessellated mesh ready for rendering.
     pub mesh_data: MeshData,
+    /// Live B-rep shape handle, present for STEP/IGES imports.
+    /// `None` for STL or when OCCT bindings are unavailable.
+    pub shape: Option<crate::geometry::OcctShape>,
 }
 
 /// The active project document.

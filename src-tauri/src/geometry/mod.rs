@@ -25,7 +25,7 @@ pub mod safe;
 
 pub use clipper::{poly_boolean, poly_offset, BoolOp};
 pub use faces::{enumerate_faces, face_boundary, face_fingerprint, FaceDescriptor, FaceInfo};
-pub use importer::import;
+pub use importer::{import, import_with_shape};
 pub use safe::{GeometryError, MeshData, OcctMesh, OcctShape};
 
 #[cfg(test)]

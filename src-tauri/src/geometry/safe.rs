@@ -44,18 +44,17 @@ fn last_error_message() -> String {
 ///
 /// # Thread safety
 ///
-/// `OcctShape` is [`Send`] — it is safe to move to a worker thread because
-/// the C++ handle registry is protected by a `std::shared_mutex`.
-///
-/// It is **not** [`Sync`] — concurrent method calls on the same shape from
-/// multiple threads are not safe without external locking.
+/// `OcctShape` is both [`Send`] and [`Sync`].  The C++ handle registry is
+/// protected by a `std::shared_mutex`, which allows safe concurrent read
+/// access from multiple threads.  In practice the shape is always stored
+/// behind `RwLock<Project>` in `AppState`, which serialises writes.
 #[derive(Debug)]
 pub struct OcctShape {
     // CgShapeId is typedef uint64_t; we store it as u64 so this struct
     // compiles regardless of whether the FFI bindings were generated.
     id: u64,
-    // PhantomData<*mut ()> opts out of the Sync auto-trait (raw pointers are
-    // neither Send nor Sync).  We restore Send manually below.
+    // PhantomData<*mut ()> opts out of the Send and Sync auto-traits (raw
+    // pointers are neither Send nor Sync).  Both are restored manually below.
     _marker: std::marker::PhantomData<*mut ()>,
 }
 
@@ -199,17 +198,24 @@ impl Drop for OcctShape {
 // handle value to another thread is safe.
 unsafe impl Send for OcctShape {}
 
+// SAFETY: The C++ handle registry uses std::shared_mutex, so read-only access
+// to the handle id from multiple threads concurrently is safe.  In practice
+// OcctShape is always stored behind RwLock<Project> in AppState, which
+// serialises all mutations; this impl is required for AppState: Sync.
+unsafe impl Sync for OcctShape {}
+
 // ── OcctMesh ──────────────────────────────────────────────────────────────────
 
 /// Safe owner of a tessellated mesh handle.
 ///
-/// Released via `cg_mesh_free` on drop. Same `Send`-not-`Sync` contract as
-/// [`OcctShape`].
+/// Released via `cg_mesh_free` on drop. [`Send`] but not [`Sync`] — meshes
+/// are short-lived temporaries used during tessellation and are never stored
+/// in shared state, so concurrent access is not needed.
 #[derive(Debug)]
 pub struct OcctMesh {
     // CgMeshId is typedef uint64_t.
     id: u64,
-    // Same as OcctShape: opt out of Sync, restore Send explicitly.
+    // Opts out of Sync; Send is restored explicitly below.
     _marker: std::marker::PhantomData<*mut ()>,
 }
 

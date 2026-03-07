@@ -219,6 +219,7 @@ mod tests {
                     indices: vec![],
                     face_groups: vec![],
                 },
+                shape: None,
             });
         }
         let snap = get_project_snapshot_inner(&state.project).expect("snapshot should not fail");
@@ -544,6 +545,7 @@ mod tests {
                     indices: vec![],
                     face_groups: vec![],
                 },
+                shape: None,
             });
             p.tools.push(tool);
             p.stock = Some(stock);

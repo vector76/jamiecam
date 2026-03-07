@@ -14,7 +14,7 @@ use std::sync::RwLock;
 use sha2::Digest as _;
 
 use crate::error::AppError;
-use crate::geometry::MeshData;
+use crate::geometry::{MeshData, OcctShape};
 use crate::state::{AppState, LoadedModel, Project};
 
 use crate::postprocessor::{program::GenerateOptions, PostProcessor};
@@ -44,21 +44,23 @@ pub(crate) async fn open_model_inner(
     // async runtime is not starved.
     let path_clone = path_buf.clone();
     let blocking_result = tokio::task::spawn_blocking(move || {
-        let mesh = crate::geometry::import(&path_clone).map_err(AppError::from)?;
+        let (mesh, shape) =
+            crate::geometry::import_with_shape(&path_clone).map_err(AppError::from)?;
         let bytes = std::fs::read(&path_clone).map_err(|e| AppError::Io(e.to_string()))?;
         let digest = sha2::Sha256::digest(&bytes);
-        Ok::<(MeshData, String), AppError>((mesh, format!("{digest:x}")))
+        Ok::<(MeshData, String, Option<OcctShape>), AppError>((mesh, format!("{digest:x}"), shape))
     })
     .await
     .map_err(|e| AppError::GeometryImport(format!("import task panicked: {e}")))?;
 
-    let (mesh, checksum) = blocking_result?;
+    let (mesh, checksum, shape) = blocking_result?;
 
     let mut project = write_project(project_lock)?;
     project.source_model = Some(LoadedModel {
         path: path_buf,
         checksum,
         mesh_data: mesh.clone(),
+        shape,
     });
 
     Ok(mesh)
@@ -409,6 +411,51 @@ mod tests {
             .expect("source_model must be set");
         assert!(!model.checksum.is_empty());
         assert_eq!(model.path, fixture);
+    }
+
+    /// With full OCCT bindings, opening a STEP file must store a live shape handle.
+    #[tokio::test]
+    #[cfg(cam_geometry_bindings)]
+    async fn open_model_stores_shape() {
+        let fixture = PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fixtures/box.step",
+        ));
+        let state = AppState::default();
+        open_model_inner(&fixture.to_string_lossy(), &state.project)
+            .await
+            .expect("open_model should succeed with OCCT");
+        let project = state.project.read().expect("read lock");
+        let model = project
+            .source_model
+            .as_ref()
+            .expect("source_model must be set");
+        assert!(
+            model.shape.is_some(),
+            "shape must be present after loading a STEP file"
+        );
+    }
+
+    /// Without OCCT bindings, shape must be None after a failed import attempt.
+    /// (State is not modified on error, so source_model remains None.)
+    #[tokio::test]
+    #[cfg(not(cam_geometry_bindings))]
+    async fn open_model_shape_is_none_without_occt() {
+        let fixture = PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fixtures/box.step",
+        ));
+        if !fixture.exists() {
+            return; // fixture absent in this environment — skip
+        }
+        let state = AppState::default();
+        // Import will fail without OCCT; verify source_model is untouched (None).
+        let _ = open_model_inner(&fixture.to_string_lossy(), &state.project).await;
+        let project = state.project.read().expect("read lock");
+        assert!(
+            project.source_model.is_none(),
+            "source_model must remain None when import fails"
+        );
     }
 
     // ── get_project_snapshot (cross-module) ───────────────────────────────

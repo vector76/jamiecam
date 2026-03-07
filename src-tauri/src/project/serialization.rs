@@ -102,6 +102,8 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
             indices: vec![],
             face_groups: vec![],
         },
+        // Shape handle is not persisted; must be re-loaded via open_model.
+        shape: None,
     });
 
     let mut project = Project {
@@ -285,6 +287,7 @@ mod tests {
                 indices: vec![],
                 face_groups: vec![],
             },
+            shape: None,
         });
         p
     }
