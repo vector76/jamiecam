@@ -1,652 +1,646 @@
-{
-  "operationId": "00000000-0000-0000-0000-000000000000",
-  "toolNumber": 1,
-  "spindleSpeed": 1200.0,
-  "feedRate": 150.0,
-  "passes": [
-    {
-      "kind": "linking",
-      "cuts": [
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "cutting",
-      "cuts": [
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+[
+  {
+    "kind": "linking",
+    "cuts": [
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 7.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 4.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 7.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 1.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 0.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "linking",
-      "cuts": [
-        {
-          "position": {
-            "x": 10.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 4.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "cutting",
-      "cuts": [
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 7.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 4.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 1.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 1.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 0.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 0.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "linking",
-      "cuts": [
-        {
-          "position": {
-            "x": 30.0,
-            "y": 10.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "cutting",
-      "cuts": [
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 7.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "linking",
+    "cuts": [
+      {
+        "position": {
+          "x": 10.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 4.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 1.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 0.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "linking",
-      "cuts": [
-        {
-          "position": {
-            "x": 10.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 7.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "cutting",
-      "cuts": [
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 7.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 4.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 4.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 1.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 0.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 1.0
         },
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "linking",
-      "cuts": [
-        {
-          "position": {
-            "x": 30.0,
-            "y": 30.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    },
-    {
-      "kind": "cutting",
-      "cuts": [
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 7.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 0.0
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 4.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "feed"
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 1.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "linking",
+    "cuts": [
+      {
+        "position": {
+          "x": 30.0,
+          "y": 10.0,
+          "z": 15.0
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 0.0
-          },
-          "moveKind": {
-            "type": "feed"
-          },
-          "toolOrientation": null
+        "moveKind": {
+          "type": "rapid"
         },
-        {
-          "position": {
-            "x": 20.0,
-            "y": 20.0,
-            "z": 15.0
-          },
-          "moveKind": {
-            "type": "rapid"
-          },
-          "toolOrientation": null
-        }
-      ]
-    }
-  ]
-}
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 7.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 4.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 1.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 0.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "linking",
+    "cuts": [
+      {
+        "position": {
+          "x": 10.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 7.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 4.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 1.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 0.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "linking",
+    "cuts": [
+      {
+        "position": {
+          "x": 30.0,
+          "y": 30.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 7.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 4.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 1.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 0.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 20.0,
+          "y": 20.0,
+          "z": 15.0
+        },
+        "moveKind": {
+          "type": "rapid"
+        },
+        "toolOrientation": null
+      }
+    ]
+  }
+]

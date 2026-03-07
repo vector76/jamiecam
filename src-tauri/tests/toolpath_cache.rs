@@ -57,7 +57,7 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
 fn round_trip_preserves_toolpath_and_not_stale() {
     let (project_lock, op_id) = make_drill_project();
 
-    calculate_toolpath_inner(&op_id.to_string(), &project_lock).expect("calculate ok");
+    calculate_toolpath_inner(&op_id.to_string(), &project_lock, None).expect("calculate ok");
 
     let original_toolpath = {
         let p = project_lock.read().unwrap();
@@ -101,7 +101,7 @@ fn round_trip_preserves_toolpath_and_not_stale() {
 fn stale_after_param_change() {
     // Repeat full setup through round-trip to obtain a loaded_lock
     let (project_lock, op_id) = make_drill_project();
-    calculate_toolpath_inner(&op_id.to_string(), &project_lock).expect("calculate ok");
+    calculate_toolpath_inner(&op_id.to_string(), &project_lock, None).expect("calculate ok");
 
     let tmp = std::env::temp_dir().join("jcam_test_toolpath_cache_stale.jcam");
     {

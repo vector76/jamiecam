@@ -6,13 +6,27 @@
 
 use std::sync::RwLock;
 
+use tauri::Emitter;
+
 use crate::error::AppError;
+use crate::models::operation::OperationParams;
+use crate::models::StockDefinition;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
-use crate::toolpath::types::PassKind;
-use crate::toolpath::{LineGeometryData, ToolpathStats};
+use crate::toolpath::types::{PassKind, Toolpath};
+use crate::toolpath::{linking, LineGeometryData, ToolpathStats};
 
 use super::{build_tool_infos, parse_entity_id, read_project, write_project};
+
+// ── ToolpathProgressEvent ─────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolpathProgressEvent {
+    operation_id: String,
+    percent: u32,
+    message: String,
+}
 
 // ── list_post_processors ──────────────────────────────────────────────────────
 
@@ -75,19 +89,34 @@ pub(crate) fn get_gcode_preview_inner(
 ///
 /// 1. Parses `operation_id` as a UUID.
 /// 2. Reads the operation, stock, and tool from the project (all must exist).
-/// 3. Calls [`crate::toolpath::planner::plan`] to generate the toolpath.
-/// 4. Computes a deterministic SHA-256 cache key from the operation, tool, stock,
+/// 3. Calls [`crate::toolpath::planner::plan`] to generate unlinked passes.
+/// 4. Calls [`linking::link_passes`] for Pocket/Profile operations.
+/// 5. Assembles the final [`Toolpath`].
+/// 6. Computes a deterministic SHA-256 cache key from the operation, tool, stock,
 ///    optional model checksum, and engine version.
-/// 5. Stores the toolpath in `project.toolpaths` and populates `operation.cache`
+/// 7. Stores the toolpath in `project.toolpaths` and populates `operation.cache`
 ///    with the key, validity flag, UTC timestamp, and summary stats.
-/// 6. Returns statistics about the generated toolpath.
+/// 8. Returns statistics about the generated toolpath.
+///
+/// Progress events are emitted via `emit` at five milestones (0%, 50%, 80%, 95%, 100%).
 pub fn calculate_toolpath_inner(
     operation_id: &str,
     project_lock: &RwLock<Project>,
+    emit: Option<&dyn Fn(ToolpathProgressEvent)>,
 ) -> Result<ToolpathStats, AppError> {
     let op_uuid = parse_entity_id(operation_id, "operation")?;
 
-    let (toolpath, stats, model_sha, operation, tool, stock) = {
+    let progress = |pct: u32, msg: &str| {
+        if let Some(f) = emit {
+            f(ToolpathProgressEvent {
+                operation_id: operation_id.to_string(),
+                percent: pct,
+                message: msg.into(),
+            });
+        }
+    };
+
+    let (raw_passes, stats, model_sha, operation, tool, stock) = {
         let project = read_project(project_lock)?;
 
         let operation = project
@@ -112,10 +141,42 @@ pub fn calculate_toolpath_inner(
         let model_sha = project.source_model.as_ref().map(|m| m.checksum.clone());
         let shape = project.source_model.as_ref().and_then(|m| m.shape.as_ref());
 
-        let (toolpath, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock, shape)?;
+        progress(0, "Starting toolpath calculation");
+        let (raw_passes, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock, shape)?;
+        progress(50, "Passes generated");
 
-        (toolpath, stats, model_sha, operation, tool, stock)
+        (raw_passes, stats, model_sha, operation, tool, stock)
         // read lock releases here at end of block
+    };
+
+    // Apply linking for operations that return unlinked cutting passes.
+    // Drill operations handle their own linking internally in drill_passes.
+    let StockDefinition::Box(b) = &stock;
+    let stock_top_z = b.origin.z + b.height;
+    let linked_passes = match &operation.params {
+        OperationParams::Pocket(_) | OperationParams::Profile(_) => {
+            linking::link_passes(raw_passes, tool.diameter, stock_top_z + 5.0)
+        }
+        OperationParams::Drill(_) => raw_passes,
+    };
+    progress(80, "Passes linked");
+
+    // Assemble Toolpath.
+    let spindle_speed = operation
+        .spindle_speed_override
+        .map(|v| v as f64)
+        .or_else(|| tool.default_spindle_speed.map(|v| v as f64))
+        .unwrap_or(8000.0);
+    let feed_rate = operation
+        .feed_rate_override
+        .or(tool.default_feed_rate)
+        .unwrap_or(500.0);
+    let toolpath = Toolpath {
+        operation_id: op_uuid,
+        tool_number: 1,
+        spindle_speed,
+        feed_rate,
+        passes: linked_passes,
     };
 
     let key = crate::toolpath::cache::compute_cache_key(
@@ -146,6 +207,8 @@ pub fn calculate_toolpath_inner(
         }
     } // write lock released here
 
+    progress(95, "Cache key stored");
+    progress(100, "Complete");
     Ok(stats)
 }
 
@@ -254,8 +317,12 @@ pub async fn get_gcode_preview(
 pub async fn calculate_toolpath(
     operation_id: String,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<ToolpathStats, AppError> {
-    calculate_toolpath_inner(&operation_id, &state.project)
+    let emit = |event: ToolpathProgressEvent| {
+        let _ = app.emit("toolpath:progress", &event);
+    };
+    calculate_toolpath_inner(&operation_id, &state.project, Some(&emit))
 }
 
 /// Get the flat-array line geometry for the toolpath of the given operation.
@@ -296,7 +363,7 @@ mod tests {
     fn calculate_toolpath_inner_returns_not_found_with_no_operation() {
         let state = AppState::default();
         let valid_uuid = Uuid::new_v4().to_string();
-        let result = calculate_toolpath_inner(&valid_uuid, &state.project);
+        let result = calculate_toolpath_inner(&valid_uuid, &state.project, None);
         assert!(
             matches!(result, Err(AppError::NotFound(_))),
             "expected NotFound, got: {result:?}"
@@ -332,7 +399,7 @@ mod tests {
             // No stock set, no tool needed — should fail at stock lookup.
         }
 
-        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project);
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
         assert!(
             matches!(result, Err(AppError::NotFound(_))),
             "expected NotFound (no stock), got: {result:?}"
@@ -394,7 +461,7 @@ mod tests {
             project.stock = Some(stock);
         }
 
-        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project);
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
         let stats = result.expect("calculate_toolpath_inner should succeed for pocket");
         assert!(stats.total_pass_count > 0, "expected non-zero pass count");
 
@@ -531,5 +598,87 @@ mod tests {
             "expected feed move (G01/G1) in output, got:\n{}",
             gcode
         );
+    }
+
+    #[test]
+    fn calculate_toolpath_inner_emits_progress_events() {
+        use crate::models::operation::{DrillParams, DrillPoint};
+        use crate::models::stock::BoxDimensions;
+        use crate::models::StockDefinition;
+
+        let state = AppState::default();
+
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        let tool = Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        };
+
+        let operation = Operation {
+            id: op_id,
+            name: "Drill".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Drill(DrillParams {
+                depth: 5.0,
+                peck_depth: None,
+                points: vec![DrillPoint { x: 10.0, y: 10.0 }],
+            }),
+            cache: CacheState::default(),
+        };
+
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 50.0,
+            depth: 50.0,
+            height: 10.0,
+        });
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(tool);
+            project.operations.push(operation);
+            project.stock = Some(stock);
+        }
+
+        let events = std::cell::RefCell::new(Vec::<super::ToolpathProgressEvent>::new());
+        let emit = |event: super::ToolpathProgressEvent| {
+            events.borrow_mut().push(event);
+        };
+
+        calculate_toolpath_inner(&op_id.to_string(), &state.project, Some(&emit))
+            .expect("calculate_toolpath_inner should succeed for drill");
+
+        let events = events.into_inner();
+        assert!(
+            events.iter().any(|e| e.percent == 0),
+            "expected a percent=0 event"
+        );
+        assert!(
+            events.iter().any(|e| e.percent == 100),
+            "expected a percent=100 event"
+        );
+        for pair in events.windows(2) {
+            assert!(
+                pair[0].percent <= pair[1].percent,
+                "percentages must be non-decreasing: {} > {}",
+                pair[0].percent,
+                pair[1].percent
+            );
+        }
     }
 }
