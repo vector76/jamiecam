@@ -120,6 +120,11 @@ void cg_face_free(CgFaceId id);
 // Free an edge handle returned by cg_shape_edges().
 void cg_edge_free(CgEdgeId id);
 
+typedef struct {
+    uint32_t start_triangle; // index of first triangle for this face
+    uint32_t triangle_count; // number of triangles for this face
+} CgFaceGroup;
+
 /* ── Tessellation ────────────────────────────────────────────────────────── */
 
 // Tessellate the entire shape into a single merged triangle mesh.
@@ -151,6 +156,12 @@ CgError cg_mesh_copy_indices(CgMeshId id, uint32_t* out_indices);
 
 // Free a mesh and remove it from the registry.
 void cg_mesh_free(CgMeshId id);
+
+// Return the number of face groups stored in mesh id (one per face in traversal order).
+size_t cg_mesh_face_group_count(CgMeshId id);
+
+// Copy face group data into caller-allocated buffer of cg_mesh_face_group_count(id) entries.
+CgError cg_mesh_copy_face_groups(CgMeshId id, CgFaceGroup* out_groups);
 
 /* ── Surface evaluation ──────────────────────────────────────────────────── */
 
@@ -238,6 +249,12 @@ typedef struct {
     double   z_height; // Z coordinate of the plane (Z-up WCS)
 } CgPlanarFaceInfo;
 
+typedef struct {
+    double centroid[3]; // X, Y, Z
+    double normal[3];   // unit normal X, Y, Z
+    double area;        // mm²
+} CgFaceInfo;
+
 // Detect cylindrical holes whose diameter falls in [min_diameter, max_diameter].
 // Writes results into *out_holes (caller frees via cg_holes_free()).
 // Returns the number of holes found.
@@ -255,6 +272,20 @@ size_t cg_shape_find_planar_faces(CgShapeId id, CgPlanarFaceInfo** out_faces);
 
 // Free the array allocated by cg_shape_find_planar_faces().
 void cg_planar_faces_free(CgPlanarFaceInfo* faces);
+
+/* ── Face index API ──────────────────────────────────────────────────────── */
+
+// Return total face count (includes non-planar faces).
+size_t cg_shape_face_count(CgShapeId id);
+
+// Fill CgFaceInfo for face_idx (0-based, same traversal as tessellation).
+// Returns CG_OK for planar faces; CG_ERR_NO_RESULT for non-planar or out-of-range.
+CgError cg_face_info(CgShapeId id, size_t face_idx, CgFaceInfo* out_info);
+
+// Extract outer-wire boundary of a planar face as flat [x,y,...] XY pairs.
+// Caller frees via cg_poly_free(). Returns CG_ERR_NO_RESULT for non-planar faces.
+CgError cg_face_boundary_poly(CgShapeId id, size_t face_idx,
+                               double** out_points, size_t* out_count);
 
 /* ── 2D polygon operations (Clipper2) ───────────────────────────────────── */
 

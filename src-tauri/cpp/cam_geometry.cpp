@@ -15,10 +15,17 @@
 //     implemented") and return CG_NULL_ID / CG_ERR_NO_RESULT.
 
 // ── OCCT includes ────────────────────────────────────────────────────────────
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepTools.hxx>
+#include <BRepTools_WireExplorer.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
+#include <GCPnts_TangentialDeflection.hxx>
+#include <GProp_GProps.hxx>
+#include <GeomAdaptor_Surface.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <RWStl.hxx>
@@ -28,8 +35,11 @@
 #include <TopAbs_Orientation.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopoDS.hxx>
+#include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Wire.hxx>
 #include <TopLoc_Location.hxx>
+#include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
@@ -56,9 +66,10 @@
 // Assembled flat mesh buffer stored in the mesh registry.
 // All positions and normals are in world space (face location applied).
 struct CgMeshData {
-    std::vector<double>   vertices; // 3 doubles per vertex [x,y,z, ...]
-    std::vector<double>   normals;  // 3 doubles per vertex [nx,ny,nz, ...] (unit)
-    std::vector<uint32_t> indices;  // 3 uint32 per triangle [i0,i1,i2, ...]
+    std::vector<double>    vertices;    // 3 doubles per vertex [x,y,z, ...]
+    std::vector<double>    normals;     // 3 doubles per vertex [nx,ny,nz, ...] (unit)
+    std::vector<uint32_t>  indices;     // 3 uint32 per triangle [i0,i1,i2, ...]
+    std::vector<CgFaceGroup> face_groups; // one entry per face in tessellation traversal
 };
 
 // ── Thread-local error string ────────────────────────────────────────────────
@@ -372,10 +383,18 @@ CgMeshId cg_shape_tessellate(CgShapeId id, double chord_tol, double angle_tol) {
             const TopoDS_Face& face = TopoDS::Face(ex.Current());
             TopLoc_Location loc;
             Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
-            if (tri.IsNull()) continue; // face not meshed (degenerate)
 
-            const bool reversed = (face.Orientation() == TopAbs_REVERSED);
-            append_triangulation(*data, tri, loc, reversed);
+            size_t start_tri = data->indices.size() / 3;
+            if (!tri.IsNull()) {
+                const bool reversed = (face.Orientation() == TopAbs_REVERSED);
+                append_triangulation(*data, tri, loc, reversed);
+            }
+            // Push unconditionally — null faces get a zero-count group entry,
+            // maintaining strict 1:1 alignment between face_groups[i] and face_idx i.
+            data->face_groups.push_back(CgFaceGroup{
+                static_cast<uint32_t>(start_tri),
+                static_cast<uint32_t>(data->indices.size() / 3 - start_tri)
+            });
         }
 
         if (data->indices.empty()) {
@@ -460,6 +479,28 @@ CgError cg_mesh_copy_indices(CgMeshId id, uint32_t* out_indices) {
 void cg_mesh_free(CgMeshId id) {
     if (id == CG_NULL_ID) return;
     mesh_store_erase(id);
+}
+
+size_t cg_mesh_face_group_count(CgMeshId id) {
+    if (id == CG_NULL_ID) return 0;
+    auto mesh = mesh_store_get(id);
+    if (!mesh) return 0;
+    return mesh->face_groups.size();
+}
+
+CgError cg_mesh_copy_face_groups(CgMeshId id, CgFaceGroup* out_groups) {
+    if (id == CG_NULL_ID || !out_groups) {
+        set_last_error("cg_mesh_copy_face_groups: null argument");
+        return CG_ERR_NULL_HANDLE;
+    }
+    auto mesh = mesh_store_get(id);
+    if (!mesh) {
+        set_last_error("cg_mesh_copy_face_groups: invalid mesh ID");
+        return CG_ERR_NULL_HANDLE;
+    }
+    std::memcpy(out_groups, mesh->face_groups.data(),
+                mesh->face_groups.size() * sizeof(CgFaceGroup));
+    return CG_OK;
 }
 
 /* ── Surface evaluation (stubs) ──────────────────────────────────────────── */
@@ -580,6 +621,180 @@ size_t cg_shape_find_planar_faces(CgShapeId /*id*/, CgPlanarFaceInfo** out_faces
 
 void cg_planar_faces_free(CgPlanarFaceInfo* faces) {
     delete[] faces;
+}
+
+/* ── Face index API ──────────────────────────────────────────────────────── */
+
+size_t cg_shape_face_count(CgShapeId id) {
+    if (id == CG_NULL_ID) return 0;
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+        size_t count = 0;
+        for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+            ++count;
+        }
+        return count;
+    } catch (...) {
+        return 0;
+    }
+}
+
+CgError cg_face_info(CgShapeId id, size_t face_idx, CgFaceInfo* out_info) {
+    if (id == CG_NULL_ID || !out_info) {
+        set_last_error("cg_face_info: null argument");
+        return CG_ERR_NULL_HANDLE;
+    }
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+
+        size_t idx = 0;
+        for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next(), ++idx) {
+            if (idx != face_idx) continue;
+
+            const TopoDS_Face& face = TopoDS::Face(ex.Current());
+
+            // Check planarity.
+            TopLoc_Location loc;
+            Handle(Geom_Surface) surf = BRep_Tool::Surface(face, loc);
+            GeomAdaptor_Surface adaptor(surf);
+            if (adaptor.GetType() != GeomAbs_Plane) {
+                set_last_error("cg_face_info: face is not planar");
+                return CG_ERR_NO_RESULT;
+            }
+
+            // Compute area and centroid via surface properties.
+            GProp_GProps props;
+            BRepGProp::SurfaceProperties(face, props);
+            out_info->area = props.Mass();
+            gp_Pnt centroid = props.CentreOfMass();
+            out_info->centroid[0] = centroid.X();
+            out_info->centroid[1] = centroid.Y();
+            out_info->centroid[2] = centroid.Z();
+
+            // Get plane normal via the adaptor (handles Geom_RectangularTrimmedSurface
+            // wrapping a plane, which DownCast to Geom_Plane would fail for).
+            gp_Dir dir = adaptor.Plane().Axis().Direction();
+            // Apply location transform to the normal if needed.
+            if (!loc.IsIdentity()) {
+                dir.Transform(loc.Transformation());
+            }
+            // Orient normal outward consistent with face orientation.
+            if (face.Orientation() == TopAbs_REVERSED) {
+                dir.Reverse();
+            }
+            out_info->normal[0] = dir.X();
+            out_info->normal[1] = dir.Y();
+            out_info->normal[2] = dir.Z();
+
+            return CG_OK;
+        }
+
+        set_last_error("cg_face_info: face index out of range");
+        return CG_ERR_NO_RESULT;
+
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_info: invalid shape ID");
+        return CG_ERR_NO_RESULT;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_info exception: ") + ex.GetMessageString());
+        return CG_ERR_NO_RESULT;
+    } catch (...) {
+        set_last_error("cg_face_info: unknown exception");
+        return CG_ERR_NO_RESULT;
+    }
+}
+
+CgError cg_face_boundary_poly(CgShapeId id, size_t face_idx,
+                               double** out_points, size_t* out_count) {
+    if (out_points) *out_points = nullptr;
+    if (out_count)  *out_count  = 0;
+
+    if (id == CG_NULL_ID || !out_points || !out_count) {
+        set_last_error("cg_face_boundary_poly: null argument");
+        return CG_ERR_NULL_HANDLE;
+    }
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+
+        size_t idx = 0;
+        for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next(), ++idx) {
+            if (idx != face_idx) continue;
+
+            const TopoDS_Face& face = TopoDS::Face(ex.Current());
+
+            // Check planarity.
+            TopLoc_Location loc;
+            Handle(Geom_Surface) surf = BRep_Tool::Surface(face, loc);
+            GeomAdaptor_Surface adaptor(surf);
+            if (adaptor.GetType() != GeomAbs_Plane) {
+                set_last_error("cg_face_boundary_poly: face is not planar");
+                return CG_ERR_NO_RESULT;
+            }
+
+            // Extract outer wire.
+            TopoDS_Wire outer_wire = BRepTools::OuterWire(face);
+            if (outer_wire.IsNull()) {
+                set_last_error("cg_face_boundary_poly: no outer wire");
+                return CG_ERR_NO_RESULT;
+            }
+
+            // Discretize each edge in wire-traversal order and collect XY points.
+            // BRepTools_WireExplorer gives edges in topological sequence (end-to-end),
+            // unlike TopExp_Explorer which returns edges in arbitrary graph order.
+            std::vector<double> pts;
+            for (BRepTools_WireExplorer we(outer_wire, face); we.More(); we.Next()) {
+                const TopoDS_Edge& edge = we.Current();
+                BRepAdaptor_Curve curve(edge);
+                // Use tangential deflection: chord 0.1mm, angular 0.1rad.
+                GCPnts_TangentialDeflection disc(curve, 0.1, 0.1);
+                int n = disc.NbPoints();
+                // For each edge, skip the "shared" endpoint to avoid duplicates.
+                // REVERSED edges are traversed end-to-start in the wire, so we
+                // sample from disc.Value(n) down to disc.Value(2), skipping
+                // disc.Value(1) (the shared vertex with the next edge).
+                // FORWARD edges are traversed start-to-end: sample disc.Value(1)
+                // up to disc.Value(n-1), skipping disc.Value(n).
+                if (we.Orientation() == TopAbs_REVERSED) {
+                    for (int i = n; i > 1; --i) {
+                        gp_Pnt p = disc.Value(i);
+                        pts.push_back(p.X());
+                        pts.push_back(p.Y());
+                    }
+                } else {
+                    for (int i = 1; i < n; ++i) {
+                        gp_Pnt p = disc.Value(i);
+                        pts.push_back(p.X());
+                        pts.push_back(p.Y());
+                    }
+                }
+            }
+
+            if (pts.empty()) {
+                set_last_error("cg_face_boundary_poly: no boundary points");
+                return CG_ERR_NO_RESULT;
+            }
+
+            size_t n_pairs = pts.size() / 2;
+            double* buf = new double[pts.size()];
+            std::memcpy(buf, pts.data(), pts.size() * sizeof(double));
+            *out_points = buf;
+            *out_count  = n_pairs;
+            return CG_OK;
+        }
+
+        set_last_error("cg_face_boundary_poly: face index out of range");
+        return CG_ERR_NO_RESULT;
+
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_boundary_poly: invalid shape ID");
+        return CG_ERR_NO_RESULT;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_boundary_poly exception: ") + ex.GetMessageString());
+        return CG_ERR_NO_RESULT;
+    } catch (...) {
+        set_last_error("cg_face_boundary_poly: unknown exception");
+        return CG_ERR_NO_RESULT;
+    }
 }
 
 /* ── 2D polygon operations (Clipper2) ───────────────────────────────────── */
