@@ -16,6 +16,8 @@ import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams } from '../../api/types'
+import { useViewportStore } from '../../store/viewportStore'
+import { getModelFaces } from '../../api/geometry'
 
 interface Props {
   operationId: string | null
@@ -26,6 +28,11 @@ export function OperationEditorForm({ operationId }: Props) {
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
   const pushNotification = useProjectStore((s) => s.pushNotification)
   const [operation, setOperation] = useState<Operation | null>(null)
+  const selectionMode = useViewportStore((s) => s.selectionMode)
+  const selectedFps = useViewportStore((s) => s.selectedFaceFingerprints)
+  const setSelectionMode = useViewportStore((s) => s.setSelectionMode)
+  const setFaceDescriptors = useViewportStore((s) => s.setFaceDescriptors)
+  const clearFaceSelection = useViewportStore((s) => s.clearFaceSelection)
 
   function handleError(e: unknown) {
     const err = toAppError(e)
@@ -37,10 +44,35 @@ export function OperationEditorForm({ operationId }: Props) {
     listOperations()
       .then((ops) => setOperation(ops.find((o) => o.id === operationId) ?? null))
       .catch(handleError)
+    return () => { setSelectionMode(false) }
   }, [operationId])
 
   if (!operationId || !operation) {
     return <div style={{ padding: '0.5rem', color: '#888' }}>Select an operation to edit</div>
+  }
+
+  async function handleSelectFaces() {
+    const faces = await getModelFaces()
+    setFaceDescriptors(faces)
+    const savedGeo = (operation!.params as PocketParams | ProfileParams).geometry
+    if (savedGeo?.length) {
+      useViewportStore.getState().clearFaceSelection()
+      savedGeo.forEach(fp => useViewportStore.getState().toggleFaceSelection(fp))
+    } else {
+      clearFaceSelection()
+    }
+    setSelectionMode(true)
+  }
+
+  async function handleDoneSelecting() {
+    setSelectionMode(false)
+    const fps = useViewportStore.getState().selectedFaceFingerprints
+    await save({ params: { ...operation!.params, geometry: fps.length ? fps : null } })
+  }
+
+  async function handleClearGeometry() {
+    clearFaceSelection()
+    await save({ params: { ...operation!.params, geometry: null } })
   }
 
   async function save(patch: Partial<OperationInput>) {
@@ -99,6 +131,25 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
         </div>
+        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
+          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+            {selectionMode
+              ? `${selectedFps.length} face(s) selected`
+              : (() => {
+                  const g = (operation.params as PocketParams | ProfileParams).geometry
+                  return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
+                })()
+            }
+          </div>
+          {selectionMode ? (
+            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
+          ) : (
+            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
+          )}
+          {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
+            <button onClick={() => void handleClearGeometry()}>Clear</button>
+          ) : null}
+        </div>
       </div>
     )
   }
@@ -141,6 +192,25 @@ export function OperationEditorForm({ operationId }: Props) {
           <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
           <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
+        </div>
+        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
+          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+            {selectionMode
+              ? `${selectedFps.length} face(s) selected`
+              : (() => {
+                  const g = (operation.params as PocketParams | ProfileParams).geometry
+                  return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
+                })()
+            }
+          </div>
+          {selectionMode ? (
+            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
+          ) : (
+            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
+          )}
+          {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
+            <button onClick={() => void handleClearGeometry()}>Clear</button>
+          ) : null}
         </div>
       </div>
     )

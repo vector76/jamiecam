@@ -8,6 +8,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { OperationEditorForm } from './OperationEditorForm'
 import { useProjectStore } from '../../store/projectStore'
+import { useViewportStore } from '../../store/viewportStore'
 import type { Operation, ProjectSnapshot } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
@@ -21,8 +22,13 @@ vi.mock('../../api/file', () => ({
   getProjectSnapshot: vi.fn(),
 }))
 
+vi.mock('../../api/geometry', () => ({
+  getModelFaces: vi.fn(),
+}))
+
 const opsApi = await import('../../api/operations')
 const fileApi = await import('../../api/file')
+const geoApi = await import('../../api/geometry')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +84,13 @@ const SNAPSHOT_BASE: ProjectSnapshot = {
 beforeEach(() => {
   vi.clearAllMocks()
   useProjectStore.setState({ snapshot: SNAPSHOT_BASE })
+  useViewportStore.setState({
+    selectionMode: false,
+    selectedFaceFingerprints: [],
+    faceDescriptors: [],
+    hoveredFaceIdx: null,
+  })
+  vi.mocked(geoApi.getModelFaces).mockResolvedValue([])
 })
 
 // ── Null / empty state ─────────────────────────────────────────────────────────
@@ -364,6 +377,105 @@ describe('OperationEditorForm — drill form', () => {
     await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
       DRILL_OP_ID,
       expect.objectContaining({ params: expect.objectContaining({ points: [{ x: 30, y: 40 }] }) }),
+    ))
+  })
+})
+
+// ── Geometry section ──────────────────────────────────────────────────────────
+
+describe('OperationEditorForm — geometry section', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(POCKET_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('Select Faces button appears for pocket operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+  })
+
+  it('Select Faces button appears for profile operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([PROFILE_OP])
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+  })
+
+  it('Select Faces button does not appear for drill operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument())
+    expect(screen.queryByText('Select Faces')).not.toBeInTheDocument()
+  })
+
+  it('Clicking Select Faces calls getModelFaces and sets selectionMode true', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(geoApi.getModelFaces).toHaveBeenCalled())
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(true))
+  })
+
+  it('Clicking Select Faces pre-populates fingerprints from saved geometry', async () => {
+    const POCKET_WITH_GEO: Operation = {
+      ...POCKET_OP,
+      params: { depth: 5.0, stepdown: 1.0, stepoverPercent: 50.0, geometry: ['fp-a', 'fp-b'] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_WITH_GEO])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(true))
+    expect(useViewportStore.getState().selectedFaceFingerprints).toEqual(['fp-a', 'fp-b'])
+  })
+
+  it('While selectionMode is true, button text is Done Selecting', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(screen.getByText('Done Selecting')).toBeInTheDocument())
+    expect(screen.queryByText('Select Faces')).not.toBeInTheDocument()
+  })
+
+  it('Clicking Done Selecting sets selectionMode false and calls editOperation with fingerprints', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(screen.getByText('Done Selecting')).toBeInTheDocument())
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-x', 'fp-y'] })
+    fireEvent.click(screen.getByText('Done Selecting'))
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(false))
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      POCKET_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: ['fp-x', 'fp-y'] }) }),
+    ))
+  })
+
+  it('Clear button appears when operation has saved fingerprints', async () => {
+    const POCKET_WITH_GEO: Operation = {
+      ...POCKET_OP,
+      params: { depth: 5.0, stepdown: 1.0, stepoverPercent: 50.0, geometry: ['fp-a'] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_WITH_GEO])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Clear')).toBeInTheDocument())
+  })
+
+  it('Clicking Clear calls editOperation with geometry null', async () => {
+    const POCKET_WITH_GEO: Operation = {
+      ...POCKET_OP,
+      params: { depth: 5.0, stepdown: 1.0, stepoverPercent: 50.0, geometry: ['fp-a'] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_WITH_GEO])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Clear')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Clear'))
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      POCKET_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: null }) }),
     ))
   })
 })
