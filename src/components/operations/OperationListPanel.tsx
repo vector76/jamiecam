@@ -13,9 +13,9 @@ import { useViewportStore } from '../../store/viewportStore'
 import { addOperation, deleteOperation, editOperation, listOperations, reorderOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
-import { calculateToolpath, getToolpathGeometry } from '../../api/toolpath'
+import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams } from '../../api/types'
+import type { OperationInput, DrillParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -30,6 +30,20 @@ export function OperationListPanel() {
 
   const [drillPointCounts, setDrillPointCounts] = useState<Record<string, number>>({})
   const [calculatingId, setCalculatingId] = useState<string | null>(null)
+  const [progress, setProgress] = useState<number>(0)
+
+  useEffect(() => {
+    let active = true
+    let unlisten: (() => void) | null = null
+    listenToolpathProgress((event: ToolpathProgressEvent) => {
+      if (event.operationId === calculatingId) {
+        setProgress(event.percent)
+      }
+    }).then((fn) => {
+      if (active) { unlisten = fn } else { fn() }
+    }).catch(handleError)
+    return () => { active = false; unlisten?.() }
+  }, [calculatingId])
 
   useEffect(() => {
     if (!operations.some(o => o.operationType === 'drill')) { setDrillPointCounts({}); return }
@@ -50,6 +64,7 @@ export function OperationListPanel() {
   // ── Calculate toolpath ────────────────────────────────────────────────────
 
   async function handleCalculate(id: string) {
+    setProgress(0)
     setCalculatingId(id)
     try {
       const stats = await calculateToolpath(id)
@@ -191,6 +206,9 @@ export function OperationListPanel() {
             >
               {calculatingId === op.id ? '…' : 'Calc'}
             </button>
+            {calculatingId === op.id && (
+              <progress value={progress} max={100} style={{ width: '60px' }} aria-label={`Progress for ${op.name}`} />
+            )}
           </div>
         ))}
       </div>

@@ -6,11 +6,11 @@
  * without a real Tauri context.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { OperationListPanel } from './OperationListPanel'
 import { useProjectStore } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
-import type { Operation, ProjectSnapshot, LineGeometryData, ToolpathStats } from '../../api/types'
+import type { Operation, ProjectSnapshot, LineGeometryData, ToolpathStats, ToolpathProgressEvent } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -29,6 +29,7 @@ vi.mock('../../api/file', () => ({
 vi.mock('../../api/toolpath', () => ({
   calculateToolpath: vi.fn(),
   getToolpathGeometry: vi.fn(),
+  listenToolpathProgress: vi.fn(),
 }))
 
 vi.mock('./OperationEditorForm', () => ({
@@ -98,6 +99,7 @@ const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 1, 1], colours
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(toolpathApi.listenToolpathProgress).mockResolvedValue(() => {})
   useProjectStore.setState({ snapshot: null, selectedOperationId: null, notifications: [] })
   useViewportStore.setState({ toolpathGeometry: null })
 })
@@ -566,5 +568,46 @@ describe('OperationListPanel — reorder', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Move down Outer Profile' }))
     await waitFor(() => expect(opsApi.reorderOperations).toHaveBeenCalled())
     expect(useProjectStore.getState().selectedOperationId).toBeNull()
+  })
+})
+
+// ── Progress bar ──────────────────────────────────────────────────────────────
+
+describe('OperationListPanel — progress bar', () => {
+  it('progress element appears when operation is calculating and updates on event', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    let progressHandler: ((event: ToolpathProgressEvent) => void) | null = null
+    vi.mocked(toolpathApi.listenToolpathProgress).mockImplementation(async (handler) => {
+      progressHandler = handler
+      return () => {}
+    })
+    const deferred = new Promise<ToolpathStats>(() => { /* never resolves */ })
+    vi.mocked(toolpathApi.calculateToolpath).mockReturnValue(deferred)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Outer Profile' }))
+
+    await waitFor(() => expect(progressHandler).not.toBeNull())
+    act(() => { progressHandler!({ operationId: OP1_ID, percent: 50, message: '' }) })
+
+    const el = screen.getByRole('progressbar', { name: `Progress for Outer Profile` })
+    expect(el).toBeInTheDocument()
+    expect(el).toHaveAttribute('value', '50')
+  })
+
+  it('progress element is not rendered after calculation completes', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_STOCK })
+    vi.mocked(toolpathApi.listenToolpathProgress).mockResolvedValue(() => {})
+    vi.mocked(toolpathApi.calculateToolpath).mockResolvedValue(TOOLPATH_STATS)
+    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Calculate Outer Profile' }))
+
+    await waitFor(() => expect(toolpathApi.calculateToolpath).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByRole('progressbar')).not.toBeInTheDocument())
   })
 })
