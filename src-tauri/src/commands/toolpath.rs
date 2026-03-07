@@ -87,7 +87,7 @@ pub fn calculate_toolpath_inner(
 ) -> Result<ToolpathStats, AppError> {
     let op_uuid = parse_entity_id(operation_id, "operation")?;
 
-    let (operation, tool, stock, model_sha) = {
+    let (toolpath, stats, model_sha, operation, tool, stock) = {
         let project = read_project(project_lock)?;
 
         let operation = project
@@ -110,11 +110,13 @@ pub fn calculate_toolpath_inner(
             .clone();
 
         let model_sha = project.source_model.as_ref().map(|m| m.checksum.clone());
+        let shape = project.source_model.as_ref().and_then(|m| m.shape.as_ref());
 
-        (operation, tool, stock, model_sha)
-    }; // read lock released here
+        let (toolpath, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock, shape)?;
 
-    let (toolpath, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock)?;
+        (toolpath, stats, model_sha, operation, tool, stock)
+        // read lock releases here at end of block
+    };
 
     let key = crate::toolpath::cache::compute_cache_key(
         &operation,

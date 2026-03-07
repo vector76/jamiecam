@@ -1,6 +1,7 @@
 //! Toolpath planner — entry-point for turning an [`Operation`] into a [`Toolpath`].
 
 use crate::error::AppError;
+use crate::geometry::OcctShape;
 use crate::models::operation::OperationParams;
 use crate::models::{Operation, StockDefinition, Tool};
 use crate::toolpath::{
@@ -13,6 +14,7 @@ pub fn plan(
     operation: &Operation,
     tool: &Tool,
     stock: &StockDefinition,
+    shape: Option<&OcctShape>,
 ) -> Result<(Toolpath, ToolpathStats), AppError> {
     // Step 1: Compute clearance height and stock boundary.
     let StockDefinition::Box(b) = stock;
@@ -24,16 +26,27 @@ pub fn plan(
         (b.origin.x, b.origin.y + b.depth),
     ];
 
+    // Step 1b: Resolve boundary — use geometry selection if present, else stock.
+    let boundary: Vec<(f64, f64)> = match &operation.params {
+        OperationParams::Pocket(p) if p.geometry.is_some() => {
+            resolve_geometry_boundary(shape, p.geometry.as_deref().unwrap())?
+        }
+        OperationParams::Profile(p) if p.geometry.is_some() => {
+            resolve_geometry_boundary(shape, p.geometry.as_deref().unwrap())?
+        }
+        _ => stock_boundary,
+    };
+
     // Step 2: Generate cutting passes based on operation type.
     let linked_passes = match &operation.params {
         OperationParams::Pocket(params) => {
             let passes =
-                operations::pocket::pocket_passes(stock, params, tool.diameter, &stock_boundary)?;
+                operations::pocket::pocket_passes(stock, params, tool.diameter, &boundary)?;
             linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
         }
         OperationParams::Profile(params) => {
             let passes =
-                operations::profile::profile_passes(stock, params, tool.diameter, &stock_boundary)?;
+                operations::profile::profile_passes(stock, params, tool.diameter, &boundary)?;
             linking::link_passes(passes, tool.diameter, stock_top_z + 5.0)
         }
         OperationParams::Drill(params) => operations::drill::drill_passes(stock, params)?,
@@ -80,6 +93,56 @@ pub fn plan(
     };
 
     Ok((toolpath, stats))
+}
+
+// ── resolve_geometry_boundary ─────────────────────────────────────────────────
+
+/// Resolve a list of face fingerprints to a 2-D boundary polygon.
+///
+/// Returns the outer-wire boundary of the selected face(s), unioned together
+/// when multiple fingerprints are provided.
+fn resolve_geometry_boundary(
+    shape: Option<&OcctShape>,
+    fingerprints: &[String],
+) -> Result<Vec<(f64, f64)>, AppError> {
+    let shape = shape.ok_or_else(|| {
+        AppError::GeometryImport("no model loaded — cannot resolve geometry selection".into())
+    })?;
+
+    #[cfg(cam_geometry_bindings)]
+    {
+        use crate::geometry::{enumerate_faces, face_boundary, poly_boolean, BoolOp};
+
+        let descriptors = enumerate_faces(shape).map_err(AppError::from)?;
+
+        let mut combined: Option<Vec<(f64, f64)>> = None;
+        for fp in fingerprints {
+            let desc = descriptors
+                .iter()
+                .find(|d| &d.fingerprint == fp)
+                .ok_or_else(|| {
+                    AppError::GeometryImport(format!(
+                        "face fingerprint '{}' not found in current model — model may have changed",
+                        fp
+                    ))
+                })?;
+            let boundary = face_boundary(shape, desc.face_idx).map_err(AppError::from)?;
+            combined = Some(match combined {
+                None => boundary,
+                Some(acc) => {
+                    poly_boolean(&acc, &boundary, BoolOp::Union).map_err(AppError::from)?
+                }
+            });
+        }
+
+        Ok(combined.unwrap_or_default())
+    }
+
+    #[cfg(not(cam_geometry_bindings))]
+    {
+        let _ = (shape, fingerprints);
+        Err(AppError::GeometryImport("OCCT not available".into()))
+    }
 }
 
 #[cfg(test)]
@@ -136,7 +199,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        let (_, stats) = plan(&operation, &tool, &stock).expect("pocket plan should succeed");
+        let (_, stats) = plan(&operation, &tool, &stock, None).expect("pocket plan should succeed");
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
     }
@@ -161,7 +224,8 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        let (_, stats) = plan(&operation, &tool, &stock).expect("profile plan should succeed");
+        let (_, stats) =
+            plan(&operation, &tool, &stock, None).expect("profile plan should succeed");
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
     }
@@ -186,7 +250,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        assert!(plan(&operation, &tool, &stock).is_err());
+        assert!(plan(&operation, &tool, &stock, None).is_err());
     }
 
     fn make_drill_operation(
@@ -217,7 +281,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.spindle_speed, 12000.0);
     }
 
@@ -229,7 +294,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.spindle_speed, 9000.0);
     }
 
@@ -238,7 +304,8 @@ mod tests {
         let operation = make_drill_operation(None, None);
         let tool = make_tool_10mm(); // default_spindle_speed: None
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.spindle_speed, 8000.0);
     }
 
@@ -250,7 +317,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.feed_rate, 800.0);
     }
 
@@ -262,7 +330,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.feed_rate, 300.0);
     }
 
@@ -271,7 +340,60 @@ mod tests {
         let operation = make_drill_operation(None, None);
         let tool = make_tool_10mm(); // default_feed_rate: None
         let stock = make_stock_50x50x10();
-        let (toolpath, _) = plan(&operation, &tool, &stock).expect("drill plan should succeed");
+        let (toolpath, _) =
+            plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
         assert_eq!(toolpath.feed_rate, 500.0);
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn plan_pocket_with_geometry_none_uses_stock_boundary() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "Pocket Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+                geometry: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        let (_, stats) = plan(&operation, &tool, &stock, None)
+            .expect("pocket with no geometry should use stock boundary");
+        assert!(stats.total_pass_count > 0);
+        assert!(stats.total_path_length_mm > 0.0);
+    }
+
+    #[test]
+    fn plan_pocket_with_geometry_some_and_no_shape_returns_error() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "Pocket Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+                geometry: Some(vec!["fp1".into()]),
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        let result = plan(&operation, &tool, &stock, None);
+        assert!(
+            matches!(result, Err(AppError::GeometryImport(_))),
+            "expected GeometryImport error, got: {result:?}"
+        );
     }
 }

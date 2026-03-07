@@ -51,7 +51,8 @@ fn drill_algorithm_golden_matches() {
         cache: CacheState::default(),
     };
 
-    let (toolpath, _stats) = planner::plan(&operation, &tool, &stock).expect("plan should succeed");
+    let (toolpath, _stats) =
+        planner::plan(&operation, &tool, &stock, None).expect("plan should succeed");
     let json = serde_json::to_string_pretty(&toolpath).expect("serialize toolpath");
 
     let fixture = fixture_path();
