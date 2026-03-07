@@ -52,6 +52,7 @@ const QUAD_MESH: MeshData = {
   vertices: [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0],
   normals: [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
   indices: [0, 1, 2, 0, 2, 3],
+  faceGroups: [],
 }
 
 // ── Setup / teardown ──────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ describe('Viewport — mesh updates', () => {
       vertices: [0, 0, 0, 2, 0, 0, 2, 2, 0],
       normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
       indices: [0, 1, 2],
+      faceGroups: [],
     }
 
     await act(async () => {

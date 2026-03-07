@@ -21,6 +21,7 @@ const QUAD_MESH: MeshData = {
     0, 1, 2, // tri 0
     0, 2, 3, // tri 1
   ],
+  faceGroups: [],
 }
 
 describe('buildModelMesh', () => {
@@ -78,6 +79,7 @@ describe('buildModelMesh', () => {
       vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0],
       normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
       indices: [0, 1, 2],
+      faceGroups: [],
     }
     const { mesh } = buildModelMesh(tri)
     expect(mesh.geometry.attributes.position.count).toBe(3)

@@ -100,6 +100,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
             vertices: vec![],
             normals: vec![],
             indices: vec![],
+            face_groups: vec![],
         },
     });
 
@@ -282,6 +283,7 @@ mod tests {
                 vertices: vec![],
                 normals: vec![],
                 indices: vec![],
+                face_groups: vec![],
             },
         });
         p

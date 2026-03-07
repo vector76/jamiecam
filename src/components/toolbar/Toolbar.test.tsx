@@ -42,7 +42,7 @@ const toolpathApi = await import('../../api/toolpath')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2] }
+const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2], faceGroups: [] }
 const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
 const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
 const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 0, 0], colours: [1, 0, 0, 1, 0, 0], types: [1] }

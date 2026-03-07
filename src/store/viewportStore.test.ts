@@ -5,6 +5,7 @@ const MESH: MeshData = {
   vertices: [0, 1, 2, 3, 4, 5],
   normals: [0, 0, 1, 0, 0, 1],
   indices: [0, 1, 2],
+  faceGroups: [],
 }
 
 beforeEach(() => {
@@ -48,8 +49,8 @@ describe('viewportStore — setMeshData', () => {
   })
 
   it('replaces existing mesh data', () => {
-    const first: MeshData = { vertices: [1], normals: [0], indices: [0] }
-    const second: MeshData = { vertices: [2], normals: [1], indices: [0] }
+    const first: MeshData = { vertices: [1], normals: [0], indices: [0], faceGroups: [] }
+    const second: MeshData = { vertices: [2], normals: [1], indices: [0], faceGroups: [] }
     useViewportStore.getState().setMeshData(first)
     useViewportStore.getState().setMeshData(second)
     expect(useViewportStore.getState().meshData).toEqual(second)

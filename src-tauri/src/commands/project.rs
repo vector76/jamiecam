@@ -217,6 +217,7 @@ mod tests {
                     vertices: vec![],
                     normals: vec![],
                     indices: vec![],
+                    face_groups: vec![],
                 },
             });
         }
@@ -541,6 +542,7 @@ mod tests {
                     vertices: vec![],
                     normals: vec![],
                     indices: vec![],
+                    face_groups: vec![],
                 },
             });
             p.tools.push(tool);

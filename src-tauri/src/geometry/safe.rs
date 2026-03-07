@@ -248,9 +248,10 @@ impl OcctMesh {
         let mut indices = vec![0_u32; tri_count * 3];
 
         // SAFETY: buffers are sized exactly as required by the C API contracts:
-        //   cg_mesh_copy_vertices  → vertex_count * 3 doubles
-        //   cg_mesh_copy_normals   → vertex_count * 3 doubles
-        //   cg_mesh_copy_indices   → tri_count * 3 uint32s
+        //   cg_mesh_copy_vertices    → vertex_count * 3 doubles
+        //   cg_mesh_copy_normals     → vertex_count * 3 doubles
+        //   cg_mesh_copy_indices     → tri_count * 3 uint32s
+        // cg_mesh_copy_face_groups is called separately below with its own guard.
         unsafe {
             super::ffi::cg_mesh_copy_vertices(self.id, verts_f64.as_mut_ptr());
             super::ffi::cg_mesh_copy_normals(self.id, norms_f64.as_mut_ptr());
@@ -260,10 +261,26 @@ impl OcctMesh {
         let vertices: Vec<f32> = verts_f64.iter().map(|&v| v as f32).collect();
         let normals: Vec<f32> = norms_f64.iter().map(|&v| v as f32).collect();
 
+        let fg_count = unsafe { super::ffi::cg_mesh_face_group_count(self.id) };
+        let mut fg_buf = vec![unsafe { std::mem::zeroed::<super::ffi::CgFaceGroup>() }; fg_count];
+        if fg_count > 0 {
+            unsafe {
+                super::ffi::cg_mesh_copy_face_groups(self.id, fg_buf.as_mut_ptr());
+            }
+        }
+        let face_groups: Vec<FaceGroup> = fg_buf
+            .into_iter()
+            .map(|fg| FaceGroup {
+                start_triangle: fg.start_triangle,
+                triangle_count: fg.triangle_count,
+            })
+            .collect();
+
         MeshData {
             vertices,
             normals,
             indices,
+            face_groups,
         }
     }
 
@@ -273,6 +290,7 @@ impl OcctMesh {
             vertices: Vec::new(),
             normals: Vec::new(),
             indices: Vec::new(),
+            face_groups: Vec::new(),
         }
     }
 }
@@ -317,12 +335,23 @@ pub enum GeometryError {
 
 // ── MeshData ──────────────────────────────────────────────────────────────────
 
+/// Per-face triangle group boundary within a [`MeshData`].
+///
+/// Each entry corresponds to one B-rep face in tessellation traversal order.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceGroup {
+    pub start_triangle: u32,
+    pub triangle_count: u32,
+}
+
 /// Tessellated triangle mesh ready for transfer to the frontend.
 ///
 /// Buffers use `f32` vertices/normals (sufficient precision for Three.js
 /// rendering) and `u32` indices. All geometry computation in Rust uses `f64`;
 /// the downcast to `f32` happens only at the IPC boundary.
 #[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MeshData {
     /// XYZ interleaved vertex positions — 3 `f32` values per vertex.
     pub vertices: Vec<f32>,
@@ -330,6 +359,8 @@ pub struct MeshData {
     pub normals: Vec<f32>,
     /// Triangle indices — 3 `u32` values per triangle.
     pub indices: Vec<u32>,
+    /// Per-face triangle group boundaries — one entry per B-rep face.
+    pub face_groups: Vec<FaceGroup>,
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -417,6 +448,7 @@ mod tests {
             vertices: vec![0.0, 1.0, 2.0],
             normals: vec![0.0, 0.0, 1.0],
             indices: vec![0, 1, 2],
+            face_groups: vec![],
         };
         assert_eq!(m.vertices.len(), 3);
         assert_eq!(m.normals.len(), 3);
@@ -429,14 +461,31 @@ mod tests {
             vertices: vec![1.0_f32, 2.0, 3.0],
             normals: vec![0.0_f32, 0.0, 1.0],
             indices: vec![0_u32, 1, 2],
+            face_groups: vec![],
         };
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert!(v["vertices"].is_array());
         assert!(v["normals"].is_array());
         assert!(v["indices"].is_array());
+        assert!(v["faceGroups"].is_array());
         assert_eq!(v["vertices"].as_array().unwrap().len(), 3);
         assert_eq!(v["indices"][2], 2);
+    }
+
+    #[test]
+    fn face_group_serializes_camel_case_keys() {
+        let fg = FaceGroup {
+            start_triangle: 4,
+            triangle_count: 2,
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&fg).unwrap()).unwrap();
+        assert_eq!(v["startTriangle"], 4);
+        assert_eq!(v["triangleCount"], 2);
+        // Rust snake_case keys must not appear in the output.
+        assert!(v.get("start_triangle").is_none());
+        assert!(v.get("triangle_count").is_none());
     }
 
     // ── Handle type properties ────────────────────────────────────────────
@@ -526,6 +575,7 @@ mod tests {
         assert!(data.vertices.is_empty());
         assert!(data.normals.is_empty());
         assert!(data.indices.is_empty());
+        assert!(data.face_groups.is_empty());
     }
 
     // ── OCCT integration tests ────────────────────────────────────────────
@@ -581,5 +631,15 @@ mod tests {
             0,
             "index count must be divisible by 3"
         );
+        // A box has 6 faces; each must appear in face_groups.
+        assert_eq!(data.face_groups.len(), 6, "box must have 6 face groups");
+        // Sanity-check that all triangle ranges are in bounds.
+        let tri_count = (data.indices.len() / 3) as u64;
+        for fg in &data.face_groups {
+            assert!(
+                fg.start_triangle as u64 + fg.triangle_count as u64 <= tri_count,
+                "face group overruns triangle buffer"
+            );
+        }
     }
 }

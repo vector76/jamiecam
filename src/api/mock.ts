@@ -25,6 +25,7 @@ const EMPTY_MESH: MeshData = {
   vertices: [],
   normals: [],
   indices: [],
+  faceGroups: [],
 }
 
 const DEFAULT_SNAPSHOT: ProjectSnapshot = {

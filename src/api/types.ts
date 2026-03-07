@@ -13,6 +13,8 @@ export interface MeshData {
   normals: number[]
   /** Triangle indices — 3 values per triangle. */
   indices: number[]
+  /** Per-face triangle group boundaries — one entry per face in traversal order. */
+  faceGroups: Array<{ startTriangle: number; triangleCount: number }>
 }
 
 /** Reference to the source geometry model stored in a .jcam file. */
