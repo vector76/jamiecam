@@ -122,6 +122,7 @@ export interface ProfileParams {
   depth: number
   stepdown: number
   compensationSide: 'left' | 'right' | 'center'
+  geometry?: string[] | null
 }
 
 /** Parameters for a Pocket operation. */
@@ -129,6 +130,7 @@ export interface PocketParams {
   depth: number
   stepdown: number
   stepoverPercent: number
+  geometry?: string[] | null
 }
 
 /** A single drill hole position. */

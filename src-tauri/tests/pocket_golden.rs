@@ -43,6 +43,7 @@ fn pocket_algorithm_golden_matches() {
             depth: 10.0,
             stepdown: 2.0,
             stepover_percent: 50.0,
+            geometry: None,
         }),
         cache: CacheState::default(),
     };

@@ -105,6 +105,7 @@ mod tests {
             depth: 10.0,
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -132,6 +133,7 @@ mod tests {
             depth: 10.0,
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -147,6 +149,7 @@ mod tests {
             depth: 5.0,
             stepdown: 2.0,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let result = profile_passes(&stock, &params, 20.0, &boundary);
@@ -164,11 +167,13 @@ mod tests {
             depth: 5.0,
             stepdown: 5.0,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         };
         let params_center = ProfileParams {
             depth: 5.0,
             stepdown: 5.0,
             compensation_side: CompensationSide::Center,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let passes_left =
@@ -208,6 +213,7 @@ mod tests_no_bindings {
             depth: 5.0,
             stepdown: 5.0,
             compensation_side: CompensationSide::Center,
+            geometry: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary)

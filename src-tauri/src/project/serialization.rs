@@ -670,6 +670,7 @@ mod tests {
                 depth: 10.0,
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
+                geometry: None,
             }),
             cache: CacheState::default(),
         };
@@ -684,6 +685,7 @@ mod tests {
                 depth: 15.0,
                 stepdown: 3.0,
                 stepover_percent: 45.0,
+                geometry: None,
             }),
             cache: CacheState::default(),
         };

@@ -96,6 +96,7 @@ mod tests {
                 depth: 10.0,
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
+                geometry: None,
             }),
             cache: CacheState::default(),
         }
@@ -142,6 +143,7 @@ mod tests {
             depth: 15.0, // changed
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         });
         let k1 = compute_cache_key(&op1, &tool, &stock, Some("abc123"), "v1");
         let k2 = compute_cache_key(&op2, &tool, &stock, Some("abc123"), "v1");

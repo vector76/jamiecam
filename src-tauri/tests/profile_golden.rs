@@ -45,6 +45,7 @@ fn profile_algorithm_golden_matches() {
             depth: 10.0,
             stepdown: 2.5,
             compensation_side: CompensationSide::Left,
+            geometry: None,
         }),
         cache: CacheState::default(),
     };

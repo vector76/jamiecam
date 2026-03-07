@@ -31,6 +31,9 @@ pub struct ProfileParams {
     pub stepdown: f64,
     /// Which side of the path the tool compensates to.
     pub compensation_side: CompensationSide,
+    /// Face fingerprints that define the machining boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
 }
 
 /// Parameters for a Pocket operation.
@@ -43,6 +46,9 @@ pub struct PocketParams {
     pub stepdown: f64,
     /// Radial stepover as a percentage of tool diameter (0–100).
     pub stepover_percent: f64,
+    /// Face fingerprints that define the machining boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
 }
 
 /// A single drill point location.
@@ -161,6 +167,7 @@ mod tests {
                 depth: 10.0,
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
+                geometry: None,
             }),
             cache: CacheState::default(),
         }
@@ -178,6 +185,7 @@ mod tests {
                 depth: 15.0,
                 stepdown: 3.0,
                 stepover_percent: 45.0,
+                geometry: None,
             }),
             cache: CacheState::default(),
         }
@@ -332,6 +340,7 @@ mod tests {
                 depth: 5.0,
                 stepdown: 1.0,
                 stepover_percent: 50.0,
+                geometry: None,
             }),
             cache: CacheState::default(),
         };
@@ -359,6 +368,7 @@ mod tests {
                 depth: 5.0,
                 stepdown: 1.0,
                 stepover_percent: 50.0,
+                geometry: None,
             }),
             cache: CacheState::default(),
         };
@@ -407,6 +417,106 @@ mod tests {
     }
 
     #[test]
+    fn pocket_geometry_absent_when_none() {
+        let params = PocketParams {
+            depth: 5.0,
+            stepdown: 1.0,
+            stepover_percent: 50.0,
+            geometry: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+    }
+
+    #[test]
+    fn pocket_geometry_present_when_set() {
+        let params = PocketParams {
+            depth: 5.0,
+            stepdown: 1.0,
+            stepover_percent: 50.0,
+            geometry: Some(vec!["fp1".into()]),
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert_eq!(value["geometry"][0], "fp1");
+    }
+
+    #[test]
+    fn pocket_geometry_round_trip_with_fingerprints() {
+        let params = PocketParams {
+            depth: 5.0,
+            stepdown: 1.0,
+            stepover_percent: 50.0,
+            geometry: Some(vec!["abc".into()]),
+        };
+        let json = serde_json::to_string(&params).expect("serialize");
+        let recovered: PocketParams = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(params, recovered);
+    }
+
+    #[test]
+    fn pocket_geometry_defaults_absent_in_old_json() {
+        let json = r#"{"depth": 5.0, "stepdown": 1.0, "stepoverPercent": 50.0}"#;
+        let params: PocketParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
+    }
+
+    #[test]
+    fn profile_geometry_absent_when_none() {
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: 2.5,
+            compensation_side: CompensationSide::Left,
+            geometry: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+    }
+
+    #[test]
+    fn profile_geometry_present_when_set() {
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: 2.5,
+            compensation_side: CompensationSide::Left,
+            geometry: Some(vec!["fp1".into()]),
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert_eq!(value["geometry"][0], "fp1");
+    }
+
+    #[test]
+    fn profile_geometry_round_trip_with_fingerprints() {
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: 2.5,
+            compensation_side: CompensationSide::Left,
+            geometry: Some(vec!["abc".into()]),
+        };
+        let json = serde_json::to_string(&params).expect("serialize");
+        let recovered: ProfileParams = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(params, recovered);
+    }
+
+    #[test]
+    fn profile_geometry_defaults_absent_in_old_json() {
+        let json = r#"{"depth": 10.0, "stepdown": 2.5, "compensationSide": "left"}"#;
+        let params: ProfileParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
+    }
+
+    #[test]
     fn cache_state_round_trip() {
         let op = Operation {
             id: Uuid::parse_str("aaaa0000-0000-0000-0000-000000000001").unwrap(),
@@ -419,6 +529,7 @@ mod tests {
                 depth: 5.0,
                 stepdown: 1.0,
                 stepover_percent: 50.0,
+                geometry: None,
             }),
             cache: CacheState {
                 key: Some("sha256:abcdef1234567890".to_string()),

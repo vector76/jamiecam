@@ -110,6 +110,7 @@ mod tests {
             depth: 10.0,
             stepdown: 2.0,
             stepover_percent: 50.0,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -136,6 +137,7 @@ mod tests {
             depth: 2.0,
             stepdown: 2.0,
             stepover_percent: 50.0,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -151,6 +153,7 @@ mod tests {
             depth: 5.0,
             stepdown: 2.0,
             stepover_percent: 50.0,
+            geometry: None,
         };
         let boundary = make_boundary(&stock);
         let result = pocket_passes(&stock, &params, 20.0, &boundary);

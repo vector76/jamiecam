@@ -311,6 +311,7 @@ mod tests {
                 depth: 10.0,
                 stepdown: 2.5,
                 compensation_side: CompensationSide::Left,
+                geometry: None,
             }),
         }
     }
@@ -326,6 +327,7 @@ mod tests {
                 depth: 15.0,
                 stepdown: 3.0,
                 stepover_percent: 45.0,
+                geometry: None,
             }),
         }
     }
@@ -382,6 +384,7 @@ mod tests {
                     depth: 8.0,
                     stepdown: 2.0,
                     stepover_percent: 50.0,
+                    geometry: None,
                 }),
             },
             &state.project,
