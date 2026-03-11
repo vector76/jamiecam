@@ -7,7 +7,7 @@ use crate::error::AppError;
 use crate::models::operation::DrillParams;
 use crate::models::stock::BoxDimensions;
 use crate::models::{StockDefinition, Vec3};
-use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
+use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind, DEFAULT_CLEARANCE_OFFSET};
 
 /// Generate linking and cutting passes for a drill operation.
 ///
@@ -35,7 +35,7 @@ pub fn drill_passes(stock: &StockDefinition, params: &DrillParams) -> Result<Vec
     let StockDefinition::Box(BoxDimensions { origin, height, .. }) = stock;
 
     let stock_top_z = origin.z + height;
-    let clearance_z = stock_top_z + 5.0;
+    let clearance_z = stock_top_z + DEFAULT_CLEARANCE_OFFSET;
     let drill_z = stock_top_z - params.depth;
 
     let mut passes = Vec::with_capacity(params.points.len() * 2);
@@ -192,7 +192,7 @@ mod tests {
         assert_eq!(cutting.cuts[1].move_kind, MoveKind::Feed); // plunge
         assert_eq!(cutting.cuts[2].move_kind, MoveKind::Rapid); // retract
 
-        let clearance_z = 15.0_f64;
+        let clearance_z = 10.0 + DEFAULT_CLEARANCE_OFFSET;
         let drill_z = 2.0_f64;
         assert!((cutting.cuts[0].position.z - clearance_z).abs() < 1e-9);
         assert!((cutting.cuts[1].position.z - drill_z).abs() < 1e-9);
@@ -262,7 +262,7 @@ mod tests {
             "second linking pass must have 2 cut points"
         );
         // Both linking cut points should be at clearance height
-        let clearance_z = 15.0_f64;
+        let clearance_z = 10.0 + DEFAULT_CLEARANCE_OFFSET;
         for cut in &passes[2].cuts {
             assert!((cut.position.z - clearance_z).abs() < 1e-9);
         }

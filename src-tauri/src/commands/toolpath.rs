@@ -13,7 +13,7 @@ use crate::models::operation::OperationParams;
 use crate::models::StockDefinition;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
-use crate::toolpath::types::{LinkingParams, PassKind, Toolpath};
+use crate::toolpath::types::{LinkingParams, PassKind, Toolpath, DEFAULT_CLEARANCE_OFFSET};
 use crate::toolpath::{linking, LineGeometryData, ToolpathStats};
 
 use super::{build_tool_infos, parse_entity_id, read_project, write_project};
@@ -190,7 +190,7 @@ pub fn calculate_toolpath_inner(
             raw_passes,
             &LinkingParams {
                 tool_diameter: tool.diameter,
-                clearance_z: stock_top_z + 5.0,
+                clearance_z: stock_top_z + DEFAULT_CLEARANCE_OFFSET,
                 lead_ratio: linking::DEFAULT_LEAD_RATIO,
                 arc_lead_in_radius,
                 arc_lead_out_radius,

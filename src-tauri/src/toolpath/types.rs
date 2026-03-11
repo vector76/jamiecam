@@ -94,6 +94,9 @@ pub enum ToolOrientation {
     },
 }
 
+/// Default clearance height offset above stock top (mm).
+pub const DEFAULT_CLEARANCE_OFFSET: f64 = 5.0;
+
 /// Parameters passed to the linking stage of toolpath generation.
 #[derive(Debug, Clone)]
 pub struct LinkingParams {

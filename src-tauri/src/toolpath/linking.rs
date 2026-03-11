@@ -165,6 +165,15 @@ fn vec3_scale(v: &Vec3, s: f64) -> Vec3 {
 // Arc lead-in / lead-out helpers
 // ---------------------------------------------------------------------------
 
+/// Number of segments to chord-approximate a quarter-circle arc with
+/// ≤ [`CHORDAL_ERROR`] error.  Returns 0 for degenerate (tiny) radii.
+fn arc_quarter_segments(radius: f64) -> usize {
+    if radius <= CHORDAL_ERROR / 2.0 {
+        return 0;
+    }
+    (std::f64::consts::FRAC_PI_2 / (1.0 - CHORDAL_ERROR / radius).max(-1.0).acos()).ceil() as usize
+}
+
 /// Quarter-circle arc approach into `first_cut_point` at `cut_z`.
 ///
 /// The arc is in the XY plane, tangent to the direction from `first_cut_point`
@@ -179,11 +188,7 @@ fn arc_approach_moves(
     radius: f64,
     cut_z: f64,
 ) -> Vec<CutPoint> {
-    if radius <= CHORDAL_ERROR / 2.0 {
-        return vec![];
-    }
-    let n_segs = (std::f64::consts::FRAC_PI_2 / (1.0 - CHORDAL_ERROR / radius).max(-1.0).acos())
-        .ceil() as usize;
+    let n_segs = arc_quarter_segments(radius);
     if n_segs == 0 {
         return vec![];
     }
@@ -234,11 +239,7 @@ fn arc_departure_moves(
     radius: f64,
     cut_z: f64,
 ) -> Vec<CutPoint> {
-    if radius <= CHORDAL_ERROR / 2.0 {
-        return vec![];
-    }
-    let n_segs = (std::f64::consts::FRAC_PI_2 / (1.0 - CHORDAL_ERROR / radius).max(-1.0).acos())
-        .ceil() as usize;
+    let n_segs = arc_quarter_segments(radius);
     if n_segs == 0 {
         return vec![];
     }
@@ -418,6 +419,11 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
         };
 
         // 1. LeadOut — based on the tail of the previous cutting pass.
+        //
+        // `lead_out_actual_xy` is the actual XY endpoint of the LeadOut pass
+        // (arc end or straight-feed end) and is used as the Linking lift-from
+        // position so the path is continuous.
+        let mut lead_out_actual_xy: Option<(f64, f64)> = None;
         if let Some(ref pos) = lead_out_pos {
             let lead_out_cuts = if let Some(arc_r) = params.arc_lead_out_radius {
                 let prev = &cutting_passes[i - 1];
@@ -432,27 +438,34 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                     tail.z,
                 )
             } else {
-                vec![feed_point(pos.clone())]
+                vec![]
             };
-            if !lead_out_cuts.is_empty() {
-                result.push(Pass {
-                    kind: PassKind::LeadOut,
-                    cuts: lead_out_cuts,
-                });
-            }
+            // Fall back to a straight feed when arc is degenerate (e.g. coincident
+            // points) so the LeadOut pass is never silently omitted.
+            let lead_out_cuts = if lead_out_cuts.is_empty() {
+                vec![feed_point(pos.clone())]
+            } else {
+                lead_out_cuts
+            };
+            lead_out_actual_xy = lead_out_cuts.last().map(|c| (c.position.x, c.position.y));
+            result.push(Pass {
+                kind: PassKind::LeadOut,
+                cuts: lead_out_cuts,
+            });
         }
 
         // 2. Linking — lift, traverse, descend.
         //
-        // The lift-from XY is the end of the LeadOut (if generated) or the tail
-        // of the previous cutting pass.  For the very first pass there is no
-        // predecessor, so the lift-from XY equals the approach XY, collapsing
-        // the first two rapid moves to the same position — intentional and safe.
+        // The lift-from XY is the actual end of the LeadOut (if generated) or
+        // the tail of the previous cutting pass.  For the very first pass there
+        // is no predecessor, so the lift-from XY equals the approach XY,
+        // collapsing the first two rapid moves to the same position —
+        // intentional and safe.
         let (approach_x, approach_y) = lead_in_approach_xy(pass, lead_offset);
         let cutting_z = pass.cuts[0].position.z;
 
-        let (from_x, from_y) = match &lead_out_pos {
-            Some(pos) => (pos.x, pos.y),
+        let (from_x, from_y) = match lead_out_actual_xy {
+            Some((x, y)) => (x, y),
             None if i > 0 => {
                 let prev = &cutting_passes[i - 1];
                 let tail = &prev.cuts[prev.cuts.len() - 1].position;
@@ -597,6 +610,29 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                 });
             }
         } else {
+            // For arc lead-in, descend to the arc start S = P − R·T + R·N so
+            // the Linking plunge ends exactly where the arc approach begins,
+            // keeping the path continuous at cutting depth.
+            let (desc_x, desc_y) =
+                if let Some(arc_r) = params.arc_lead_in_radius.filter(|_| pass.cuts.len() >= 2) {
+                    let p0 = &pass.cuts[0].position;
+                    let p1 = &pass.cuts[1].position;
+                    let ddx = p1.x - p0.x;
+                    let ddy = p1.y - p0.y;
+                    let dlen = (ddx * ddx + ddy * ddy).sqrt();
+                    if dlen >= 1e-12 {
+                        let (tx, ty) = (ddx / dlen, ddy / dlen);
+                        let (nx, ny) = (-ty, tx); // left perpendicular
+                        (
+                            p0.x - arc_r * tx + arc_r * nx,
+                            p0.y - arc_r * ty + arc_r * ny,
+                        )
+                    } else {
+                        (approach_x, approach_y)
+                    }
+                } else {
+                    (approach_x, approach_y)
+                };
             result.push(Pass {
                 kind: PassKind::Linking,
                 cuts: vec![
@@ -606,13 +642,13 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                         z: clearance_z,
                     }),
                     rapid_point(Vec3 {
-                        x: approach_x,
-                        y: approach_y,
+                        x: desc_x,
+                        y: desc_y,
                         z: clearance_z,
                     }),
                     rapid_point(Vec3 {
-                        x: approach_x,
-                        y: approach_y,
+                        x: desc_x,
+                        y: desc_y,
                         z: cutting_z,
                     }),
                 ],
@@ -626,14 +662,19 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                 let p1 = &pass.cuts[1].position;
                 arc_approach_moves((p0.x, p0.y, p0.z), (p1.x, p1.y, p1.z), arc_r, cutting_z)
             } else {
-                vec![feed_point(pass.cuts[0].position.clone())]
+                vec![]
             };
-            if !lead_in_cuts.is_empty() {
-                result.push(Pass {
-                    kind: PassKind::LeadIn,
-                    cuts: lead_in_cuts,
-                });
-            }
+            // Fall back to a straight feed when arc is degenerate so the
+            // LeadIn pass is never silently omitted.
+            let lead_in_cuts = if lead_in_cuts.is_empty() {
+                vec![feed_point(pass.cuts[0].position.clone())]
+            } else {
+                lead_in_cuts
+            };
+            result.push(Pass {
+                kind: PassKind::LeadIn,
+                cuts: lead_in_cuts,
+            });
         }
 
         // 4. Cutting pass (unchanged).
@@ -1408,6 +1449,95 @@ mod tests {
         for m in &moves {
             assert_eq!(m.move_kind, MoveKind::Feed);
         }
+    }
+
+    /// The Linking pass should end at the arc start S so the path is
+    /// continuous at cutting depth: no implicit XY jump between Linking and
+    /// LeadIn.
+    #[test]
+    fn arc_lead_in_linking_ends_at_arc_start() {
+        // Open pass along X; first cut at origin, second at (20, 0).
+        let passes = vec![make_open_pass(-5.0)];
+        let arc_r = 3.0_f64;
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: Some(arc_r),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        let lead_in = result.iter().find(|p| p.kind == PassKind::LeadIn).unwrap();
+
+        // The Linking last rapid point and the arc start (one chord before the
+        // first arc move) must be at the same XY — verified by comparing the
+        // linking descent XY against the expected S = P - R·T + R·N.
+        // P = (0,0), T = (1,0), N = (0,1) → S = (-R, R).
+        let linking_end = linking.cuts.last().unwrap();
+        assert!(
+            (linking_end.position.x - (-arc_r)).abs() < 1e-9
+                && (linking_end.position.y - arc_r).abs() < 1e-9,
+            "linking should descend to arc start S=({},{}) but got ({},{})",
+            -arc_r,
+            arc_r,
+            linking_end.position.x,
+            linking_end.position.y
+        );
+
+        // The last arc approach move must end at the first cut point (0,0).
+        let arc_end = lead_in.cuts.last().unwrap();
+        assert!(
+            arc_end.position.x.abs() < 1e-9 && arc_end.position.y.abs() < 1e-9,
+            "arc lead-in last point should be at first cut (0,0), got ({},{})",
+            arc_end.position.x,
+            arc_end.position.y
+        );
+    }
+
+    /// After an arc lead-out, the next Linking pass must rapid from the actual
+    /// arc endpoint, not the old straight-offset position.
+    #[test]
+    fn arc_lead_out_linking_lift_from_arc_end() {
+        let passes = vec![make_open_pass(-5.0), make_open_pass(-10.0)];
+        let arc_r = 3.0_f64;
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: Some(arc_r),
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+
+        // Find the LeadOut and the Linking that follows it.
+        let lead_out = result.iter().find(|p| p.kind == PassKind::LeadOut).unwrap();
+        let second_linking = result
+            .iter()
+            .filter(|p| p.kind == PassKind::Linking)
+            .nth(1)
+            .unwrap();
+
+        // The arc departure ends at some point E.
+        let arc_end = lead_out.cuts.last().unwrap();
+        // The second linking lift-from (first rapid point) must equal E.
+        let lift_from = &second_linking.cuts[0];
+        assert!(
+            (lift_from.position.x - arc_end.position.x).abs() < 1e-9
+                && (lift_from.position.y - arc_end.position.y).abs() < 1e-9,
+            "linking lift-from ({},{}) should match arc lead-out end ({},{})",
+            lift_from.position.x,
+            lift_from.position.y,
+            arc_end.position.x,
+            arc_end.position.y
+        );
     }
 
     #[test]
