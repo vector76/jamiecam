@@ -1,4 +1,92 @@
+use super::config::{PeckRetractMode, PostProcessorConfig};
+use super::formatter::format_coord;
+use super::PostProcessorError;
 use crate::toolpath::types::{MoveKind, Pass, PassKind, DEFAULT_CLEARANCE_OFFSET};
+
+/// Returns true if the config enables canned cycles.
+pub fn cycles_supported(config: &PostProcessorConfig) -> bool {
+    config.cycles.supported
+}
+
+/// Selects G83 vs G73 based on peck_retract_mode (defaults to Full/G83 when absent).
+/// Returns None if config does not have a peck code defined.
+pub fn peck_cycle_code(config: &PostProcessorConfig) -> Option<&str> {
+    match &config.cycles.peck_retract_mode {
+        Some(PeckRetractMode::ChipBreak) => config.cycles.chip_break.as_deref(),
+        _ => config.cycles.peck.as_deref(),
+    }
+}
+
+/// Returns the drill (non-peck) cycle code (e.g. "G81"), or None.
+pub fn drill_cycle_code(config: &PostProcessorConfig) -> Option<&str> {
+    config.cycles.drill.as_deref()
+}
+
+/// Returns the cycle cancel code (e.g. "G80"), or None.
+pub fn cycle_cancel_code(config: &PostProcessorConfig) -> Option<&str> {
+    config.cycles.cycle_cancel.as_deref()
+}
+
+/// Returns the R-plane-abs mode code (e.g. "G98"), or None.
+pub fn r_plane_abs_code(config: &PostProcessorConfig) -> Option<&str> {
+    config.cycles.r_plane_abs.as_deref()
+}
+
+/// Formats the cycle activation line for a drill cutting pass.
+/// Example Simple output:  "G98 G81 Z-12.5 R2 F150"
+/// Example Peck output:    "G98 G83 Z-12.5 R2 Q5 F150"
+/// (Exact number formatting depends on the config's decimal/trailing-zero settings.)
+/// Returns Err if config doesn't have required cycle codes.
+pub fn format_cycle_header(
+    params: &DrillCycleParams,
+    feed_rate: f64,
+    config: &PostProcessorConfig,
+) -> Result<String, PostProcessorError> {
+    let cycle_code = match &params.kind {
+        DrillCycleKind::Simple => drill_cycle_code(config).ok_or_else(|| {
+            PostProcessorError::NotSupported("drill cycle code not configured".to_string())
+        })?,
+        DrillCycleKind::Peck { .. } => peck_cycle_code(config).ok_or_else(|| {
+            PostProcessorError::NotSupported("peck cycle code not configured".to_string())
+        })?,
+    };
+
+    let dp = config.format.decimal_places;
+    let strip = !config.format.trailing_zeros;
+    let suppress_lz = config.format.leading_zero_suppression;
+    let sep = &config.format.word_separator;
+
+    let z_str = format_coord(params.drill_depth_z, dp, strip, suppress_lz);
+    let r_str = format_coord(params.r_plane_z, dp, strip, suppress_lz);
+    let f_str = format_coord(feed_rate, dp, strip, suppress_lz);
+
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(rpa) = r_plane_abs_code(config) {
+        parts.push(rpa.to_string());
+    }
+    parts.push(cycle_code.to_string());
+    parts.push(format!("{}{z_str}", config.axes.z));
+    parts.push(format!("R{r_str}"));
+
+    if let DrillCycleKind::Peck { increment } = &params.kind {
+        let q_str = format_coord(*increment, dp, strip, suppress_lz);
+        parts.push(format!("Q{q_str}"));
+    }
+
+    parts.push(format!("{}{f_str}", config.words.feed));
+
+    Ok(parts.join(sep))
+}
+
+/// Formats the cycle cancel line (e.g. "G80").
+pub fn format_cycle_cancel(config: &PostProcessorConfig) -> Result<String, PostProcessorError> {
+    cycle_cancel_code(config)
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            PostProcessorError::NotSupported("cycle cancel code not configured".to_string())
+        })
+}
 
 /// Detect whether a `Pass` carries a drill cycle signature.
 ///
@@ -91,7 +179,16 @@ pub fn classify_drill_pass(pass: &Pass) -> Option<DrillCycleParams> {
 mod tests {
     use super::*;
     use crate::models::Vec3;
+    use crate::postprocessor::PostProcessor;
     use crate::toolpath::types::{CutPoint, Pass, PassKind};
+
+    fn fanuc_config() -> crate::postprocessor::config::PostProcessorConfig {
+        PostProcessor::builtin("fanuc-0i").unwrap().config
+    }
+
+    fn grbl_config() -> crate::postprocessor::config::PostProcessorConfig {
+        PostProcessor::builtin("grbl").unwrap().config
+    }
 
     fn make_cut(x: f64, y: f64, z: f64, move_kind: MoveKind) -> CutPoint {
         CutPoint {
@@ -172,5 +269,62 @@ mod tests {
             ],
         };
         assert!(!is_drill_cutting_pass(&pass));
+    }
+
+    // fanuc-0i: decimal_places=3, trailing_zeros=false → strip trailing zeros
+    // format_coord(2.0, 3, true, false) = "2", format_coord(150.0, ...) = "150"
+
+    #[test]
+    fn test_format_header_simple_g81() {
+        let config = fanuc_config();
+        let params = DrillCycleParams {
+            kind: DrillCycleKind::Simple,
+            r_plane_z: 2.0,
+            drill_depth_z: -12.5,
+        };
+        let result = format_cycle_header(&params, 150.0, &config).unwrap();
+        assert!(result.contains("G81"), "expected G81 in: {result}");
+        assert!(result.contains("Z-12.5"), "expected Z-12.5 in: {result}");
+        assert!(result.contains("R2"), "expected R2 in: {result}");
+        assert!(result.contains("F150"), "expected F150 in: {result}");
+        assert!(!result.contains('Q'), "did not expect Q in: {result}");
+    }
+
+    #[test]
+    fn test_format_header_peck_g83() {
+        let config = fanuc_config();
+        let params = DrillCycleParams {
+            kind: DrillCycleKind::Peck { increment: 5.0 },
+            r_plane_z: 2.0,
+            drill_depth_z: -12.5,
+        };
+        let result = format_cycle_header(&params, 150.0, &config).unwrap();
+        assert!(result.contains("G83"), "expected G83 in: {result}");
+        assert!(result.contains("Q5"), "expected Q5 in: {result}");
+    }
+
+    #[test]
+    fn test_cycles_not_supported_returns_false() {
+        let config = grbl_config();
+        assert!(!cycles_supported(&config));
+    }
+
+    #[test]
+    fn test_peck_retract_mode_selects_g83() {
+        let config = fanuc_config();
+        assert_eq!(peck_cycle_code(&config), Some("G83"));
+    }
+
+    #[test]
+    fn test_format_cycle_cancel_returns_g80() {
+        let config = fanuc_config();
+        let result = format_cycle_cancel(&config).unwrap();
+        assert_eq!(result, "G80");
+    }
+
+    #[test]
+    fn test_format_cycle_cancel_err_when_not_configured() {
+        let config = grbl_config();
+        assert!(format_cycle_cancel(&config).is_err());
     }
 }
