@@ -378,3 +378,70 @@ TEST_CASE("intersection of non-overlapping squares returns CG_ERR_NO_RESULT") {
 }
 
 } // TEST_SUITE poly_boolean
+
+// ---------------------------------------------------------------------------
+// Test suite: shape section at Z
+// ---------------------------------------------------------------------------
+
+TEST_SUITE("shape_section_at_z") {
+
+TEST_CASE("section of 10x10x10 box at mid-height returns points") {
+    CgShapeId id = cg_load_step(STEP_PATH);
+    REQUIRE(id != CG_NULL_ID);
+
+    CgPoint3* pts = nullptr;
+    size_t    cnt = 0;
+    CgError   err = cg_shape_section_at_z(id, 5.0, &pts, &cnt);
+    INFO("last error: " << last_error());
+
+    REQUIRE(err == CG_OK);
+    REQUIRE(pts != nullptr);
+    // A rectangular cross-section has 4 edges → 8 endpoint pairs
+    REQUIRE(cnt > 0);
+    CHECK(cnt % 2 == 0);   // always pairs of start/end points
+    CHECK(cnt >= 8);        // at least 4 edges × 2 endpoints
+
+    cg_section_free(pts);
+    cg_shape_free(id);
+}
+
+TEST_CASE("section outside box bounds returns CG_ERR_NO_RESULT") {
+    CgShapeId id = cg_load_step(STEP_PATH);
+    REQUIRE(id != CG_NULL_ID);
+
+    CgPoint3* pts = nullptr;
+    size_t    cnt = 0;
+    CgError   err = cg_shape_section_at_z(id, 999.0, &pts, &cnt);
+
+    CHECK(err == CG_ERR_NO_RESULT);
+    CHECK(pts == nullptr);
+    CHECK(cnt == 0);
+
+    cg_shape_free(id);
+}
+
+TEST_CASE("null out_points returns CG_ERR_NULL_HANDLE") {
+    CgShapeId id = cg_load_step(STEP_PATH);
+    REQUIRE(id != CG_NULL_ID);
+
+    size_t  cnt = 0;
+    CgError err = cg_shape_section_at_z(id, 5.0, nullptr, &cnt);
+    CHECK(err == CG_ERR_NULL_HANDLE);
+
+    cg_shape_free(id);
+}
+
+TEST_CASE("CG_NULL_ID returns CG_ERR_NULL_HANDLE") {
+    CgPoint3* pts = nullptr;
+    size_t    cnt = 0;
+    CgError   err = cg_shape_section_at_z(CG_NULL_ID, 5.0, &pts, &cnt);
+    CHECK(err == CG_ERR_NULL_HANDLE);
+    CHECK(pts == nullptr);
+    CHECK(cnt == 0);
+}
+
+TEST_CASE("cg_section_free of nullptr does not crash") {
+    cg_section_free(nullptr);
+}
+
+} // TEST_SUITE shape_section_at_z

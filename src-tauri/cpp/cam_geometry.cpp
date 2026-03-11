@@ -16,7 +16,9 @@
 
 // ── OCCT includes ────────────────────────────────────────────────────────────
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepAlgoAPI_Section.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
@@ -25,6 +27,7 @@
 #include <Bnd_Box.hxx>
 #include <GCPnts_TangentialDeflection.hxx>
 #include <GProp_GProps.hxx>
+#include <Geom_Curve.hxx>
 #include <GeomAdaptor_Surface.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
@@ -40,6 +43,7 @@
 #include <TopoDS_Wire.hxx>
 #include <TopLoc_Location.hxx>
 #include <gp_Dir.hxx>
+#include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
@@ -587,12 +591,64 @@ double cg_shape_distance(CgShapeId /*a*/, CgShapeId /*b*/) {
     return -1.0;
 }
 
-CgError cg_shape_section_at_z(CgShapeId /*id*/, double /*z_value*/,
+CgError cg_shape_section_at_z(CgShapeId id, double z_value,
                                CgPoint3** out_points, size_t* out_count) {
-    set_last_error("not implemented");
     if (out_points) *out_points = nullptr;
     if (out_count)  *out_count  = 0;
-    return CG_ERR_NO_RESULT;
+    if (id == CG_NULL_ID || !out_points || !out_count) {
+        set_last_error("cg_shape_section_at_z: null argument");
+        return CG_ERR_NULL_HANDLE;
+    }
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+
+        gp_Pnt origin(0.0, 0.0, z_value);
+        gp_Dir normal(0.0, 0.0, 1.0);
+        gp_Pln plane(origin, normal);
+        TopoDS_Face planeFace = BRepBuilderAPI_MakeFace(plane, -1e6, 1e6, -1e6, 1e6).Face();
+
+        BRepAlgoAPI_Section sectionOp(shape, planeFace, Standard_False);
+        sectionOp.ComputePCurveOn1(Standard_True);
+        sectionOp.Approximation(Standard_True);
+        sectionOp.Build();
+        if (!sectionOp.IsDone()) {
+            set_last_error("BRepAlgoAPI_Section failed");
+            return CG_ERR_OCCT_EXCEPTION;
+        }
+
+        std::vector<CgPoint3> pts;
+        TopExp_Explorer edgeExp(sectionOp.Shape(), TopAbs_EDGE);
+        for (; edgeExp.More(); edgeExp.Next()) {
+            const TopoDS_Edge& edge = TopoDS::Edge(edgeExp.Current());
+            Standard_Real tFirst, tLast;
+            Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, tFirst, tLast);
+            if (curve.IsNull()) continue;
+            gp_Pnt pStart = curve->Value(tFirst);
+            gp_Pnt pEnd   = curve->Value(tLast);
+            pts.push_back({ pStart.X(), pStart.Y(), pStart.Z() });
+            pts.push_back({ pEnd.X(),   pEnd.Y(),   pEnd.Z()   });
+        }
+
+        if (pts.empty()) {
+            set_last_error("no intersection");
+            return CG_ERR_NO_RESULT;
+        }
+
+        CgPoint3* arr = new CgPoint3[pts.size()];
+        std::copy(pts.begin(), pts.end(), arr);
+        *out_points = arr;
+        *out_count  = pts.size();
+        return CG_OK;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_shape_section_at_z: invalid shape ID");
+        return CG_ERR_NO_RESULT;
+    } catch (const Standard_Failure& e) {
+        set_last_error(std::string("cg_shape_section_at_z exception: ") + e.GetMessageString());
+        return CG_ERR_NO_RESULT;
+    } catch (...) {
+        set_last_error("cg_shape_section_at_z: unknown exception");
+        return CG_ERR_NO_RESULT;
+    }
 }
 
 void cg_section_free(CgPoint3* points) {
