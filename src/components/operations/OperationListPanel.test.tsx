@@ -136,6 +136,7 @@ describe('OperationListPanel — rendering', () => {
     expect(screen.getByRole('button', { name: /\+ profile/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /\+ drill/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeInTheDocument()
   })
 
   it('renders nothing when operation list is empty', () => {
@@ -154,6 +155,7 @@ describe('OperationListPanel — add buttons', () => {
     expect(screen.getByRole('button', { name: /\+ profile/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ drill/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeDisabled()
   })
 
   it('enables add buttons when tools exist', () => {
@@ -162,6 +164,7 @@ describe('OperationListPanel — add buttons', () => {
     expect(screen.getByRole('button', { name: /\+ profile/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ pocket/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ drill/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).not.toBeDisabled()
   })
 
   it('add profile calls addOperation with type profile and first tool ID', async () => {
@@ -201,6 +204,30 @@ describe('OperationListPanel — add buttons', () => {
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'drill', toolId: TOOL_ID })
+    ))
+  })
+
+  it('add z-level roughing button is disabled when no tools exist', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_NO_TOOLS })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeDisabled()
+  })
+
+  it('add z-level roughing calls addOperation with correct defaults', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    const zlrOp: Operation = { id: 'new-id', name: 'Z-Level Roughing', enabled: true, toolId: TOOL_ID, type: 'z_level_roughing', params: { depth: 5.0, stepdown: 1.0, stepover: 0.5 } }
+    vi.mocked(opsApi.addOperation).mockResolvedValue(zlrOp)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: /\+ z-level roughing/i }))
+
+    await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'z_level_roughing',
+        toolId: TOOL_ID,
+        params: expect.objectContaining({ depth: 5.0, stepdown: 1.0, stepover: 0.5 }),
+      })
     ))
   })
 

@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,24 +127,24 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing') {
     const tool = tools[0]
     if (!tool) return
 
-    let params: OperationInput['params']
+    let input: OperationInput
     if (type === 'profile') {
-      params = { depth: 1.0, stepdown: 0.5, compensationSide: 'left' }
+      input = { name: 'New profile', toolId: tool.id, type, params: { depth: 1.0, stepdown: 0.5, compensationSide: 'left' } }
     } else if (type === 'pocket') {
-      params = { depth: 1.0, stepdown: 0.5, stepoverPercent: 50.0 }
+      input = { name: 'New pocket', toolId: tool.id, type, params: { depth: 1.0, stepdown: 0.5, stepoverPercent: 50.0 } }
+    } else if (type === 'z_level_roughing') {
+      input = {
+        name: 'Z-Level Roughing',
+        toolId: tool.id,
+        type: 'z_level_roughing',
+        params: { depth: 5.0, stepdown: 1.0, stepover: 0.5 } as ZLevelRoughingParams,
+      }
     } else {
-      params = { depth: 10.0, points: [] }
-    }
-
-    const input: OperationInput = {
-      name: `New ${type}`,
-      toolId: tool.id,
-      type,
-      params,
+      input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
     }
 
     try {
@@ -231,6 +231,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Drill
+        </button>
+        <button
+          onClick={() => void handleAdd('z_level_roughing')}
+          disabled={noTools}
+        >
+          + Z-Level Roughing
         </button>
       </div>
     </div>
