@@ -122,7 +122,7 @@ export interface WorkCoordinateSystem {
 /** Parameters for a Profile (contour) operation. */
 export interface ProfileParams {
   depth: number
-  stepdown?: number
+  stepdown?: number | null
   compensationSide: 'left' | 'right' | 'center'
   geometry?: string[] | null
   arcLeadInRadius?: number | null

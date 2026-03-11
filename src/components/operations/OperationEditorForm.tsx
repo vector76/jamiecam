@@ -118,6 +118,31 @@ export function OperationEditorForm({ operationId }: Props) {
             onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
         </div>
         <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
+          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
+          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
+          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
+          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+            onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
+          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+            onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-stepover">Stepover (%)</label>
           <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
             onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
@@ -172,8 +197,33 @@ export function OperationEditorForm({ operationId }: Props) {
         </div>
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-stepdown">Step-down (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
-            onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
+          <input id="oef-stepdown" type="number" defaultValue={params.stepdown ?? ''}
+            onBlur={(e) => void save({ params: { ...params, stepdown: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
+          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
+          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
+          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+            onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
+          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+            onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
+          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+            onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
         </div>
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-compensation">Compensation side</label>

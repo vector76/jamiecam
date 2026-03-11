@@ -190,6 +190,72 @@ describe('OperationEditorForm — profile form', () => {
     await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
     expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
   })
+
+  it('renders all five entry motion fields for a profile operation', async () => {
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+  })
+
+  it('entry motion fields are empty by default when params have no values', async () => {
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Arc lead-in radius (mm)')).toHaveValue(null)
+    expect(screen.getByLabelText('Arc lead-out radius (mm)')).toHaveValue(null)
+    expect(screen.getByLabelText('Helical entry radius (mm)')).toHaveValue(null)
+    expect(screen.getByLabelText('Helical entry pitch (mm)')).toHaveValue(null)
+    expect(screen.getByLabelText('Ramp entry angle (°)')).toHaveValue(null)
+  })
+
+  it('arc lead-in radius blur with a value calls editOperation with arcLeadInRadius set', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Arc lead-in radius (mm)'), { target: { value: '2.5' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ arcLeadInRadius: 2.5 }) }),
+    ))
+  })
+
+  it('arc lead-in radius blur with blank sends null', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Arc lead-in radius (mm)'), { target: { value: '' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ arcLeadInRadius: null }) }),
+    ))
+  })
+
+  it('profile stepdown blur with blank sends null', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PROFILE_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Step-down (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Step-down (mm)'), { target: { value: '' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PROFILE_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepdown: null }) }),
+    ))
+  })
 })
 
 // ── Pocket form rendering ──────────────────────────────────────────────────────
@@ -221,6 +287,46 @@ describe('OperationEditorForm — pocket form', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
     expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
+  })
+
+  it('renders all five entry motion fields for a pocket operation', async () => {
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+  })
+
+  it('arc lead-out radius blur with a value calls editOperation with arcLeadOutRadius set', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(POCKET_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Arc lead-out radius (mm)'), { target: { value: '3' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      POCKET_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ arcLeadOutRadius: 3 }) }),
+    ))
+  })
+
+  it('arc lead-out radius blur with blank sends null', async () => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(POCKET_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Arc lead-out radius (mm)'), { target: { value: '' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      POCKET_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ arcLeadOutRadius: null }) }),
+    ))
   })
 
   it('resets input values when operationId changes to a different pocket operation', async () => {
