@@ -43,7 +43,7 @@ fn profile_algorithm_golden_matches() {
         feed_rate_override: None,
         params: OperationParams::Profile(ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
         }),

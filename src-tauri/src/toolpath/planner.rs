@@ -206,7 +206,7 @@ mod tests {
             feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
-                stepdown: 2.5,
+                stepdown: Some(2.5),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
             }),
@@ -233,7 +233,7 @@ mod tests {
             feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 5.0,
-                stepdown: 2.0,
+                stepdown: Some(2.0),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
             }),

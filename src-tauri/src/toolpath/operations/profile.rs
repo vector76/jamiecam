@@ -36,16 +36,22 @@ pub fn profile_passes(
     };
 
     let mut passes = Vec::new();
-    let mut n = 1usize;
 
-    loop {
-        let current_z = (stock_top_z - n as f64 * params.stepdown).max(floor_z);
-        passes.push(contour_pass(&contour, current_z));
-
-        if current_z <= floor_z {
-            break;
+    match params.stepdown {
+        Some(sd) if sd > 0.0 => {
+            let mut n = 1usize;
+            loop {
+                let current_z = (stock_top_z - n as f64 * sd).max(floor_z);
+                passes.push(contour_pass(&contour, current_z));
+                if current_z <= floor_z {
+                    break;
+                }
+                n += 1;
+            }
         }
-        n += 1;
+        _ => {
+            passes.push(contour_pass(&contour, floor_z));
+        }
     }
 
     Ok(passes)
@@ -103,7 +109,7 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
         };
@@ -131,7 +137,7 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
         };
@@ -147,7 +153,7 @@ mod tests {
         let stock = make_box_stock(10.0, 10.0, 5.0);
         let params = ProfileParams {
             depth: 5.0,
-            stepdown: 2.0,
+            stepdown: Some(2.0),
             compensation_side: CompensationSide::Left,
             geometry: None,
         };
@@ -165,13 +171,13 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params_left = ProfileParams {
             depth: 5.0,
-            stepdown: 5.0,
+            stepdown: Some(5.0),
             compensation_side: CompensationSide::Left,
             geometry: None,
         };
         let params_center = ProfileParams {
             depth: 5.0,
-            stepdown: 5.0,
+            stepdown: Some(5.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
         };
@@ -211,7 +217,7 @@ mod tests_no_bindings {
         });
         let params = ProfileParams {
             depth: 5.0,
-            stepdown: 5.0,
+            stepdown: Some(5.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
         };
@@ -225,5 +231,107 @@ mod tests_no_bindings {
             (first_x - 0.0_f64).abs() < 1e-9,
             "Center compensation must use raw boundary x=0.0, got {first_x}"
         );
+    }
+
+    fn make_stock_10() -> StockDefinition {
+        StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 50.0,
+            depth: 50.0,
+            height: 10.0,
+        })
+    }
+
+    #[test]
+    fn profile_none_stepdown_produces_single_pass_at_floor() {
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: None,
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        assert_eq!(
+            passes.len(),
+            1,
+            "None stepdown must produce exactly one pass"
+        );
+        // stock origin z=0, height=10 → top=10, floor=top-depth=0.0
+        let z = passes[0].cuts[0].position.z;
+        assert!(
+            (z - 0.0_f64).abs() < 1e-9,
+            "single pass must be at floor z=0.0, got {z}"
+        );
+    }
+
+    #[test]
+    fn profile_zero_stepdown_produces_single_pass_at_floor() {
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: Some(0.0),
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        assert_eq!(
+            passes.len(),
+            1,
+            "zero stepdown must produce exactly one pass"
+        );
+        let z = passes[0].cuts[0].position.z;
+        assert!(
+            (z - 0.0_f64).abs() < 1e-9,
+            "single pass must be at floor z=0.0, got {z}"
+        );
+    }
+
+    #[test]
+    fn profile_negative_stepdown_produces_single_pass_at_floor() {
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: Some(-1.0),
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        assert_eq!(
+            passes.len(),
+            1,
+            "negative stepdown must produce exactly one pass"
+        );
+    }
+
+    #[test]
+    fn profile_stepdown_absent_from_json_when_none() {
+        use crate::models::operation::ProfileParams;
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: None,
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("stepdown").is_none(),
+            "stepdown must be absent from JSON when None"
+        );
+    }
+
+    #[test]
+    fn profile_stepdown_backward_compat_deserialize() {
+        // Old JSON with a numeric stepdown field must still deserialize to Some(v)
+        let json = r#"{"depth": 10.0, "stepdown": 2.5, "compensationSide": "center"}"#;
+        let params: ProfileParams = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(params.stepdown, Some(2.5));
     }
 }

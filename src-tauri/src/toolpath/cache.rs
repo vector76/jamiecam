@@ -94,7 +94,7 @@ mod tests {
             feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
-                stepdown: 2.5,
+                stepdown: Some(2.5),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
             }),
@@ -141,7 +141,7 @@ mod tests {
         let mut op2 = make_operation();
         op2.params = OperationParams::Profile(ProfileParams {
             depth: 15.0, // changed
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
         });

@@ -27,8 +27,9 @@ pub enum CompensationSide {
 pub struct ProfileParams {
     /// Cut depth in project units.
     pub depth: f64,
-    /// Maximum depth per pass in project units.
-    pub stepdown: f64,
+    /// Maximum depth per pass in project units; `None` or `Some(v <= 0)` → single pass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stepdown: Option<f64>,
     /// Which side of the path the tool compensates to.
     pub compensation_side: CompensationSide,
     /// Face fingerprints that define the machining boundary.
@@ -199,7 +200,7 @@ mod tests {
             feed_rate_override: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
-                stepdown: 2.5,
+                stepdown: Some(2.5),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
             }),
@@ -535,7 +536,7 @@ mod tests {
     fn profile_geometry_absent_when_none() {
         let params = ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
         };
@@ -550,7 +551,7 @@ mod tests {
     fn profile_geometry_present_when_set() {
         let params = ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: Some(vec!["fp1".into()]),
         };
@@ -562,7 +563,7 @@ mod tests {
     fn profile_geometry_round_trip_with_fingerprints() {
         let params = ProfileParams {
             depth: 10.0,
-            stepdown: 2.5,
+            stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: Some(vec!["abc".into()]),
         };
