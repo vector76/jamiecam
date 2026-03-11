@@ -34,6 +34,10 @@ vi.mock('./scene', () => ({
     frameModel: vi.fn(),
     setToolpathLines: vi.fn(),
     setOrbitEnabled: vi.fn(),
+    snapTop: vi.fn(),
+    snapFront: vi.fn(),
+    snapRight: vi.fn(),
+    snapIsometric: vi.fn(),
   })),
 }))
 
@@ -47,7 +51,16 @@ function latestMgr() {
   const results = vi.mocked(SceneManager).mock.results
   const last = results.at(-1)
   if (!last || last.type !== 'return') throw new Error('SceneManager not yet constructed')
-  return last.value as unknown as { scene: THREE.Scene; dispose: ReturnType<typeof vi.fn>; frameModel: ReturnType<typeof vi.fn>; setToolpathLines: ReturnType<typeof vi.fn> }
+  return last.value as unknown as {
+    scene: THREE.Scene
+    dispose: ReturnType<typeof vi.fn>
+    frameModel: ReturnType<typeof vi.fn>
+    setToolpathLines: ReturnType<typeof vi.fn>
+    snapTop: ReturnType<typeof vi.fn>
+    snapFront: ReturnType<typeof vi.fn>
+    snapRight: ReturnType<typeof vi.fn>
+    snapIsometric: ReturnType<typeof vi.fn>
+  }
 }
 
 const QUAD_MESH: MeshData = {
@@ -178,5 +191,77 @@ describe('Viewport — face selection mode', () => {
     })
 
     expect(container.firstChild).toBeInstanceOf(HTMLDivElement)
+  })
+})
+
+describe('Viewport — keyboard shortcuts', () => {
+  function fireKey(key: string) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  }
+
+  it('T key calls snapTop', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    fireKey('t')
+    expect(mgr.snapTop).toHaveBeenCalledOnce()
+  })
+
+  it('F key calls snapFront', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    fireKey('f')
+    expect(mgr.snapFront).toHaveBeenCalledOnce()
+  })
+
+  it('R key calls snapRight', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    fireKey('r')
+    expect(mgr.snapRight).toHaveBeenCalledOnce()
+  })
+
+  it('I key calls snapIsometric', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    fireKey('i')
+    expect(mgr.snapIsometric).toHaveBeenCalledOnce()
+  })
+
+  it('uppercase T key also calls snapTop', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    fireKey('T')
+    expect(mgr.snapTop).toHaveBeenCalledOnce()
+  })
+
+  it('ignores keydown when an INPUT is focused', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    fireKey('t')
+    expect(mgr.snapTop).not.toHaveBeenCalled()
+    document.body.removeChild(input)
+  })
+
+  it('ignores keydown when a TEXTAREA is focused', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    const ta = document.createElement('textarea')
+    document.body.appendChild(ta)
+    ta.focus()
+    fireKey('f')
+    expect(mgr.snapFront).not.toHaveBeenCalled()
+    document.body.removeChild(ta)
+  })
+
+  it('removes keydown listener on unmount', () => {
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    const { unmount } = render(<Viewport />)
+    unmount()
+    const keydownRemovals = removeSpy.mock.calls.filter(([type]) => type === 'keydown')
+    expect(keydownRemovals.length).toBeGreaterThan(0)
+    removeSpy.mockRestore()
   })
 })

@@ -108,12 +108,25 @@ export function Viewport({ style }: ViewportProps) {
       }
     }
 
+    function onKeyDown(event: KeyboardEvent) {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      switch (event.key.toUpperCase()) {
+        case 'T': mgrRef.current?.snapTop(); break
+        case 'F': mgrRef.current?.snapFront(); break
+        case 'R': mgrRef.current?.snapRight(); break
+        case 'I': mgrRef.current?.snapIsometric(); break
+      }
+    }
+
     container.addEventListener('mousemove', onMouseMove)
     container.addEventListener('click', onClick)
+    window.addEventListener('keydown', onKeyDown)
 
     return () => {
       container.removeEventListener('mousemove', onMouseMove)
       container.removeEventListener('click', onClick)
+      window.removeEventListener('keydown', onKeyDown)
       mgrRef.current = null
       mgr.dispose()
       if (container.contains(canvas)) container.removeChild(canvas)
