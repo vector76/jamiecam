@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-07. Based on git history (115 commits, branch `main`)._
+_Last updated: 2026-03-11. Based on git history (141 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -47,7 +47,15 @@ milestones during `calculate_toolpath` via a Tauri `AppHandle`, a
 `OperationListPanel` that subscribes to events filtered to the active
 calculation row.
 
-Full test suite: 350 Rust tests, 235 frontend tests — all passing.
+Phase 2 (2.5D Operations) is **partially complete**. The first chunk of Phase 2
+deliverables has been implemented: the OCCT Z-section primitive
+(`cg_shape_section_at_z`), Z-Level Roughing operation (data model, algorithm,
+IPC, UI, golden test), viewport standard view snap shortcuts (T/F/R/I keys with
+animated transitions), perspective/orthographic projection toggle (P key and
+toolbar button), and display mode selector (Shaded / Shaded+Edges / Wireframe /
+Transparent) are all implemented and tested.
+
+Full test suite: 377 Rust tests, 316 frontend tests — all passing.
 
 ---
 
@@ -128,7 +136,8 @@ frontend types are in `src/api/types.ts`.
 **Operations** (`97c6ac2`, `9c04c01`, updated `eebfd3d`, `f5e0efc`, `88473eb`)
 - `Operation` struct (common fields: `id`, `name`, `enabled`, `tool_id`,
   `spindle_speed_override`, `feed_rate_override`, `cache: CacheState`) +
-  `OperationParams` enum (`Profile`, `Pocket`, `Drill`) flattened alongside it
+  `OperationParams` enum (`Profile`, `Pocket`, `Drill`; extended with
+  `ZLevelRoughing` in Phase 2) flattened alongside it
 - `PocketParams` and `ProfileParams` both carry `geometry: Option<Vec<String>>`
   — the face fingerprints that define the machining boundary; serialized with
   `#[serde(default, skip_serializing_if = "Option::is_none")]` for backward
@@ -379,6 +388,7 @@ immediately once algorithms are written.
 - Tests in `OperationEditorForm.test.tsx` cover pocket, profile, and drill
   forms; including add/remove point, override inputs, and geometry section
   (Select Faces / Done Selecting / Clear) — 9 new tests for geometry section
+  (z_level_roughing branch added in Phase 2, bringing total to 42 tests)
 
 **Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`, `9706ff9`, `085504f`, `8491f7f`, `31e1286`, `d9139d1`)
 - Row click sets `selectedOperationId`; selected row highlighted
@@ -386,9 +396,10 @@ immediately once algorithms are written.
 - Checkbox per row toggles `enabled`: fetches full operation via
   `listOperations()`, flips `enabled`, calls `editOperation`, refreshes snapshot
 - Delete button per row: calls `deleteOperation`, refreshes snapshot
-- Add operation buttons at the bottom (+ Profile, + Pocket, + Drill): disabled
-  when no tools exist; uses first available tool; calls `addOperation` with
-  sensible defaults, refreshes snapshot
+- Add operation buttons at the bottom (+ Profile, + Pocket, + Drill; extended
+  with + Z-Level Roughing in Phase 2): disabled when no tools exist; uses
+  first available tool; calls `addOperation` with sensible defaults, refreshes
+  snapshot
 - Reorder buttons (▲/▼) per row: call `reorderOperations` to move the operation
   up or down in the list; ▲ disabled for the first row, ▼ disabled for the last
 - Calculate button per row: enabled for pocket and profile operations when
@@ -673,9 +684,160 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
 
 ---
 
-## Phases 2–5
+## Phase 2: 2.5D Operations — Partial
 
-Nothing from Phases 2–5 is implemented. `src-tauri/src/simulation/` does not
+### OCCT Z-section primitive (`ca53015`, `0924ca7`)
+
+**C++ implementation** (`cam_geometry.cpp`)
+- `cg_shape_section_at_z(id, z_value, CgPoint3** out_points, size_t* out_count)
+  → CgError` — slices an OCCT B-rep solid at a given Z plane using
+  `BRepAlgoAPI_Section`, walks result edges, and writes a heap-allocated flat
+  array of `CgPoint3` pairs (connected edge segments) into `*out_points`;
+  caller frees with `cg_section_free(CgPoint3*)`
+- New error guards: null output-pointer guard, `CG_NULL_ID` guard, Standard_Failure
+  exception chain
+- 5 new C++ doctests: mid-height section of box fixture, out-of-bounds section,
+  null out_points guard, CG_NULL_ID guard, `cg_section_free(nullptr)` safety
+
+**Rust safe wrapper** (`src-tauri/src/geometry/safe.rs`)
+- `shape_section_at_z(shape: &OcctShape, z: f64) -> Result<Vec<Vec<(f64, f64)>>, GeometryError>`
+- Private helper `stitch_segments_into_loops()` handles mixed-orientation edge
+  segments from OCCT by traversing each segment in either direction and
+  chain-linking them into closed (or open) loops; a chain that closes on itself
+  has the duplicate endpoint removed; a chain with no continuation is kept as-is
+  (open)
+- `GeometryError::NotImplemented` variant added for the stub path
+- Dual-compile: real FFI behind `#[cfg(cam_geometry_bindings)]`; stub returning
+  `GeometryError::NotImplemented` otherwise
+- 2 new Rust unit tests: stub returns NotImplemented (ungated); box section at
+  mid-height returns a single loop (OCCT-gated)
+
+### Z-Level Roughing (ZLR) — complete end-to-end (`db86fdf`–`87b89ce`)
+
+**Data model** (`src-tauri/src/models/operation.rs`)
+- `ZLevelRoughingParams` struct: `depth: f64`, `stepdown: f64`, `stepover: f64`
+  (fraction 0–1), `geometry: Option<Vec<String>>`; tagged as `"type":
+  "z_level_roughing"` in the `OperationParams` enum
+- `AppError::InvalidInput(String)` new variant for parameter validation errors
+- Serde round-trip test: `zlevel_roughing_round_trips` verifies discriminant and
+  camelCase serialization
+
+**Algorithm** (`src-tauri/src/toolpath/operations/zlevel_roughing.rs`)
+- `zlevel_roughing_passes(stock, params, tool_diameter, shape)` → `Result<Vec<Pass>>`
+- Validates all params (stepdown > 0, depth > 0, stepover in (0, 1])
+- Integer-indexed Z-level loop ensures floor depth is always machined even when
+  depth is not a multiple of stepdown
+- At each Z level: calls `shape_section_at_z()` to get OCCT section boundary;
+  falls back to stock extents when shape is `None` or OCCT returns
+  `GeometryError::NotImplemented` (no bindings); skips (continues to next level)
+  when OCCT returns an empty section (geometry doesn't intersect that Z plane);
+  other geometry errors propagate as `AppError`
+- Applies inward tool-radius offset then concentric stepover offsets until polygon
+  collapses (identical strategy to pocket clearing)
+- Registered in `planner.rs` (new `ZLevelRoughing` arm), `commands/project.rs`,
+  and `commands/toolpath.rs`
+- 3 ungated unit tests: zero stepdown rejection, zero depth rejection,
+  out-of-range stepover rejection
+- 6 OCCT-gated unit tests: produces passes for simple stock, Z levels span depth,
+  floor Z always machined when depth not multiple of stepdown,
+  `zlr_stock_boundary_produces_correct_z_levels`, `zlr_geometry_uses_section_boundaries`,
+  collapses when tool too large
+
+**IPC and TypeScript types** (`a3f4ce1`)
+- `z_level_roughing` case handled in `calculate_toolpath_inner` (linking
+  dispatch match arm at lines 157-159) and in `planner::plan()` (ZLevelRoughing
+  arm); `get_toolpath_geometry_inner` requires no ZLR-specific code — it
+  operates generically on any stored `Toolpath`; no extra IPC commands needed
+- `ZLevelRoughingParams` interface in `src/api/types.ts`; `'z_level_roughing'`
+  added to `Operation`, `OperationInput`, and `OperationSummary` union types
+
+**Operation editor UI** (`39211ad`, `26a171d`)
+- `OperationEditorForm.tsx`: new `z_level_roughing` branch with tool selector,
+  depth/stepdown/stepover (displayed as % → stored as fraction), geometry section
+  (Select Faces / Done / Clear), and feed/speed override inputs
+- `OperationListPanel.tsx`: `+ Z-Level Roughing` button (disabled when no tools),
+  default params depth=5.0, stepdown=1.0, stepover=0.5
+- 10 new OperationEditorForm tests; 2 new OperationListPanel tests
+
+**Golden test** (`87b89ce`)
+- `src-tauri/tests/zlevel_roughing_golden.rs` (gated on `cam_geometry_bindings`) —
+  loads `box.step`, runs ZLR with depth=5/stepdown=2/stepover=0.4; compares
+  serialized passes against committed golden fixture
+- Golden fixture: `tests/fixtures/zlevel_roughing_golden.json` (197 lines)
+
+### Viewport standard views (`1a752b2`, `728476a`)
+
+**SceneManager methods** (`src/viewport/scene.ts`)
+- `snapToView(position, up)` — smoothly animates camera position and up-vector
+  over 300 ms using `@tweenjs/tween.js`; cancels any in-flight tween; preserves
+  orbit distance; `_tweenGroup` driven each animation frame
+- Convenience methods: `snapTop()` (camera at +Z, up=(0,1,0), looks down),
+  `snapFront()` (camera at -Y, up=(0,0,1), looks in from front),
+  `snapRight()` (camera at +X, up=(0,0,1), looks in from right),
+  `snapIsometric()` (camera at (1,−1,1) normalized, up=(0,0,1))
+
+**Keyboard handler** (`src/viewport/Viewport.tsx`)
+- `T` / `F` / `R` / `I` keys call the corresponding SceneManager snap methods
+- Guards against `INPUT`, `TEXTAREA`, `SELECT` focus; cleanup on unmount
+- 8 Viewport keyboard-shortcut tests (T/F/R/I routing, uppercase T, INPUT guard,
+  TEXTAREA guard, remove-listener-on-unmount); note: the 2 P-key tests also live
+  in the `keyboard shortcuts` describe block but are counted under projection toggle
+- 5 new SceneManager mock tests (`scene-snap-mock.test.ts`): verify tween target
+  position for each view including no-op when already at target
+- 12 real-tween SceneManager tests in `scene.test.ts`: position/up animation,
+  orbit distance preservation, mid-flight cancellation, dispose cleanup
+
+### Viewport projection toggle (`d25ef8a`, `4ce177d`, `1f07a1c`)
+
+**SceneManager methods** (`src/viewport/scene.ts`)
+- `getProjectionMode()` → `'perspective' | 'orthographic'`
+- `toggleProjection()` — switches between `THREE.PerspectiveCamera` and
+  `THREE.OrthographicCamera`; syncs position, up vector, and frustum size;
+  reassigns `OrbitControls.object`; calls `controls.update()`
+- `_animate()` dispatches render calls through a private `_activeCamera()` helper
+- Bug fix (`1f07a1c`): `_onResize()` ortho frustum used hardcoded 250 half-size
+  instead of `orthographicCamera.top`; fixed to use current ortho half-height
+
+**Store and UI** (`src/store/viewportStore.ts`, `src/viewport/Viewport.tsx`)
+- `projectionMode: 'perspective' | 'orthographic'` field + `setProjectionMode()`
+  action in `viewportStore`
+- `P` key toggles projection via store; toolbar button shows current mode
+- `useEffect` syncs store → SceneManager only when modes disagree (avoids flicker)
+- 14 SceneManager projection tests (13 in `projection toggle` describe block +
+  1 `orthographic resize consistency` test verifying the `_onResize` bug fix);
+  6 Viewport projection tests: P-key ×2 (in keyboard shortcuts describe), toolbar
+  button ×3, projection mode sync ×3 — across three describe blocks
+
+### Viewport display mode selector (`8c0b2a8`, `b5edf28`, `eccd2f1`)
+
+**SceneManager** (`src/viewport/scene.ts`)
+- `setModelMesh(mesh)` — stores reference for display-mode changes; disposes
+  stale edge overlay when mesh changes
+- `setDisplayMode(mode: DisplayMode)` — implements all four modes:
+  - `'shaded'`: `MeshStandardMaterial` opaque, wireframe=false, transparent=false, opacity=1
+  - `'shaded-edges'`: shaded fill + lazy `EdgesGeometry` / `LineSegments` overlay
+    (built once, reused)
+  - `'wireframe'`: `material.wireframe = true`, no fill
+  - `'transparent'`: `material.transparent = true`, `opacity = 0.3`
+  - Each mode fully resets material state to avoid stale values
+- `dispose()` tears down edge overlay to prevent GPU leaks
+
+**Store and UI** (`src/store/viewportStore.ts`, `src/viewport/Viewport.tsx`)
+- `DisplayMode = 'shaded' | 'shaded-edges' | 'wireframe' | 'transparent'`
+  type and `displayMode` field (default `'shaded'`) in `viewportStore`;
+  replaces the previous string literal
+- `setModelMesh` + `setDisplayMode` called in mesh-update effect so current mode
+  applies immediately to newly loaded models
+- `<select>` toolbar control: Shaded / Shaded + Edges / Wireframe / Transparent
+- 6 Viewport display-mode tests (select rendered, all four options present, store
+  sync on change, SceneManager `setDisplayMode` called, `setModelMesh` on mesh
+  load/clear); SceneManager display-mode tests in `scene.test.ts`
+
+---
+
+## Phases 3–5
+
+Nothing from Phases 3–5 is implemented. `src-tauri/src/simulation/` does not
 yet exist. `kinematics.rs` and `cycles.rs` are not created; the post-processor
 engine returns `PostProcessorError::NotSupported` when a 5-axis path is
 encountered.
@@ -686,40 +848,44 @@ encountered.
 
 | Test file | Coverage |
 |---|---|
-| `src/viewport/scene.test.ts` | SceneManager: scene graph (lights, GridHelper), cameras (perspective/orthographic, Z-up, FOV, clip planes), OrbitControls config, dispose (idempotent), frameModel — 22 tests across 5 describe blocks |
+| `src/viewport/scene.test.ts` | SceneManager: scene graph (lights, GridHelper), cameras (perspective/orthographic, Z-up, FOV, clip planes), OrbitControls config, dispose (idempotent), frameModel; projection toggle (mode state, camera sync, frustum sizing, controls reassignment); orthographic resize consistency (left/right respect toggled top/bottom after resize); snap view animation (position, up, distance preservation, mid-flight cancel); display mode (shaded/wireframe/transparent/edges, edge overlay reuse, dispose cleanup) — 55 tests |
+| `src/viewport/scene-snap-mock.test.ts` | SceneManager snap direction tests using Tween mock: snapTop/Front/Right/Isometric target positions, no-op when already at target — 5 tests |
 | `src/viewport/controls.test.ts` | `createAxisTriad`: returns named Group, 3 ArrowHelper children, correct axis directions and colours (red/green/blue), independent instances — 11 tests |
 | `src/viewport/modelMesh.test.ts` | `buildModelMesh`: returns THREE.Mesh, vertex/index counts, position attribute data, normals, bounding sphere, MeshStandardMaterial, single-triangle edge case — 9 tests |
 | `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null input, empty positions, LineSegments instance type, position attribute count, color attribute count, vertexColors on material — 6 tests |
 | `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks. Note: `useWcs`, `useNotifications`, and `useSelectedOperationId` selectors are implemented but not directly tested here (covered implicitly via component tests). |
-| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`), `setMeshData`, `setOrbitTarget`, `setZoom` — 13 original tests; plus 10 new tests covering `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors` — 23 tests total. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
+| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
-| `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 45 tests across 10 describe blocks |
-| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (inputs/defaults/save-on-blur+change/overrides), pocket form (tool select/inputs/overrides/remount-on-id-change), tool change saves, input blur saves, drill form (inputs/add-point/remove-point/overrides), geometry section (Select Faces/Done Selecting/Clear for pocket and profile; not present for drill), error handling — 32 tests across 8 describe blocks |
+| `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6 incl. Z-Level Roughing button), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 47 tests across 10 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form, pocket form, tool change saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), error handling — 42 tests across 9 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
 | `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
 | `src/components/tools/ToolLibraryPanel.test.tsx` | ToolLibraryPanel: rendering, add/cancel/submit form, edit pre-populate/submit, delete, error notifications — 12 tests |
-| `src/viewport/Viewport.test.tsx` | Viewport: mount/unmount (4), mesh updates — add/replace/remove ModelGroup, frameModel called (4), face selection mode — entering does not throw (1); SceneManager mock includes `setOrbitEnabled`, `camera`, and `setToolpathLines` — 9 tests |
+| `src/viewport/Viewport.test.tsx` | Six describe blocks: mount/unmount (4), mesh updates (4), face selection mode (1), keyboard shortcuts — T/F/R/I routing, uppercase T, INPUT/TEXTAREA focus guards, remove-listener on unmount, P-key projection toggle ×2 (10), toolbar button — renders Perspective label, click toggles, label updates (3), projection mode sync — no-op on mount, syncs on store change, skips when modes agree (3), display mode — select rendered, all options, store sync, SceneManager calls, setModelMesh on load/clear (6) — 31 tests |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
 | `src/components/gcode/GCodePreviewPanel.test.tsx` | GCodePreviewPanel: placeholder when no op selected, placeholder when NotFound, renders G-code text, Export button calls exportGcode, PP selector populated from listPostProcessors — 5 tests |
-| `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean (doctest) |
+| `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean + `cg_shape_section_at_z` (doctest) |
 | `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i, linuxcnc |
 | `src-tauri/tests/pocket_golden.rs` | Golden-file integration: pocket algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/profile_golden.rs` | Golden-file integration: profile algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
 | `src-tauri/tests/toolpath_cache.rs` | End-to-end cache round-trip: save/load preserves toolpath + validity; param mutation marks stale (ungated; uses drill operations) |
+| `src-tauri/tests/zlevel_roughing_golden.rs` | Golden-file integration: Z-Level Roughing algorithm JSON output (`#[cfg(cam_geometry_bindings)]`; box.step, depth=5/stepdown=2/stepover=0.4) |
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration); plus two OCCT-gated integration tests in `commands/toolpath.rs` for geometry-selection end-to-end and invalid-fingerprint error |
-| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `cache.rs` key stability + sensitivity (4 tests), `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback + geometry-none-uses-stock + geometry-some-no-shape-error + progress-events emission, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors, non-peck geometry, peck Z-levels, multi-hole ordering |
+| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `cache.rs` key stability + sensitivity (4 tests), `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback + geometry-none-uses-stock + geometry-some-no-shape-error + progress-events emission, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
 | `src-tauri/src/project/` (inline) | `serialization.rs` round-trips, toolpath ZIP entry write (positive + negative), round-trip with valid toolpath, graceful load with missing entry |
 | `src-tauri/src/geometry/clipper.rs` (inline) | Stub path always; integration path (offset/boolean) gated on bindings |
-| `src-tauri/src/` (inline) | `error.rs` variants, `state.rs` defaults |
+| `src-tauri/src/geometry/safe.rs` (inline) | `shape_section_at_z` stub returns NotImplemented; OCCT-gated integration test verifies single loop from box mid-height section |
+| `src-tauri/src/` (inline) | `error.rs` variants (incl. `InvalidInput`), `state.rs` defaults |
 
-Golden-file tests cover the post-processor output stage (G-code) and all three
-CAM algorithm output stages (pocket, profile, and drill toolpath JSON). The
-pocket and profile golden tests are gated on `cam_geometry_bindings`; the drill
-golden test is ungated since drilling requires no geometry bindings.
+Golden-file tests cover the post-processor output stage (G-code) and all four
+CAM algorithm output stages (pocket, profile, drill, and Z-Level Roughing
+toolpath JSON). The pocket, profile, and ZLR golden tests are gated on
+`cam_geometry_bindings`; the drill golden test is ungated since drilling
+requires no geometry bindings.
 
 ---
 
@@ -731,17 +897,18 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src-tauri/src/main.rs` | Thin binary entry point (calls `lib.rs::run()`) |
 | `src-tauri/src/lib.rs` | Tauri app init, IPC command registration |
 | `src-tauri/src/state.rs` | `AppState`, `Project` (in-memory document with all fields), `LoadedModel` (path + checksum + `MeshData` + `shape: Option<OcctShape>`), `UserPreferences` (recent files list, not yet persisted); `Project.toolpaths: HashMap<Uuid, Toolpath>` |
-| `src-tauri/src/error.rs` | `AppError` enum (thiserror, adjacently-tagged serde); variants: `FileNotFound`, `GeometryImport`, `Io`, `ProjectLoad`, `ProjectSave`, `UnsupportedFormat`, `NotFound`, `PostProcessor` |
+| `src-tauri/src/error.rs` | `AppError` enum (thiserror, adjacently-tagged serde); variants: `FileNotFound`, `GeometryImport`, `Io`, `ProjectLoad`, `ProjectSave`, `UnsupportedFormat`, `NotFound`, `PostProcessor`, `InvalidInput` |
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
-| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`), `ProfileParams`, `PocketParams`, `DrillParams`, `DrillPoint`, `CompensationSide`, `CacheState`, `CachedStats` |
+| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`), `ProfileParams`, `PocketParams`, `DrillParams`, `DrillPoint`, `ZLevelRoughingParams`, `CompensationSide`, `CacheState`, `CachedStats` |
 | `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData` |
 | `src-tauri/src/toolpath/linking.rs` | `link_passes()` — lift/traverse/descend between cutting passes |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — resolves geometry boundary, dispatches to algorithm, returns passes + stats; linking and `Toolpath` assembly happen in `calculate_toolpath_inner` |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
 | `src-tauri/src/toolpath/operations/drill.rs` | Drill cycle algorithm (linking + cutting passes per hole, peck support) |
+| `src-tauri/src/toolpath/operations/zlevel_roughing.rs` | Z-Level Roughing algorithm (OCCT section at each Z level + concentric offset per level; stock-boundary fallback) |
 | `src-tauri/src/toolpath/cache.rs` | `compute_cache_key()` — deterministic SHA-256 cache key for toolpath operations |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
 | `src-tauri/src/postprocessor/config.rs` | TOML schema deserialization + validation |
@@ -760,7 +927,7 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src-tauri/src/commands/operations.rs` | Operation CRUD commands; `OperationInput` (add/edit input type) |
 | `src-tauri/src/commands/project.rs` | `get_project_snapshot`; `ProjectSnapshot`, `ToolSummary`, `OperationSummary` IPC output types |
 | `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/IGES/STL); `import_with_shape()` returns live `OcctShape` for STEP/IGES |
-| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape` (with `unsafe impl Sync`), `OcctMesh` (with `Drop` impls); `MeshData` struct (incl. `face_groups`); `FaceGroup` struct; `GeometryError` enum |
+| `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape` (with `unsafe impl Sync`), `OcctMesh` (with `Drop` impls); `MeshData` struct (incl. `face_groups`); `FaceGroup` struct; `GeometryError` enum (variants incl. `NotImplemented`); `shape_section_at_z()` + `stitch_segments_into_loops()` |
 | `src-tauri/src/geometry/faces.rs` | `FaceInfo`, `FaceDescriptor` structs; `enumerate_faces()` (skips non-planar); `face_boundary(shape, face_idx)`; `face_fingerprint()` (64-char hex SHA-256); dual-compiled (OCCT / stub) |
 | `src-tauri/src/geometry/ffi.rs` | FFI bindings module: includes bindgen output written to `$OUT_DIR` at build time |
 | `src-tauri/src/project/types.rs` | On-disk serialization types: `ProjectMeta`, `SourceModelRef`, `ProjectFile` (mirrors `project.json` schema; distinct from the in-memory `Project` in `state.rs`) |
@@ -786,11 +953,12 @@ golden test is ungated since drilling requires no geometry bindings.
 | `tests/integration/pocket/toolpath.json` | Golden pocket algorithm output (50×50×10 mm, 10 mm tool) |
 | `tests/integration/profile/toolpath.json` | Golden profile algorithm output (50×50×10 mm, 6 mm tool, Left compensation) |
 | `tests/integration/drill/toolpath.json` | Golden drill algorithm output (50×50×10 mm, 5 mm drill, 5 holes, 3 mm peck) |
+| `tests/fixtures/zlevel_roughing_golden.json` | Golden Z-Level Roughing output (box.step, depth=5/stepdown=2/stepover=0.4) |
 
 ### TypeScript frontend
 | File | Purpose |
 |---|---|
-| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `ToolpathProgressEvent`) |
+| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'` |
 | `src/api/file.ts` | File operation IPC wrappers |
 | `src/api/tools.ts` | Tool CRUD IPC wrappers |
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
@@ -798,21 +966,21 @@ golden test is ungated since drilling requires no geometry bindings.
 | `src/api/geometry.ts` | `getModelFaces()` IPC wrapper |
 | `src/api/toolpath.ts` | `listPostProcessors`, `getGcodePreview`, `exportGcode`, `calculateToolpath`, `getToolpathGeometry`, `listenToolpathProgress` |
 | `src/store/projectStore.ts` | Project Zustand store; selector hooks: `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock`, `useWcs`, `useNotifications`, `useSelectedOperationId`, `usePushNotification` |
-| `src/store/viewportStore.ts` | Viewport Zustand store (incl. `toolpathGeometry`, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`) |
-| `src/viewport/scene.ts` | Three.js renderer + scene + `toolpathGroup` + `setToolpathLines()` + `setOrbitEnabled()` + camera getter |
-| `src/viewport/controls.ts` | OrbitControls (Z-up) |
+| `src/store/viewportStore.ts` | Viewport Zustand store (incl. `toolpathGeometry`, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `projectionMode`, `displayMode`) |
+| `src/viewport/scene.ts` | Three.js renderer + scene + `toolpathGroup` + `setToolpathLines()` + `setOrbitEnabled()` + camera getter; projection toggle (`toggleProjection`, `getProjectionMode`); standard view snaps (`snapTop/Front/Right/Isometric`) with Tween animation; display mode (`setDisplayMode`, `setModelMesh`) |
+| `src/viewport/controls.ts` | `createAxisTriad()` — RGB ArrowHelper group (X=red, Y=green, Z=blue) added to the main scene |
 | `src/viewport/modelMesh.ts` | `MeshData` → `BufferGeometry` |
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
-| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations, row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, and drill parameter forms; feed/speed override inputs; dynamic drill-points table |
+| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section |
 | `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
 | `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
 | `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
-| `src/components/toolbar/Toolbar.tsx` | File operation toolbar |
+| `src/components/toolbar/Toolbar.tsx` | File operation toolbar (Open Model, New Project, Save Project, Open Project) |
 | `src/components/common/Notifications.tsx` | Dismissible toast overlay with auto-dismiss after 5 s |
 | `src/components/gcode/GCodePreviewPanel.tsx` | G-code preview with PP selector + Export |
 
 ---
 
-*Related documents: `development-roadmap.md`, `system-architecture.md`, `gcode-postprocessor.md`*
+*Related documents: `development-roadmap.md`, `system-architecture.md`, `geometry-kernel.md`, `viewport-design.md`*
