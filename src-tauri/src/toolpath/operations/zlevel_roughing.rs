@@ -137,6 +137,11 @@ mod tests {
             stepdown: 0.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = zlevel_roughing_passes(&stock, &params, 5.0, None);
         assert!(matches!(result, Err(AppError::InvalidInput(_))));
@@ -150,6 +155,11 @@ mod tests {
             stepdown: 1.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = zlevel_roughing_passes(&stock, &params, 5.0, None);
         assert!(matches!(result, Err(AppError::InvalidInput(_))));
@@ -163,6 +173,11 @@ mod tests {
             stepdown: 1.0,
             stepover: 0.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         assert!(matches!(
             zlevel_roughing_passes(&stock, &params_zero, 5.0, None),
@@ -174,6 +189,11 @@ mod tests {
             stepdown: 1.0,
             stepover: 1.1,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         assert!(matches!(
             zlevel_roughing_passes(&stock, &params_over, 5.0, None),
@@ -190,6 +210,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let passes = zlevel_roughing_passes(&stock, &params, 5.0, None).expect("should succeed");
         assert!(!passes.is_empty(), "expected non-empty passes");
@@ -204,6 +229,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let passes = zlevel_roughing_passes(&stock, &params, 5.0, None).expect("should succeed");
 
@@ -232,6 +262,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let passes = zlevel_roughing_passes(&stock, &params, 5.0, None).expect("should succeed");
 
@@ -265,6 +300,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let passes = zlevel_roughing_passes(&stock, &params, 6.0, None).unwrap();
         assert!(!passes.is_empty());
@@ -301,6 +341,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.4,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let passes = zlevel_roughing_passes(&stock, &params, 6.0, Some(&shape)).unwrap();
         assert!(!passes.is_empty());
@@ -324,6 +369,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = zlevel_roughing_passes(&stock, &params, 20.0, None);
         assert!(

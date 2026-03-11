@@ -97,6 +97,11 @@ mod tests {
                 stepdown: Some(2.5),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         }
@@ -144,6 +149,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         });
         let k1 = compute_cache_key(&op1, &tool, &stock, Some("abc123"), "v1");
         let k2 = compute_cache_key(&op2, &tool, &stock, Some("abc123"), "v1");

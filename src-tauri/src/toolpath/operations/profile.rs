@@ -112,6 +112,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -140,6 +145,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -156,6 +166,11 @@ mod tests {
             stepdown: Some(2.0),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let result = profile_passes(&stock, &params, 20.0, &boundary);
@@ -174,12 +189,22 @@ mod tests {
             stepdown: Some(5.0),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let params_center = ProfileParams {
             depth: 5.0,
             stepdown: Some(5.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let passes_left =
@@ -220,6 +245,11 @@ mod tests_no_bindings {
             stepdown: Some(5.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary)
@@ -254,6 +284,11 @@ mod tests_no_bindings {
             stepdown: None,
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
@@ -278,6 +313,11 @@ mod tests_no_bindings {
             stepdown: Some(0.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
@@ -301,6 +341,11 @@ mod tests_no_bindings {
             stepdown: Some(-1.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
@@ -319,6 +364,11 @@ mod tests_no_bindings {
             stepdown: None,
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert!(
@@ -344,6 +394,11 @@ mod tests_no_bindings {
             stepdown: None,
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
@@ -370,6 +425,11 @@ mod tests_no_bindings {
             stepdown: Some(2.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
@@ -396,6 +456,11 @@ mod tests_no_bindings {
             stepdown: Some(3.0),
             compensation_side: CompensationSide::Center,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
         let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");

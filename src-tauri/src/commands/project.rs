@@ -380,6 +380,11 @@ mod tests {
                     stepdown: 3.0,
                     stepover_percent: 45.0,
                     geometry: None,
+                    arc_lead_in_radius: None,
+                    arc_lead_out_radius: None,
+                    helical_entry_radius: None,
+                    helical_entry_pitch: None,
+                    ramp_entry_angle_deg: None,
                 }),
                 cache: CacheState::default(),
             });
@@ -395,6 +400,11 @@ mod tests {
                     stepdown: Some(2.5),
                     compensation_side: CompensationSide::Left,
                     geometry: None,
+                    arc_lead_in_radius: None,
+                    arc_lead_out_radius: None,
+                    helical_entry_radius: None,
+                    helical_entry_pitch: None,
+                    ramp_entry_angle_deg: None,
                 }),
                 cache: CacheState::default(),
             });

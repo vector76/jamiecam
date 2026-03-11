@@ -33,6 +33,11 @@ fn zlevel_roughing_golden_matches() {
         stepdown: 2.0,
         stepover: 0.4,
         geometry: None,
+        arc_lead_in_radius: None,
+        arc_lead_out_radius: None,
+        helical_entry_radius: None,
+        helical_entry_pitch: None,
+        ramp_entry_angle_deg: None,
     };
 
     let passes = zlevel_roughing_passes(&stock, &params, 6.0, Some(&shape))

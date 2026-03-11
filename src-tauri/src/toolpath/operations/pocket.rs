@@ -111,6 +111,11 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -138,6 +143,11 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let passes =
@@ -154,6 +164,11 @@ mod tests {
             stepdown: 2.0,
             stepover_percent: 50.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let boundary = make_boundary(&stock);
         let result = pocket_passes(&stock, &params, 20.0, &boundary);

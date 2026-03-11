@@ -35,6 +35,16 @@ pub struct ProfileParams {
     /// Face fingerprints that define the machining boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
 }
 
 /// Parameters for a Pocket operation.
@@ -50,6 +60,16 @@ pub struct PocketParams {
     /// Face fingerprints that define the machining boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
 }
 
 /// A single drill point location.
@@ -87,6 +107,16 @@ pub struct ZLevelRoughingParams {
     /// Face fingerprints that define the machining boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
 }
 
 /// Type-discriminated operation parameters.
@@ -185,6 +215,11 @@ mod tests {
                 stepdown: 2.0,
                 stepover: 0.5,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         }
@@ -203,6 +238,11 @@ mod tests {
                 stepdown: Some(2.5),
                 compensation_side: CompensationSide::Left,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         }
@@ -221,6 +261,11 @@ mod tests {
                 stepdown: 3.0,
                 stepover_percent: 45.0,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         }
@@ -274,6 +319,11 @@ mod tests {
             stepdown: 1.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let op = OperationParams::ZLevelRoughing(params);
         let json = serde_json::to_string(&op).unwrap();
@@ -407,6 +457,11 @@ mod tests {
                 stepdown: 1.0,
                 stepover_percent: 50.0,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         };
@@ -435,6 +490,11 @@ mod tests {
                 stepdown: 1.0,
                 stepover_percent: 50.0,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState::default(),
         };
@@ -489,6 +549,11 @@ mod tests {
             stepdown: 1.0,
             stepover_percent: 50.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert!(
@@ -504,6 +569,11 @@ mod tests {
             stepdown: 1.0,
             stepover_percent: 50.0,
             geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert_eq!(value["geometry"][0], "fp1");
@@ -516,6 +586,11 @@ mod tests {
             stepdown: 1.0,
             stepover_percent: 50.0,
             geometry: Some(vec!["abc".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let json = serde_json::to_string(&params).expect("serialize");
         let recovered: PocketParams = serde_json::from_str(&json).expect("deserialize");
@@ -539,6 +614,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert!(
@@ -554,6 +634,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert_eq!(value["geometry"][0], "fp1");
@@ -566,6 +651,11 @@ mod tests {
             stepdown: Some(2.5),
             compensation_side: CompensationSide::Left,
             geometry: Some(vec!["abc".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let json = serde_json::to_string(&params).expect("serialize");
         let recovered: ProfileParams = serde_json::from_str(&json).expect("deserialize");
@@ -589,6 +679,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert!(
@@ -604,6 +699,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let value = serde_json::to_value(&params).expect("to_value");
         assert_eq!(value["geometry"][0], "fp1");
@@ -616,6 +716,11 @@ mod tests {
             stepdown: 2.0,
             stepover: 0.5,
             geometry: Some(vec!["abc".into()]),
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let json = serde_json::to_string(&params).expect("serialize");
         let recovered: ZLevelRoughingParams = serde_json::from_str(&json).expect("deserialize");
@@ -646,6 +751,11 @@ mod tests {
                 stepdown: 1.0,
                 stepover_percent: 50.0,
                 geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
             }),
             cache: CacheState {
                 key: Some("sha256:abcdef1234567890".to_string()),

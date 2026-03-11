@@ -6,6 +6,9 @@
 use crate::models::Vec3;
 use crate::toolpath::types::{CutPoint, LinkingParams, MoveKind, Pass, PassKind};
 
+/// Default lead-in/lead-out ratio (as a fraction of tool diameter).
+pub const DEFAULT_LEAD_RATIO: f64 = 0.4;
+
 fn vec3_sub(a: &Vec3, b: &Vec3) -> Vec3 {
     Vec3 {
         x: a.x - b.x,
@@ -204,6 +207,11 @@ mod tests {
             tool_diameter: 6.0,
             clearance_z: 5.0,
             lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = link_passes(passes, &params);
 
@@ -233,6 +241,11 @@ mod tests {
             tool_diameter: 6.0,
             clearance_z: 5.0,
             lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = link_passes(passes, &params);
 
@@ -257,6 +270,11 @@ mod tests {
             tool_diameter: 6.0,
             clearance_z: 5.0,
             lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         };
         let result = link_passes(passes, &params);
 

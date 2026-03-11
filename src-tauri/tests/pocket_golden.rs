@@ -44,6 +44,11 @@ fn pocket_algorithm_golden_matches() {
             stepdown: 2.0,
             stepover_percent: 50.0,
             geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
         }),
         cache: CacheState::default(),
     };
