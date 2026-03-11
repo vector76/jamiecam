@@ -3,7 +3,7 @@ use super::config::{ArcFormat, PostProcessorConfig};
 use super::modal::ModalState;
 use super::PostProcessorError;
 use super::{
-    arcs,
+    arcs, cycles,
     formatter::{format_coord, render_template, TemplateContext},
 };
 use crate::toolpath::types::{CutPoint, MoveKind, PassKind, ToolOrientation};
@@ -108,19 +108,105 @@ pub fn assemble(
             last_tool = Some(toolpath.tool_number);
         }
 
-        for pass in &toolpath.passes {
-            if options.include_comments {
-                let label = pass_comment_label(&pass.kind, config);
-                push_raw(&mut out, &label, &mut line_num, config);
-            }
+        // Classify the toolpath as a drill cycle toolpath if cycles are supported
+        // and every cutting pass looks like a drill cycle pattern.
+        let is_drill_toolpath = config.cycles.supported
+            && toolpath
+                .passes
+                .iter()
+                .filter(|p| p.kind == PassKind::Cutting)
+                .all(cycles::is_drill_cutting_pass)
+            && toolpath.passes.iter().any(|p| p.kind == PassKind::Cutting);
 
-            for cut in &pass.cuts {
-                if let Some(ToolOrientation::FiveAxis { .. }) = &cut.tool_orientation {
-                    return Err(PostProcessorError::NotSupported(
-                        "5-axis orientation not supported".to_string(),
-                    ));
+        if is_drill_toolpath {
+            let mut cycle_active = false;
+            for pass in &toolpath.passes {
+                if options.include_comments {
+                    let label = pass_comment_label(&pass.kind, config);
+                    push_raw(&mut out, &label, &mut line_num, config);
                 }
-                emit_cut(cut, toolpath, &mut modal, &mut line_num, config, &mut out)?;
+                match &pass.kind {
+                    PassKind::Linking if !cycle_active => {
+                        // Position tool over first hole; emit all cut-points normally.
+                        for cut in &pass.cuts {
+                            if let Some(ToolOrientation::FiveAxis { .. }) = &cut.tool_orientation {
+                                return Err(PostProcessorError::NotSupported(
+                                    "5-axis orientation not supported".to_string(),
+                                ));
+                            }
+                            emit_cut(cut, toolpath, &mut modal, &mut line_num, config, &mut out)?;
+                        }
+                    }
+                    PassKind::Cutting if !cycle_active => {
+                        // First cutting pass: emit cycle header, update modal, activate cycle.
+                        let params = cycles::classify_drill_pass(pass).ok_or_else(|| {
+                            PostProcessorError::Assembly(
+                                "failed to classify drill pass".to_string(),
+                            )
+                        })?;
+                        let header =
+                            cycles::format_cycle_header(&params, toolpath.feed_rate, config)?;
+                        push_raw(&mut out, &header, &mut line_num, config);
+                        // Update motion modal so subsequent coordinate-only lines suppress it.
+                        let cycle_code = match &params.kind {
+                            cycles::DrillCycleKind::Simple => cycles::drill_cycle_code(config),
+                            cycles::DrillCycleKind::Peck { .. } => cycles::peck_cycle_code(config),
+                        };
+                        if let Some(code) = cycle_code {
+                            modal.should_emit_motion(code);
+                        }
+                        cycle_active = true;
+                    }
+                    PassKind::Linking if cycle_active => {
+                        // Emit only the last cut-point (XY over next hole); Z is managed by G98.
+                        if let Some(last_cut) = pass.cuts.last() {
+                            let pos = &last_cut.position;
+                            let mut bb = BlockBuilder::new();
+                            if modal.should_emit_coord('X', pos.x) {
+                                bb = bb.axis('X', pos.x);
+                            }
+                            if modal.should_emit_coord('Y', pos.y) {
+                                bb = bb.axis('Y', pos.y);
+                            }
+                            let ln = next_line_num(&mut line_num, config);
+                            out.push_str(&bb.build().render(ln, config));
+                        }
+                    }
+                    PassKind::Cutting if cycle_active => {
+                        // Cycle already triggered by the preceding XY move; suppress entirely.
+                    }
+                    _ => {
+                        // Other pass kinds (LeadIn/LeadOut/SpringPass): emit normally.
+                        for cut in &pass.cuts {
+                            if let Some(ToolOrientation::FiveAxis { .. }) = &cut.tool_orientation {
+                                return Err(PostProcessorError::NotSupported(
+                                    "5-axis orientation not supported".to_string(),
+                                ));
+                            }
+                            emit_cut(cut, toolpath, &mut modal, &mut line_num, config, &mut out)?;
+                        }
+                    }
+                }
+            }
+            if cycle_active {
+                let cancel = cycles::format_cycle_cancel(config)?;
+                push_raw(&mut out, &cancel, &mut line_num, config);
+            }
+        } else {
+            for pass in &toolpath.passes {
+                if options.include_comments {
+                    let label = pass_comment_label(&pass.kind, config);
+                    push_raw(&mut out, &label, &mut line_num, config);
+                }
+
+                for cut in &pass.cuts {
+                    if let Some(ToolOrientation::FiveAxis { .. }) = &cut.tool_orientation {
+                        return Err(PostProcessorError::NotSupported(
+                            "5-axis orientation not supported".to_string(),
+                        ));
+                    }
+                    emit_cut(cut, toolpath, &mut modal, &mut line_num, config, &mut out)?;
+                }
             }
         }
     }
