@@ -25,10 +25,12 @@ fn chord_len_for_radius(radius: f64) -> f64 {
 /// Number of straight segments per full revolution for a given `radius`.
 ///
 /// Returns 0 when `radius` is so small that the chordal-error formula would
-/// require negative radicand (radius < CHORDAL_ERROR/2).
+/// yield a zero or negative radicand (radius ≤ CHORDAL_ERROR/2).  At exactly
+/// `radius == CHORDAL_ERROR/2` the chord length is zero, which would produce
+/// +inf and then usize::MAX via Rust's saturating float-to-int cast.
 fn segments_per_revolution(radius: f64) -> usize {
     let e = CHORDAL_ERROR;
-    if radius < e / 2.0 {
+    if radius <= e / 2.0 {
         return 0;
     }
     let cl = chord_len_for_radius(radius);
@@ -159,6 +161,65 @@ fn vec3_scale(v: &Vec3, s: f64) -> Vec3 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Ramp entry helpers
+// ---------------------------------------------------------------------------
+
+/// Produces linear feed moves descending from `retract_z` to `cut_z` along
+/// the XY direction from `xy_start` toward `xy_end`.
+///
+/// The required horizontal distance is `depth / tan(angle_deg)`.  When the
+/// segment is shorter than that distance the ramp is clamped to the segment
+/// length (steepening the effective angle) and a warning is logged.
+/// The number of steps is chosen so that individual Z increments ≤ 0.5 mm.
+fn ramp_descent_moves(
+    xy_start: (f64, f64),
+    xy_end: (f64, f64),
+    retract_z: f64,
+    cut_z: f64,
+    angle_deg: f64,
+) -> Vec<CutPoint> {
+    let depth = (retract_z - cut_z).abs();
+    // angle_deg must be in (0°, 90°): at 0° the ramp is horizontal (infinite
+    // length), at ≥ 90° tan becomes zero or negative and required_horiz would
+    // be infinite or negative, producing moves in the wrong direction.
+    if depth <= 0.0 || angle_deg <= 0.0 || angle_deg >= 90.0 {
+        return vec![];
+    }
+
+    let dx = xy_end.0 - xy_start.0;
+    let dy = xy_end.1 - xy_start.1;
+    let seg_len = (dx * dx + dy * dy).sqrt();
+
+    let required_horiz = depth / angle_deg.to_radians().tan();
+    let actual_horiz = if required_horiz > seg_len {
+        tracing::warn!("ramp entry: segment too short, steepening angle");
+        seg_len
+    } else {
+        required_horiz
+    };
+
+    let n_steps = ((depth / 0.5).ceil() as usize).max(1);
+    let (dir_x, dir_y) = if seg_len > 1e-12 {
+        (dx / seg_len, dy / seg_len)
+    } else {
+        (1.0, 0.0)
+    };
+
+    (1..=n_steps)
+        .map(|i| {
+            let t = i as f64 / n_steps as f64;
+            let z = retract_z - depth * t;
+            let horiz = actual_horiz * t;
+            feed_point(Vec3 {
+                x: xy_start.0 + dir_x * horiz,
+                y: xy_start.1 + dir_y * horiz,
+                z,
+            })
+        })
+        .collect()
+}
+
 fn normalize(v: Vec3) -> Vec3 {
     let len = (v.x * v.x + v.y * v.y + v.z * v.z).sqrt();
     if len < 1e-12 {
@@ -217,7 +278,9 @@ fn lead_in_approach_xy(pass: &Pass, lead_offset: f64) -> (f64, f64) {
 ///    `params.helical_entry_radius` is set and the contour is closed: two
 ///    Rapid moves followed by helical-descent and cleanup-arc [`MoveKind::Feed`]
 ///    moves, provided the helix fits inside the cut polygon; otherwise falls
-///    back to the standard plunge.
+///    back to the standard plunge.  When `params.ramp_entry_angle_deg` is set
+///    and the contour is open (first ≠ last point): two Rapid moves followed
+///    by ramp-descent [`MoveKind::Feed`] moves along the first segment direction.
 /// 3. [`PassKind::LeadIn`] — skipped when the cutting pass has only one point.
 /// 4. The cutting pass itself (unchanged).
 pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pass> {
@@ -270,8 +333,12 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
             None => (approach_x, approach_y),
         };
 
-        // Decide whether to use helical entry for this pass.
+        // Decide whether to use helical or ramp entry for this pass.
         let use_helical = params.helical_entry_radius.is_some() && is_closed_contour(pass);
+        let use_ramp = !use_helical
+            && params.ramp_entry_angle_deg.is_some()
+            && pass.cuts.len() >= 2
+            && !is_closed_contour(pass);
 
         if use_helical {
             let radius = params.helical_entry_radius.unwrap();
@@ -345,6 +412,60 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                             z: cutting_z,
                         }),
                     ],
+                });
+            }
+        } else if use_ramp {
+            let angle_deg = params.ramp_entry_angle_deg.unwrap();
+            let first_cut = &pass.cuts[0].position;
+            let ramp_moves = ramp_descent_moves(
+                (approach_x, approach_y),
+                (first_cut.x, first_cut.y),
+                clearance_z,
+                cutting_z,
+                angle_deg,
+            );
+            if ramp_moves.is_empty() {
+                // Invalid angle or zero depth — fall back to straight plunge.
+                tracing::warn!(
+                    "ramp entry: invalid angle {angle_deg}° or zero depth, falling back to plunge"
+                );
+                result.push(Pass {
+                    kind: PassKind::Linking,
+                    cuts: vec![
+                        rapid_point(Vec3 {
+                            x: from_x,
+                            y: from_y,
+                            z: clearance_z,
+                        }),
+                        rapid_point(Vec3 {
+                            x: approach_x,
+                            y: approach_y,
+                            z: clearance_z,
+                        }),
+                        rapid_point(Vec3 {
+                            x: approach_x,
+                            y: approach_y,
+                            z: cutting_z,
+                        }),
+                    ],
+                });
+            } else {
+                let mut linking_cuts = vec![
+                    rapid_point(Vec3 {
+                        x: from_x,
+                        y: from_y,
+                        z: clearance_z,
+                    }),
+                    rapid_point(Vec3 {
+                        x: approach_x,
+                        y: approach_y,
+                        z: clearance_z,
+                    }),
+                ];
+                linking_cuts.extend(ramp_moves);
+                result.push(Pass {
+                    kind: PassKind::Linking,
+                    cuts: linking_cuts,
                 });
             }
         } else {
@@ -657,55 +778,65 @@ mod tests {
     #[test]
     fn cleanup_arc_starts_at_helix_endpoint() {
         // Use a pitch that does NOT divide evenly into the depth so the helix
-        // ends at a non-zero angle.  Verify the first cleanup arc point is
-        // within ε of the last helix point in XY (same Z aside).
-        let passes = vec![make_closed_pass(-5.0)];
+        // ends at a non-zero angle.  The boundary between helix moves and
+        // cleanup-arc moves is at index `total_segs` in the feed-move list.
+        // Verify no positional discontinuity across that boundary.
+        let radius = 2.0_f64;
+        let pitch = 3.0_f64;
+        let clearance_z = 5.0_f64;
+        let cutting_z = -5.0_f64;
+
+        let passes = vec![make_closed_pass(cutting_z)];
         let params = LinkingParams {
             tool_diameter: 6.0,
-            clearance_z: 5.0,
+            clearance_z,
             lead_ratio: 0.4,
             arc_lead_in_radius: None,
             arc_lead_out_radius: None,
-            helical_entry_radius: Some(2.0),
-            helical_entry_pitch: Some(3.0), // depth=10, pitch=3 → non-integer revolutions
+            helical_entry_radius: Some(radius),
+            helical_entry_pitch: Some(pitch), // depth=10, pitch=3 → non-integer revolutions
             ramp_entry_angle_deg: None,
         };
         let result = link_passes(passes, &params);
         let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
 
-        // Separate the helix descent moves from the cleanup arc moves.
-        // Rapids are first two; feeds follow. Within the feeds, Z stops at
-        // cutting_z when the cleanup arc begins.
         let feed_moves: Vec<_> = linking
             .cuts
             .iter()
             .filter(|c| c.move_kind == MoveKind::Feed)
             .collect();
-        assert!(!feed_moves.is_empty());
 
-        // Find where Z first reaches cutting_z = -5.0 — that's the boundary
-        // between helix and cleanup arc.
-        let cutting_z = -5.0_f64;
-        let arc_start_idx = feed_moves
-            .iter()
-            .position(|c| (c.position.z - cutting_z).abs() < 1e-9)
-            .expect("at least one point should be at cutting_z");
+        // Compute the expected helix segment count identically to the
+        // production code so we can index the exact helix→arc boundary.
+        let spr = segments_per_revolution(radius);
+        let total_depth = clearance_z - cutting_z;
+        let total_segs = ((total_depth / pitch) * spr as f64).ceil().max(1.0) as usize;
 
-        // The point just before the arc (last helix point) and the first arc
-        // point should have continuous XY (≤ one chord length apart).
-        if arc_start_idx > 0 {
-            let last_helix = &feed_moves[arc_start_idx - 1];
-            let first_arc = &feed_moves[arc_start_idx];
-            let dx = first_arc.position.x - last_helix.position.x;
-            let dy = first_arc.position.y - last_helix.position.y;
-            let gap = (dx * dx + dy * dy).sqrt();
-            let chord = chord_len_for_radius(2.0);
-            assert!(
-                gap <= chord + 1e-9,
-                "XY gap between last helix point and first cleanup arc point ({gap:.6}) \
-                 exceeds chord length ({chord:.6}) — discontinuity"
-            );
-        }
+        assert_eq!(
+            feed_moves.len(),
+            total_segs + spr,
+            "expected {total_segs} helix + {spr} arc feed moves"
+        );
+
+        // Last helix point must be at cutting_z.
+        assert!(
+            (feed_moves[total_segs - 1].position.z - cutting_z).abs() < 1e-9,
+            "last helix point should be at cutting_z"
+        );
+
+        // The XY gap between the last helix point and the first cleanup-arc
+        // point must be ≤ one chord length (i.e. no jump back to angle=0).
+        let last_helix = &feed_moves[total_segs - 1];
+        let first_arc = &feed_moves[total_segs];
+        let dx = first_arc.position.x - last_helix.position.x;
+        let dy = first_arc.position.y - last_helix.position.y;
+        let gap = (dx * dx + dy * dy).sqrt();
+        let chord = chord_len_for_radius(radius);
+        assert!(
+            gap <= chord + 1e-9,
+            "XY gap at helix→arc boundary ({gap:.6} mm) exceeds chord length \
+             ({chord:.6} mm) — cleanup arc jumped to wrong start angle"
+        );
     }
 
     #[test]
@@ -730,6 +861,256 @@ mod tests {
             linking.cuts.len(),
             3,
             "oversized radius should fall back to 3-point plunge, got {}",
+            linking.cuts.len()
+        );
+        for cut in &linking.cuts {
+            assert_eq!(cut.move_kind, MoveKind::Rapid);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Ramp entry tests
+    // -----------------------------------------------------------------------
+
+    /// Open contour: a simple line segment along X at cut_z.
+    fn make_open_pass(z: f64) -> Pass {
+        make_pass(&[(0.0, 0.0, z), (20.0, 0.0, z), (40.0, 0.0, z)])
+    }
+
+    #[test]
+    fn ramp_moves_span_retract_to_cut_z() {
+        let retract_z = 5.0_f64;
+        let cut_z = -5.0_f64;
+        let moves = ramp_descent_moves((0.0, 0.0), (100.0, 0.0), retract_z, cut_z, 15.0);
+        assert!(!moves.is_empty());
+        let first_z = moves[0].position.z;
+        let last_z = moves.last().unwrap().position.z;
+        assert!(
+            first_z < retract_z,
+            "first Z should be below retract_z, got {first_z}"
+        );
+        assert!(
+            (last_z - cut_z).abs() < 1e-9,
+            "last Z should equal cut_z {cut_z}, got {last_z}"
+        );
+    }
+
+    #[test]
+    fn ramp_z_values_decrease_monotonically() {
+        let moves = ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 15.0);
+        assert!(!moves.is_empty());
+        let mut prev_z = 5.0_f64;
+        for m in &moves {
+            assert!(
+                m.position.z <= prev_z,
+                "Z not monotonically decreasing: {} after {}",
+                m.position.z,
+                prev_z
+            );
+            prev_z = m.position.z;
+        }
+    }
+
+    #[test]
+    fn ramp_horizontal_distance_consistent_with_angle_and_depth() {
+        let retract_z = 5.0_f64;
+        let cut_z = -5.0_f64;
+        let angle_deg = 15.0_f64;
+        let xy_start = (0.0_f64, 0.0_f64);
+        let xy_end = (200.0_f64, 0.0_f64); // long enough to not clamp
+
+        let moves = ramp_descent_moves(xy_start, xy_end, retract_z, cut_z, angle_deg);
+        assert!(!moves.is_empty());
+
+        let depth = (retract_z - cut_z).abs();
+        let expected_horiz = depth / angle_deg.to_radians().tan();
+        let last = moves.last().unwrap();
+        let actual_horiz = (last.position.x - xy_start.0).abs();
+
+        assert!(
+            (actual_horiz - expected_horiz).abs() < 1e-9,
+            "expected horizontal distance {expected_horiz:.6}, got {actual_horiz:.6}"
+        );
+    }
+
+    #[test]
+    fn ramp_entry_none_falls_back_to_plunge() {
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        assert_eq!(
+            linking.cuts.len(),
+            3,
+            "plunge should have 3 points, got {}",
+            linking.cuts.len()
+        );
+        for cut in &linking.cuts {
+            assert_eq!(
+                cut.move_kind,
+                MoveKind::Rapid,
+                "plunge moves should be Rapid"
+            );
+        }
+    }
+
+    #[test]
+    fn ramp_short_segment_clamps_and_still_reaches_cut_z() {
+        // Segment is only 2 mm long; a 15° ramp over 10 mm depth needs ~37 mm.
+        let retract_z = 5.0_f64;
+        let cut_z = -5.0_f64;
+        // warning is emitted via tracing::warn! inside ramp_descent_moves
+        let moves = ramp_descent_moves((0.0, 0.0), (2.0, 0.0), retract_z, cut_z, 15.0);
+        assert!(
+            !moves.is_empty(),
+            "should produce moves even for short segment"
+        );
+
+        let last_z = moves.last().unwrap().position.z;
+        assert!(
+            (last_z - cut_z).abs() < 1e-9,
+            "last Z should still reach cut_z {cut_z} even when segment is short, got {last_z}"
+        );
+
+        let last_x = moves.last().unwrap().position.x;
+        assert!(
+            last_x <= 2.0 + 1e-9,
+            "ramp end should be clamped to segment length, got x={last_x}"
+        );
+    }
+
+    #[test]
+    fn ramp_invalid_angles_produce_no_moves() {
+        // angle_deg ≥ 90° → tan goes zero or negative, ramp would travel
+        // backward or be infinite; must return empty rather than bad moves.
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 90.0).is_empty());
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 91.0).is_empty());
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 180.0).is_empty());
+        // angle_deg ≤ 0 was already guarded but verify too.
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 0.0).is_empty());
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, -5.0).is_empty());
+    }
+
+    #[test]
+    fn ramp_zero_length_segment_stays_at_start_xy() {
+        // When xy_start == xy_end the ramp must not wander off in an arbitrary
+        // direction; all XY positions should stay at xy_start (vertical plunge).
+        let xy_start = (3.0_f64, 7.0_f64);
+        let moves = ramp_descent_moves(xy_start, xy_start, 5.0, -5.0, 15.0);
+        assert!(!moves.is_empty());
+        for m in &moves {
+            assert!(
+                (m.position.x - xy_start.0).abs() < 1e-9
+                    && (m.position.y - xy_start.1).abs() < 1e-9,
+                "zero-length segment ramp moved in XY: ({}, {})",
+                m.position.x,
+                m.position.y
+            );
+        }
+        // Must still reach cut_z.
+        let last_z = moves.last().unwrap().position.z;
+        assert!(
+            (last_z - (-5.0)).abs() < 1e-9,
+            "last Z should be cut_z, got {last_z}"
+        );
+    }
+
+    #[test]
+    fn ramp_entry_used_for_open_contour() {
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(15.0),
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        assert!(
+            linking.cuts.len() > 3,
+            "ramp linking pass should have more than 3 points, got {}",
+            linking.cuts.len()
+        );
+        assert_eq!(linking.cuts[0].move_kind, MoveKind::Rapid);
+        assert_eq!(linking.cuts[1].move_kind, MoveKind::Rapid);
+        for cut in &linking.cuts[2..] {
+            assert_eq!(cut.move_kind, MoveKind::Feed, "ramp moves should be Feed");
+        }
+        let last_z = linking.cuts.last().unwrap().position.z;
+        assert!(
+            (last_z - (-5.0)).abs() < 1e-9,
+            "last ramp move should reach cutting_z, got {last_z}"
+        );
+    }
+
+    #[test]
+    fn ramp_entry_non_clamped_reaches_cut_z() {
+        // Use a steep angle (80°) so required_horiz ≈ 1.76 mm, well under the
+        // lead_offset of 2.4 mm (0.4 × 6.0).  This exercises the code path in
+        // link_passes where actual_horiz == required_horiz (no clamping).
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(80.0),
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        // 2 rapids + at least 1 ramp feed move.
+        assert!(linking.cuts.len() > 2, "should have ramp feed moves");
+        assert_eq!(linking.cuts[0].move_kind, MoveKind::Rapid);
+        assert_eq!(linking.cuts[1].move_kind, MoveKind::Rapid);
+        for cut in &linking.cuts[2..] {
+            assert_eq!(cut.move_kind, MoveKind::Feed);
+        }
+        let last_z = linking.cuts.last().unwrap().position.z;
+        assert!(
+            (last_z - (-5.0)).abs() < 1e-9,
+            "non-clamped ramp must still reach cutting_z, got {last_z}"
+        );
+    }
+
+    #[test]
+    fn ramp_not_applied_for_closed_contour() {
+        let passes = vec![make_closed_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(15.0),
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        assert_eq!(
+            linking.cuts.len(),
+            3,
+            "closed contour should fall back to plunge, got {}",
             linking.cuts.len()
         );
         for cut in &linking.cuts {
