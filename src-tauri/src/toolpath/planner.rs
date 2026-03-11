@@ -9,9 +9,9 @@ use crate::toolpath::{operations, types, types::ToolpathStats};
 /// Generate unlinked cutting passes and [`ToolpathStats`] for the given operation.
 ///
 /// Returns raw passes without linking moves applied. For Drill operations,
-/// `drill_passes` handles its own linking internally. For Pocket and Profile
-/// operations, the caller is responsible for calling [`linking::link_passes`]
-/// and assembling the final [`Toolpath`].
+/// `drill_passes` handles its own linking internally. For Pocket, Profile, and
+/// ZLevelRoughing operations, the caller is responsible for calling
+/// [`linking::link_passes`] and assembling the final [`Toolpath`].
 pub fn plan(
     operation: &Operation,
     tool: &Tool,
@@ -39,7 +39,7 @@ pub fn plan(
     };
 
     // Step 2: Generate cutting passes based on operation type.
-    // Pocket and Profile return unlinked cutting passes; Drill handles its own linking.
+    // Pocket, Profile, and ZLevelRoughing return unlinked cutting passes; Drill handles its own linking.
     let passes = match &operation.params {
         OperationParams::Pocket(params) => {
             operations::pocket::pocket_passes(stock, params, tool.diameter, &boundary)?
@@ -48,6 +48,14 @@ pub fn plan(
             operations::profile::profile_passes(stock, params, tool.diameter, &boundary)?
         }
         OperationParams::Drill(params) => operations::drill::drill_passes(stock, params)?,
+        OperationParams::ZLevelRoughing(params) => {
+            operations::zlevel_roughing::zlevel_roughing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+            )?
+        }
     };
 
     // Step 3: Compute stats over the returned passes.
@@ -130,7 +138,7 @@ mod tests {
     use super::*;
     use crate::models::operation::{
         CacheState, CompensationSide, DrillParams, DrillPoint, OperationParams, PocketParams,
-        ProfileParams,
+        ProfileParams, ZLevelRoughingParams,
     };
     use crate::models::stock::BoxDimensions;
     use crate::models::tool::ToolType;
@@ -347,6 +355,32 @@ mod tests {
         assert!(!passes.is_empty());
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
+    }
+
+    #[test]
+    fn plan_zlevel_roughing_invalid_params_returns_invalid_input() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "ZLR Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ZLevelRoughing(ZLevelRoughingParams {
+                depth: 5.0,
+                stepdown: 0.0, // invalid
+                stepover: 0.5,
+                geometry: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        let result = plan(&operation, &tool, &stock, None);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput error, got: {result:?}"
+        );
     }
 
     #[test]

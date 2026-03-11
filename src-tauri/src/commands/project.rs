@@ -120,6 +120,7 @@ impl From<&Project> for ProjectSnapshot {
                         OperationParams::Profile(_) => "profile".to_string(),
                         OperationParams::Pocket(_) => "pocket".to_string(),
                         OperationParams::Drill(_) => "drill".to_string(),
+                        OperationParams::ZLevelRoughing(_) => "z_level_roughing".to_string(),
                     },
                     enabled: op.enabled,
                     needs_recalculate,

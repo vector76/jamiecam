@@ -73,6 +73,21 @@ pub struct DrillParams {
     pub peck_depth: Option<f64>,
 }
 
+/// Parameters for a Z-Level Roughing operation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZLevelRoughingParams {
+    /// Cut depth in project units.
+    pub depth: f64,
+    /// Maximum depth per pass in project units.
+    pub stepdown: f64,
+    /// Radial stepover as a fraction of tool diameter (0–1).
+    pub stepover: f64,
+    /// Face fingerprints that define the machining boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -84,6 +99,7 @@ pub enum OperationParams {
     Profile(ProfileParams),
     Pocket(PocketParams),
     Drill(DrillParams),
+    ZLevelRoughing(ZLevelRoughingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -153,6 +169,24 @@ mod tests {
 
     fn tool_id() -> Uuid {
         Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap()
+    }
+
+    fn make_zlevel_op() -> Operation {
+        Operation {
+            id: Uuid::parse_str("dddd0000-0000-0000-0000-000000000004").unwrap(),
+            name: "Z-Level Rough".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ZLevelRoughing(ZLevelRoughingParams {
+                depth: 8.0,
+                stepdown: 2.0,
+                stepover: 0.5,
+                geometry: None,
+            }),
+            cache: CacheState::default(),
+        }
     }
 
     fn make_profile_op() -> Operation {
@@ -230,6 +264,22 @@ mod tests {
         let json = serde_json::to_string(&original).expect("serialize");
         let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn zlevel_roughing_operation_serde_round_trip() {
+        let original = make_zlevel_op();
+        let json = serde_json::to_string(&original).expect("serialize");
+        let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn zlevel_roughing_type_field_is_z_level_roughing() {
+        let op = make_zlevel_op();
+        let value = serde_json::to_value(&op).expect("to_value");
+        assert_eq!(value["type"], "z_level_roughing");
+        assert!(value.get("params").is_some());
     }
 
     #[test]
@@ -510,6 +560,56 @@ mod tests {
     fn profile_geometry_defaults_absent_in_old_json() {
         let json = r#"{"depth": 10.0, "stepdown": 2.5, "compensationSide": "left"}"#;
         let params: ProfileParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
+    }
+
+    #[test]
+    fn zlevel_roughing_geometry_absent_when_none() {
+        let params = ZLevelRoughingParams {
+            depth: 8.0,
+            stepdown: 2.0,
+            stepover: 0.5,
+            geometry: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+    }
+
+    #[test]
+    fn zlevel_roughing_geometry_present_when_set() {
+        let params = ZLevelRoughingParams {
+            depth: 8.0,
+            stepdown: 2.0,
+            stepover: 0.5,
+            geometry: Some(vec!["fp1".into()]),
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert_eq!(value["geometry"][0], "fp1");
+    }
+
+    #[test]
+    fn zlevel_roughing_geometry_round_trip_with_fingerprints() {
+        let params = ZLevelRoughingParams {
+            depth: 8.0,
+            stepdown: 2.0,
+            stepover: 0.5,
+            geometry: Some(vec!["abc".into()]),
+        };
+        let json = serde_json::to_string(&params).expect("serialize");
+        let recovered: ZLevelRoughingParams = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(params, recovered);
+    }
+
+    #[test]
+    fn zlevel_roughing_geometry_defaults_absent_in_old_json() {
+        let json = r#"{"depth": 8.0, "stepdown": 2.0, "stepover": 0.5}"#;
+        let params: ZLevelRoughingParams = serde_json::from_str(json).expect("deserialize");
         assert!(
             params.geometry.is_none(),
             "geometry must default to None when absent"

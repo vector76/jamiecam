@@ -49,6 +49,10 @@ pub enum AppError {
     /// A post-processor error; the inner message describes the failure.
     #[error("{0}")]
     PostProcessor(String),
+
+    /// Operation parameters are invalid.
+    #[error("{0}")]
+    InvalidInput(String),
 }
 
 impl From<GeometryError> for AppError {
@@ -145,6 +149,14 @@ mod tests {
         let value = serde_json::to_value(&err).expect("serialize AppError::PostProcessor");
         assert_eq!(value["kind"], "PostProcessor");
         assert_eq!(value["message"], "invalid config");
+    }
+
+    #[test]
+    fn invalid_input_error_serializes_to_kind_message() {
+        let err = AppError::InvalidInput("stepdown must be > 0".to_string());
+        let value = serde_json::to_value(&err).expect("serialize AppError::InvalidInput");
+        assert_eq!(value["kind"], "InvalidInput");
+        assert_eq!(value["message"], "stepdown must be > 0");
     }
 
     #[test]

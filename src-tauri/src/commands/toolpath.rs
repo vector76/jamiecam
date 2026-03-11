@@ -90,7 +90,7 @@ pub(crate) fn get_gcode_preview_inner(
 /// 1. Parses `operation_id` as a UUID.
 /// 2. Reads the operation, stock, and tool from the project (all must exist).
 /// 3. Calls [`crate::toolpath::planner::plan`] to generate unlinked passes.
-/// 4. Calls [`linking::link_passes`] for Pocket/Profile operations.
+/// 4. Calls [`linking::link_passes`] for Pocket/Profile/ZLevelRoughing operations.
 /// 5. Assembles the final [`Toolpath`].
 /// 6. Computes a deterministic SHA-256 cache key from the operation, tool, stock,
 ///    optional model checksum, and engine version.
@@ -154,7 +154,9 @@ pub fn calculate_toolpath_inner(
     let StockDefinition::Box(b) = &stock;
     let stock_top_z = b.origin.z + b.height;
     let linked_passes = match &operation.params {
-        OperationParams::Pocket(_) | OperationParams::Profile(_) => {
+        OperationParams::Pocket(_)
+        | OperationParams::Profile(_)
+        | OperationParams::ZLevelRoughing(_) => {
             linking::link_passes(raw_passes, tool.diameter, stock_top_z + 5.0)
         }
         OperationParams::Drill(_) => raw_passes,
