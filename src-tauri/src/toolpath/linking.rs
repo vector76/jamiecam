@@ -4,9 +4,7 @@
 //! around each cutting pass to produce safe tool transitions between depth levels.
 
 use crate::models::Vec3;
-use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
-
-const LEAD_RATIO: f64 = 0.4;
+use crate::toolpath::types::{CutPoint, LinkingParams, MoveKind, Pass, PassKind};
 
 fn vec3_sub(a: &Vec3, b: &Vec3) -> Vec3 {
     Vec3 {
@@ -89,8 +87,9 @@ fn lead_in_approach_xy(pass: &Pass, lead_offset: f64) -> (f64, f64) {
 ///    lift to `clearance_z`, traverse at `clearance_z`, descend to cutting depth.
 /// 3. [`PassKind::LeadIn`] — skipped when the cutting pass has only one point.
 /// 4. The cutting pass itself (unchanged).
-pub fn link_passes(cutting_passes: Vec<Pass>, tool_diameter: f64, clearance_z: f64) -> Vec<Pass> {
-    let lead_offset = LEAD_RATIO * tool_diameter;
+pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pass> {
+    let lead_offset = params.lead_ratio * params.tool_diameter;
+    let clearance_z = params.clearance_z;
     let mut result = Vec::new();
 
     for (i, pass) in cutting_passes.iter().enumerate() {
@@ -201,7 +200,12 @@ mod tests {
             make_pass(&[(0.0, 5.0, -10.0), (10.0, 5.0, -10.0), (20.0, 5.0, -10.0)]),
         ];
 
-        let result = link_passes(passes, 6.0, 5.0);
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+        };
+        let result = link_passes(passes, &params);
 
         let kinds: Vec<&PassKind> = result.iter().map(|p| &p.kind).collect();
         assert_eq!(
@@ -225,7 +229,12 @@ mod tests {
             make_pass(&[(0.0, 5.0, -10.0), (10.0, 5.0, -10.0), (20.0, 5.0, -10.0)]),
         ];
 
-        let result = link_passes(passes, 6.0, 5.0);
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+        };
+        let result = link_passes(passes, &params);
 
         for pass in &result {
             if pass.kind == PassKind::Linking {
@@ -244,7 +253,12 @@ mod tests {
     fn single_point_pass_skips_lead_geometry() {
         let passes = vec![make_pass(&[(5.0, 5.0, -3.0)])];
 
-        let result = link_passes(passes, 6.0, 5.0);
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+        };
+        let result = link_passes(passes, &params);
 
         for pass in &result {
             assert!(

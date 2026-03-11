@@ -94,6 +94,14 @@ pub enum ToolOrientation {
     },
 }
 
+/// Parameters passed to the linking stage of toolpath generation.
+#[derive(Debug, Clone)]
+pub struct LinkingParams {
+    pub tool_diameter: f64,
+    pub clearance_z: f64,
+    pub lead_ratio: f64,
+}
+
 /// Statistics computed over a generated toolpath.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

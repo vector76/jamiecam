@@ -13,7 +13,7 @@ use crate::models::operation::OperationParams;
 use crate::models::StockDefinition;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
-use crate::toolpath::types::{PassKind, Toolpath};
+use crate::toolpath::types::{LinkingParams, PassKind, Toolpath};
 use crate::toolpath::{linking, LineGeometryData, ToolpathStats};
 
 use super::{build_tool_infos, parse_entity_id, read_project, write_project};
@@ -156,9 +156,14 @@ pub fn calculate_toolpath_inner(
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
         | OperationParams::Profile(_)
-        | OperationParams::ZLevelRoughing(_) => {
-            linking::link_passes(raw_passes, tool.diameter, stock_top_z + 5.0)
-        }
+        | OperationParams::ZLevelRoughing(_) => linking::link_passes(
+            raw_passes,
+            &LinkingParams {
+                tool_diameter: tool.diameter,
+                clearance_z: stock_top_z + 5.0,
+                lead_ratio: 0.4,
+            },
+        ),
         OperationParams::Drill(_) => raw_passes,
     };
     progress(80, "Passes linked");
