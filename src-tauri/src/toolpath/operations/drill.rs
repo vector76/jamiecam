@@ -4,7 +4,7 @@
 //! with optional peck drilling support.
 
 use crate::error::AppError;
-use crate::models::operation::DrillParams;
+use crate::models::operation::{DrillParams, DrillPoint};
 use crate::models::stock::BoxDimensions;
 use crate::models::{StockDefinition, Vec3};
 use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind, DEFAULT_CLEARANCE_OFFSET};
@@ -38,14 +38,37 @@ pub fn drill_passes(stock: &StockDefinition, params: &DrillParams) -> Result<Vec
     let clearance_z = stock_top_z + DEFAULT_CLEARANCE_OFFSET;
     let drill_z = stock_top_z - params.depth;
 
-    let mut passes = Vec::with_capacity(params.points.len() * 2);
+    // Nearest-neighbor sort: start with the first point, repeatedly select
+    // the closest unvisited point by Euclidean XY distance.
+    let sorted_points: Vec<DrillPoint> = {
+        let mut remaining: Vec<DrillPoint> = params.points.clone();
+        let mut ordered = Vec::with_capacity(remaining.len());
+        ordered.push(remaining.remove(0));
+        while !remaining.is_empty() {
+            let last = ordered.last().unwrap();
+            let nearest_idx = remaining
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    let da = (a.x - last.x).hypot(a.y - last.y);
+                    let db = (b.x - last.x).hypot(b.y - last.y);
+                    da.partial_cmp(&db).unwrap()
+                })
+                .map(|(i, _)| i)
+                .unwrap();
+            ordered.push(remaining.remove(nearest_idx));
+        }
+        ordered
+    };
 
-    for (i, point) in params.points.iter().enumerate() {
+    let mut passes = Vec::with_capacity(sorted_points.len() * 2);
+
+    for (i, point) in sorted_points.iter().enumerate() {
         // --- Linking pass ---
         let linking_cuts = if i == 0 {
             vec![rapid(point.x, point.y, clearance_z)]
         } else {
-            let prev = &params.points[i - 1];
+            let prev = &sorted_points[i - 1];
             vec![
                 rapid(prev.x, prev.y, clearance_z),
                 rapid(point.x, point.y, clearance_z),
@@ -237,6 +260,49 @@ mod tests {
         assert_eq!(cutting.cuts[5].move_kind, MoveKind::Feed);
         assert!((cutting.cuts[5].position.z - 1.0).abs() < 1e-9);
         assert_eq!(cutting.cuts[6].move_kind, MoveKind::Rapid);
+    }
+
+    #[test]
+    fn test_sort_single() {
+        let stock = make_stock(10.0);
+        let params = DrillParams {
+            depth: 5.0,
+            points: vec![point(7.0, 3.0)],
+            peck_depth: None,
+        };
+        let passes = drill_passes(&stock, &params).expect("should succeed");
+        // One hole → one linking + one cutting pass; position unchanged
+        assert_eq!(passes.len(), 2);
+        assert!((passes[1].cuts[0].position.x - 7.0).abs() < 1e-9);
+        assert!((passes[1].cuts[0].position.y - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_sort_grid() {
+        // Collinear points in an order that differs from nearest-neighbor.
+        // Input: (0,0), (40,0), (10,0), (30,0)
+        // Expected NN tour from (0,0): (0,0)→(10,0)→(30,0)→(40,0)
+        let stock = make_stock(10.0);
+        let params = DrillParams {
+            depth: 5.0,
+            points: vec![
+                point(0.0, 0.0),
+                point(40.0, 0.0),
+                point(10.0, 0.0),
+                point(30.0, 0.0),
+            ],
+            peck_depth: None,
+        };
+        let passes = drill_passes(&stock, &params).expect("should succeed");
+        // 4 holes × 2 passes each = 8 passes
+        assert_eq!(passes.len(), 8);
+        // Extract X positions from the approach cut of each cutting pass
+        let xs: Vec<f64> = passes
+            .iter()
+            .filter(|p| p.kind == PassKind::Cutting)
+            .map(|p| p.cuts[0].position.x)
+            .collect();
+        assert_eq!(xs, vec![0.0, 10.0, 30.0, 40.0]);
     }
 
     #[test]
