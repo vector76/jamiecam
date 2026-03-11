@@ -400,6 +400,73 @@ describe('SceneManager — frameModel', () => {
   })
 })
 
+// ── setDisplayMode ────────────────────────────────────────────────────────────
+
+describe('SceneManager — setDisplayMode', () => {
+  let mgr: SceneManager
+  let material: THREE.MeshStandardMaterial
+
+  beforeEach(() => {
+    const { canvas, container } = makeElements()
+    mgr = new SceneManager(canvas, container)
+    material = new THREE.MeshStandardMaterial()
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+    mgr.setModelMesh(mesh)
+  })
+
+  afterEach(() => mgr.dispose())
+
+  it('shaded: resets wireframe and transparent after switching from other modes', () => {
+    mgr.setDisplayMode('wireframe')
+    mgr.setDisplayMode('shaded')
+    expect(material.wireframe).toBe(false)
+    mgr.setDisplayMode('transparent')
+    mgr.setDisplayMode('shaded')
+    expect(material.transparent).toBe(false)
+  })
+
+  it('shaded: edge overlay is hidden after switching from shaded-edges', () => {
+    mgr.setDisplayMode('shaded-edges')
+    mgr.setDisplayMode('shaded')
+    // shaded-edges created the overlay; shaded must hide it (not destroy it).
+    const overlay = (mgr as any)._edgeOverlay as THREE.LineSegments
+    expect(overlay).not.toBeNull()
+    expect(overlay.visible).toBe(false)
+  })
+
+  it('wireframe: wireframe is true', () => {
+    mgr.setDisplayMode('wireframe')
+    expect(material.wireframe).toBe(true)
+  })
+
+  it('transparent: transparent is true, opacity ≈ 0.3', () => {
+    mgr.setDisplayMode('transparent')
+    expect(material.transparent).toBe(true)
+    expect(material.opacity).toBeCloseTo(0.3)
+  })
+
+  it('shaded-edges: wireframe is false, edge overlay is not null and visible', () => {
+    mgr.setDisplayMode('shaded-edges')
+    expect(material.wireframe).toBe(false)
+    const overlay = (mgr as any)._edgeOverlay as THREE.LineSegments | null
+    expect(overlay).not.toBeNull()
+    expect(overlay!.visible).toBe(true)
+  })
+
+  it('shaded-edges: overlay is reused on second call', () => {
+    mgr.setDisplayMode('shaded-edges')
+    const first = (mgr as any)._edgeOverlay
+    mgr.setDisplayMode('shaded-edges')
+    const second = (mgr as any)._edgeOverlay
+    expect(second).toBe(first)
+  })
+
+  it('does not throw when no mesh is loaded', () => {
+    mgr.setModelMesh(null)
+    expect(() => mgr.setDisplayMode('shaded')).not.toThrow()
+  })
+})
+
 // ── snapToView / snap* ────────────────────────────────────────────────────────
 
 describe('SceneManager — snapToView', () => {
