@@ -125,6 +125,11 @@ export interface ProfileParams {
   stepdown?: number
   compensationSide: 'left' | 'right' | 'center'
   geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
 }
 
 /** Parameters for a Pocket operation. */
@@ -133,6 +138,11 @@ export interface PocketParams {
   stepdown: number
   stepoverPercent: number
   geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
 }
 
 /** A single drill hole position. */
@@ -155,6 +165,11 @@ export interface ZLevelRoughingParams {
   /** Radial stepover as a fraction of tool diameter (0–1). */
   stepover: number
   geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
 }
 
 /**

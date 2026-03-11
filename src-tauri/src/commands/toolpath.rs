@@ -153,6 +153,36 @@ pub fn calculate_toolpath_inner(
     // Drill operations handle their own linking internally in drill_passes.
     let StockDefinition::Box(b) = &stock;
     let stock_top_z = b.origin.z + b.height;
+    let (
+        arc_lead_in_radius,
+        arc_lead_out_radius,
+        helical_entry_radius,
+        helical_entry_pitch,
+        ramp_entry_angle_deg,
+    ) = match &operation.params {
+        OperationParams::Profile(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
+        OperationParams::Pocket(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
+        OperationParams::ZLevelRoughing(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
+        OperationParams::Drill(_) => (None, None, None, None, None),
+    };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
         | OperationParams::Profile(_)
@@ -162,11 +192,11 @@ pub fn calculate_toolpath_inner(
                 tool_diameter: tool.diameter,
                 clearance_z: stock_top_z + 5.0,
                 lead_ratio: linking::DEFAULT_LEAD_RATIO,
-                arc_lead_in_radius: None,
-                arc_lead_out_radius: None,
-                helical_entry_radius: None,
-                helical_entry_pitch: None,
-                ramp_entry_angle_deg: None,
+                arc_lead_in_radius,
+                arc_lead_out_radius,
+                helical_entry_radius,
+                helical_entry_pitch,
+                ramp_entry_angle_deg,
             },
         ),
         OperationParams::Drill(_) => raw_passes,
