@@ -56,3 +56,6 @@ coverage/
 # ===== Logs =====
 *.log
 /.claude
+fulspec_latest.md
+beads_latest.md
+plan_latst.md
