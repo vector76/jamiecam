@@ -50,13 +50,13 @@ pub fn drill_passes(stock: &StockDefinition, params: &DrillParams) -> Result<Vec
                 .iter()
                 .enumerate()
                 .min_by(|(_, a), (_, b)| {
-                    let da = (a.x - last.x).hypot(a.y - last.y);
-                    let db = (b.x - last.x).hypot(b.y - last.y);
-                    da.partial_cmp(&db).unwrap()
+                    let da = (a.x - last.x).powi(2) + (a.y - last.y).powi(2);
+                    let db = (b.x - last.x).powi(2) + (b.y - last.y).powi(2);
+                    da.total_cmp(&db)
                 })
                 .map(|(i, _)| i)
                 .unwrap();
-            ordered.push(remaining.remove(nearest_idx));
+            ordered.push(remaining.swap_remove(nearest_idx));
         }
         ordered
     };
