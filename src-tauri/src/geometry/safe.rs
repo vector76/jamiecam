@@ -351,6 +351,10 @@ pub enum GeometryError {
     /// The file extension is not handled by any available importer.
     #[error("Unsupported format: {extension}")]
     UnsupportedFormat { extension: String },
+
+    /// The operation requires OCCT bindings not available in this build.
+    #[error("Not implemented (OCCT not available)")]
+    NotImplemented,
 }
 
 // ── MeshData ──────────────────────────────────────────────────────────────────
@@ -381,6 +385,116 @@ pub struct MeshData {
     pub indices: Vec<u32>,
     /// Per-face triangle group boundaries — one entry per B-rep face.
     pub face_groups: Vec<FaceGroup>,
+}
+
+// ── shape_section_at_z ────────────────────────────────────────────────────────
+
+/// Stitch a flat list of line segments `(start, end)` into closed (or open) loops.
+///
+/// Uses a greedy chain walk: repeatedly search for a segment whose start (or
+/// end, traversing in reverse) matches the current chain end, then append it.
+/// When a chain closes (end == first point) or no continuation is found, the
+/// chain is saved and a new one is started from the next unvisited segment.
+/// Segments may be traversed in either direction to handle mixed-orientation
+/// edge output from OCCT.
+fn stitch_segments_into_loops(segments: Vec<((f64, f64), (f64, f64))>) -> Vec<Vec<(f64, f64)>> {
+    const EPS: f64 = 1e-6;
+
+    fn approx_eq(a: (f64, f64), b: (f64, f64)) -> bool {
+        (a.0 - b.0).abs() < EPS && (a.1 - b.1).abs() < EPS
+    }
+
+    let mut used = vec![false; segments.len()];
+    let mut loops: Vec<Vec<(f64, f64)>> = Vec::new();
+
+    for start_idx in 0..segments.len() {
+        if used[start_idx] {
+            continue;
+        }
+        used[start_idx] = true;
+        let (s, e) = segments[start_idx];
+        let mut chain: Vec<(f64, f64)> = vec![s, e];
+
+        loop {
+            let chain_end = *chain.last().unwrap();
+            if approx_eq(chain_end, chain[0]) {
+                // Closed loop — remove the duplicate closing point.
+                chain.pop();
+                break;
+            }
+            // Find the next unused segment — accept either orientation.
+            let next = segments
+                .iter()
+                .enumerate()
+                .find_map(|(i, &(seg_s, seg_e))| {
+                    if used[i] {
+                        return None;
+                    }
+                    if approx_eq(seg_s, chain_end) {
+                        Some((i, seg_e))
+                    } else if approx_eq(seg_e, chain_end) {
+                        Some((i, seg_s)) // traverse reversed
+                    } else {
+                        None
+                    }
+                });
+            match next {
+                Some((idx, next_pt)) => {
+                    used[idx] = true;
+                    chain.push(next_pt);
+                }
+                None => break, // open chain — keep as-is
+            }
+        }
+        loops.push(chain);
+    }
+    loops
+}
+
+/// Compute the cross-section of `shape` at height `z`.
+///
+/// Returns a list of closed (or open) 2-D loops, each loop being an ordered
+/// sequence of XY points.  An empty `Vec` means the plane did not intersect
+/// the shape.
+///
+/// # Errors
+/// - [`GeometryError::NotImplemented`] — OCCT bindings were not compiled in.
+/// - [`GeometryError::ImportFailed`] — the kernel reported an unexpected error.
+#[cfg(cam_geometry_bindings)]
+pub fn shape_section_at_z(
+    shape: &OcctShape,
+    z: f64,
+) -> Result<Vec<Vec<(f64, f64)>>, GeometryError> {
+    let mut out_ptr: *mut super::ffi::CgPoint3 = std::ptr::null_mut();
+    let mut out_count: usize = 0;
+    let rc = unsafe {
+        super::ffi::cg_shape_section_at_z(shape.raw_id(), z, &mut out_ptr, &mut out_count)
+    };
+    if rc == super::ffi::CgError::CG_ERR_NO_RESULT {
+        return Ok(vec![]);
+    }
+    if rc != super::ffi::CgError::CG_OK {
+        return Err(GeometryError::ImportFailed {
+            message: last_error_message(),
+        });
+    }
+    let segments: Vec<_> = (0..out_count / 2)
+        .map(|i| {
+            let s = unsafe { *out_ptr.add(i * 2) };
+            let e = unsafe { *out_ptr.add(i * 2 + 1) };
+            ((s.x, s.y), (e.x, e.y))
+        })
+        .collect();
+    unsafe { super::ffi::cg_section_free(out_ptr) };
+    Ok(stitch_segments_into_loops(segments))
+}
+
+#[cfg(not(cam_geometry_bindings))]
+pub fn shape_section_at_z(
+    _shape: &OcctShape,
+    _z: f64,
+) -> Result<Vec<Vec<(f64, f64)>>, GeometryError> {
+    Err(GeometryError::NotImplemented)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -622,6 +736,42 @@ mod tests {
         assert!(xmax > xmin, "xmax > xmin");
         assert!(ymax > ymin, "ymax > ymin");
         assert!(zmax > zmin, "zmax > zmin");
+    }
+
+    // ── shape_section_at_z ────────────────────────────────────────────────
+
+    #[cfg(not(cam_geometry_bindings))]
+    #[test]
+    fn section_returns_not_implemented_without_bindings() {
+        let shape = OcctShape::new_for_test(0);
+        assert!(matches!(
+            shape_section_at_z(&shape, 5.0),
+            Err(GeometryError::NotImplemented)
+        ));
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn section_box_at_midheight_returns_single_loop() {
+        let path = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fixtures/box.step"
+        ));
+        let shape = OcctShape::load_step(path).expect("box.step fixture should load");
+        let (_, _, zmin, _, _, zmax) = shape.bounding_box();
+        let z_mid = (zmin + zmax) / 2.0;
+        let loops =
+            shape_section_at_z(&shape, z_mid).expect("section at mid-height should succeed");
+        assert_eq!(
+            loops.len(),
+            1,
+            "rectangular cross-section should produce one closed loop"
+        );
+        assert_eq!(
+            loops[0].len(),
+            4,
+            "rectangular loop should have four corners"
+        );
     }
 
     #[cfg(cam_geometry_bindings)]
