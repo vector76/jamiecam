@@ -1092,6 +1092,34 @@ mod tests {
     }
 
     #[test]
+    fn ramp_invalid_angle_falls_back_to_plunge_in_link_passes() {
+        // An out-of-range angle (≥ 90°) should not leave the linking pass without
+        // a Z descent — it must fall back to the standard 3-point plunge.
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(90.0),
+        };
+        let result = link_passes(passes, &params);
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        assert_eq!(linking.cuts.len(), 3, "should fall back to 3-point plunge");
+        let last_z = linking.cuts.last().unwrap().position.z;
+        assert!(
+            (last_z - (-5.0)).abs() < 1e-9,
+            "fallback plunge must reach cutting_z, got {last_z}"
+        );
+        for cut in &linking.cuts {
+            assert_eq!(cut.move_kind, MoveKind::Rapid);
+        }
+    }
+
+    #[test]
     fn ramp_not_applied_for_closed_contour() {
         let passes = vec![make_closed_pass(-5.0)];
         let params = LinkingParams {
