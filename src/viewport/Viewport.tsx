@@ -13,6 +13,7 @@ import { buildModelMesh } from './modelMesh'
 import { buildToolpathLines } from './toolpathLines'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
+import type { DisplayMode } from '../store/viewportStore'
 
 interface ViewportProps {
   style?: React.CSSProperties
@@ -33,6 +34,8 @@ export function Viewport({ style }: ViewportProps) {
   const faceDescriptors = useViewportStore((state) => state.faceDescriptors)
   const projectionMode = useViewportStore((state) => state.projectionMode)
   const setProjectionMode = useViewportStore((state) => state.setProjectionMode)
+  const displayMode = useViewportStore((state) => state.displayMode)
+  const setDisplayMode = useViewportStore((state) => state.setDisplayMode)
   const setHoveredFaceIdx = useViewportStore((state) => state.setHoveredFaceIdx)
   const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
 
@@ -156,6 +159,7 @@ export function Viewport({ style }: ViewportProps) {
     if (modelGroupRef.current) {
       mgr.scene.remove(modelGroupRef.current)
       modelGroupRef.current = null
+      mgr.setModelMesh(null)
     }
 
     if (meshData) {
@@ -165,6 +169,8 @@ export function Viewport({ style }: ViewportProps) {
       group.add(mesh)
       mgr.scene.add(group)
       modelGroupRef.current = group
+      mgr.setModelMesh(mesh)
+      mgr.setDisplayMode(displayMode)
       mgr.frameModel(boundingSphere)
     }
   }, [meshData])
@@ -220,6 +226,11 @@ export function Viewport({ style }: ViewportProps) {
       mgr.toggleProjection()
     }
   }, [projectionMode])
+
+  // ── Display mode sync ──────────────────────────────────────────────────────
+  useEffect(() => {
+    mgrRef.current?.setDisplayMode(displayMode)
+  }, [displayMode])
 
   // ── Highlight rebuild effect ───────────────────────────────────────────────
   useEffect(() => {
@@ -289,6 +300,16 @@ export function Viewport({ style }: ViewportProps) {
         >
           {projectionMode === 'perspective' ? 'Perspective' : 'Orthographic'}
         </button>
+        <select
+          value={displayMode}
+          onChange={(e) => setDisplayMode(e.target.value as DisplayMode)}
+          style={{ padding: '2px 4px', fontSize: 12, cursor: 'pointer' }}
+        >
+          <option value="shaded">Shaded</option>
+          <option value="shaded-edges">Shaded + Edges</option>
+          <option value="wireframe">Wireframe</option>
+          <option value="transparent">Transparent</option>
+        </select>
       </div>
     </div>
   )

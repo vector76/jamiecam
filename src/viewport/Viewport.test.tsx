@@ -34,6 +34,8 @@ vi.mock('./scene', () => ({
     frameModel: vi.fn(),
     setToolpathLines: vi.fn(),
     setOrbitEnabled: vi.fn(),
+    setModelMesh: vi.fn(),
+    setDisplayMode: vi.fn(),
     snapTop: vi.fn(),
     snapFront: vi.fn(),
     snapRight: vi.fn(),
@@ -58,6 +60,8 @@ function latestMgr() {
     dispose: ReturnType<typeof vi.fn>
     frameModel: ReturnType<typeof vi.fn>
     setToolpathLines: ReturnType<typeof vi.fn>
+    setModelMesh: ReturnType<typeof vi.fn>
+    setDisplayMode: ReturnType<typeof vi.fn>
     snapTop: ReturnType<typeof vi.fn>
     snapFront: ReturnType<typeof vi.fn>
     snapRight: ReturnType<typeof vi.fn>
@@ -88,6 +92,7 @@ beforeEach(() => {
     selectedFaceFingerprints: [],
     faceDescriptors: [],
     projectionMode: 'perspective',
+    displayMode: 'shaded',
   })
 })
 
@@ -332,5 +337,61 @@ describe('Viewport — projection mode sync', () => {
       useViewportStore.getState().setProjectionMode('perspective')
     })
     expect(mgr.toggleProjection).not.toHaveBeenCalled()
+  })
+})
+
+describe('Viewport — display mode', () => {
+  it('renders a select with default value shaded', () => {
+    render(<Viewport />)
+    const select = screen.getByRole('combobox') as HTMLSelectElement
+    expect(select.value).toBe('shaded')
+  })
+
+  it('renders all four display mode options', () => {
+    render(<Viewport />)
+    const select = screen.getByRole('combobox')
+    expect(select).toContainElement(screen.getByRole('option', { name: 'Shaded' }))
+    expect(select).toContainElement(screen.getByRole('option', { name: 'Shaded + Edges' }))
+    expect(select).toContainElement(screen.getByRole('option', { name: 'Wireframe' }))
+    expect(select).toContainElement(screen.getByRole('option', { name: 'Transparent' }))
+  })
+
+  it('changing the select updates displayMode in the store', async () => {
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'wireframe' } })
+    })
+    expect(useViewportStore.getState().displayMode).toBe('wireframe')
+  })
+
+  it('calls setDisplayMode on the manager when displayMode changes', async () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    await act(async () => {
+      useViewportStore.getState().setDisplayMode('transparent')
+    })
+    expect(mgr.setDisplayMode).toHaveBeenCalledWith('transparent')
+  })
+
+  it('calls setModelMesh and setDisplayMode when mesh is loaded', async () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    await act(async () => {
+      useViewportStore.getState().setMeshData(QUAD_MESH)
+    })
+    expect(mgr.setModelMesh).toHaveBeenCalledWith(expect.any(THREE.Mesh))
+    expect(mgr.setDisplayMode).toHaveBeenCalledWith('shaded')
+  })
+
+  it('calls setModelMesh(null) when mesh is cleared', async () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    await act(async () => {
+      useViewportStore.getState().setMeshData(QUAD_MESH)
+    })
+    await act(async () => {
+      useViewportStore.getState().setMeshData(null)
+    })
+    expect(mgr.setModelMesh).toHaveBeenLastCalledWith(null)
   })
 })
