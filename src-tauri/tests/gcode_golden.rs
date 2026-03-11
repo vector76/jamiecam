@@ -170,6 +170,79 @@ fn test_assemble_cycles_not_supported_uses_linear() {
     );
 }
 
+fn five_hole_peck_toolpath() -> Toolpath {
+    let stock = StockDefinition::Box(BoxDimensions {
+        origin: Vec3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        width: 50.0,
+        depth: 50.0,
+        height: 10.0,
+    });
+    let params = DrillParams {
+        depth: 10.0,
+        peck_depth: Some(3.0),
+        points: vec![
+            DrillPoint { x: 10.0, y: 10.0 },
+            DrillPoint { x: 30.0, y: 10.0 },
+            DrillPoint { x: 10.0, y: 30.0 },
+            DrillPoint { x: 30.0, y: 30.0 },
+            DrillPoint { x: 20.0, y: 20.0 },
+        ],
+    };
+    let passes = drill_passes(&stock, &params).expect("drill_passes must succeed");
+    Toolpath {
+        operation_id: Uuid::nil(),
+        tool_number: 1,
+        spindle_speed: 1200.0,
+        feed_rate: 150.0,
+        passes,
+    }
+}
+
+#[test]
+fn grbl_drill_expansion_golden_matches() {
+    let toolpath = five_hole_peck_toolpath();
+    let dir = golden_dir("grbl");
+    std::fs::create_dir_all(&dir).expect("create grbl golden dir");
+
+    let toolpath_fixture = dir.join("drill_expansion.toolpath.json");
+    let nc_fixture = dir.join("drill_expansion.nc");
+
+    let pp = PostProcessor::builtin("grbl").expect("load grbl");
+    let tool_info = ToolInfo {
+        number: 1,
+        diameter: 5.0,
+        description: "5mm Drill".to_string(),
+    };
+    let output = pp
+        .generate(
+            &[toolpath.clone()],
+            &[tool_info],
+            GenerateOptions {
+                program_number: None,
+                include_comments: false,
+            },
+        )
+        .expect("generate");
+
+    if !nc_fixture.exists() {
+        let json = serde_json::to_string_pretty(&toolpath).expect("serialize toolpath");
+        std::fs::write(&toolpath_fixture, &json).expect("write toolpath fixture");
+        std::fs::write(&nc_fixture, &output).expect("write nc fixture");
+        panic!(
+            "Fixtures written. Inspect {:?} — verify: no G81/G83/G80, correct peck Z steps, correct XY order. Re-run to lock.",
+            nc_fixture
+        );
+    }
+
+    let golden = std::fs::read_to_string(&nc_fixture)
+        .unwrap_or_else(|e| panic!("read golden {nc_fixture:?}: {e}"));
+    assert_eq!(output, golden, "grbl drill_expansion golden file mismatch");
+}
+
 #[test]
 fn linuxcnc_golden_matches() {
     let toolpath = load_toolpath("linuxcnc");
