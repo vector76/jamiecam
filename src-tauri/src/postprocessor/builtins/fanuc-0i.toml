@@ -118,9 +118,10 @@ boring_dwell = "G86"
 reaming      = "G85"
 tapping      = "G84"
 tapping_ccw  = "G74"
-cycle_cancel = "G80"
-r_plane_abs  = "G98"
-r_plane_r    = "G99"
+cycle_cancel      = "G80"
+r_plane_abs       = "G98"
+r_plane_r         = "G99"
+peck_retract_mode = "full"
 
 # ── Miscellaneous ─────────────────────────────────────────────────────────
 [misc]

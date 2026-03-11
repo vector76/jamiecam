@@ -190,6 +190,16 @@ pub struct CoolantConfig {
     pub through_tool: Option<String>,
 }
 
+/// Peck drilling retract mode — selects between G83 (full retract) and G73 (chip-break).
+#[derive(Debug, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PeckRetractMode {
+    /// G83 — full retract to R-plane between pecks (default when absent).
+    Full,
+    /// G73 — partial retract / chip-break (reserved for future scope).
+    ChipBreak,
+}
+
 /// `[cycles]` — canned drilling cycle support.
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -208,6 +218,8 @@ pub struct CyclesConfig {
     pub cycle_cancel: Option<String>,
     pub r_plane_abs: Option<String>,
     pub r_plane_r: Option<String>,
+    /// Selects peck retract behaviour. `None` is treated as `Full`.
+    pub peck_retract_mode: Option<PeckRetractMode>,
 }
 
 /// `[misc]` — miscellaneous stop/pause codes.
@@ -442,5 +454,47 @@ program_stop = "M00"
     fn cycles_not_supported_does_not_require_drill_code() {
         // minimal_valid_toml already has supported = false with no drill code
         assert!(parse(&minimal_valid_toml()).is_ok());
+    }
+
+    #[test]
+    fn peck_retract_mode_full_parses() {
+        let toml = minimal_valid_toml().replace(
+            "[cycles]\nsupported = false",
+            "[cycles]\nsupported = true\ndrill = \"G81\"\npeck_retract_mode = \"full\"",
+        );
+        let cfg = parse(&toml).expect("parse failed");
+        assert_eq!(cfg.cycles.peck_retract_mode, Some(PeckRetractMode::Full));
+    }
+
+    #[test]
+    fn peck_retract_mode_chip_break_parses() {
+        let toml = minimal_valid_toml().replace(
+            "[cycles]\nsupported = false",
+            "[cycles]\nsupported = true\ndrill = \"G81\"\npeck_retract_mode = \"chip_break\"",
+        );
+        let cfg = parse(&toml).expect("parse failed");
+        assert_eq!(
+            cfg.cycles.peck_retract_mode,
+            Some(PeckRetractMode::ChipBreak)
+        );
+    }
+
+    #[test]
+    fn peck_retract_mode_absent_is_none() {
+        let toml = minimal_valid_toml().replace(
+            "[cycles]\nsupported = false",
+            "[cycles]\nsupported = true\ndrill = \"G81\"",
+        );
+        let cfg = parse(&toml).expect("parse failed");
+        assert_eq!(cfg.cycles.peck_retract_mode, None);
+    }
+
+    #[test]
+    fn peck_retract_mode_invalid_value_returns_error() {
+        let toml = minimal_valid_toml().replace(
+            "[cycles]\nsupported = false",
+            "[cycles]\nsupported = true\ndrill = \"G81\"\npeck_retract_mode = \"unknown\"",
+        );
+        assert!(parse(&toml).is_err());
     }
 }
