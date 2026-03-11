@@ -8,6 +8,7 @@
 /target/
 src-tauri/target/
 **/*.rs.bk
+**/*.rlib
 Cargo.lock
 # Keep Cargo.lock for binaries (Tauri app); uncomment next line only for libraries
 # src-tauri/Cargo.lock
