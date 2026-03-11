@@ -27,6 +27,7 @@ export class SceneManager {
   private toolpathGroup: THREE.Group
   private _tweenGroup: TWEEN.Group
   private _activeTween: TWEEN.Tween<any> | null = null
+  private _projectionMode: 'perspective' | 'orthographic' = 'perspective'
 
   constructor(canvas: HTMLCanvasElement, container: HTMLElement) {
     this.scene = new THREE.Scene()
@@ -114,18 +115,72 @@ export class SceneManager {
     this.renderer.setSize(w, h)
   }
 
+  private _activeCamera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+    return this._projectionMode === 'perspective'
+      ? this.perspectiveCamera
+      : this.orthographicCamera
+  }
+
   private _animate(): void {
     this.frameId = requestAnimationFrame(() => this._animate())
     this._tweenGroup.update(performance.now())
     this.controls.update()
-    this.renderer.render(this.scene, this.perspectiveCamera)
+    this.renderer.render(this.scene, this._activeCamera())
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
 
   /** Expose the active camera for external raycasting. */
-  get camera(): THREE.PerspectiveCamera {
-    return this.perspectiveCamera
+  get camera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+    return this._activeCamera()
+  }
+
+  /** Return the current projection mode. */
+  getProjectionMode(): 'perspective' | 'orthographic' {
+    return this._projectionMode
+  }
+
+  /**
+   * Toggle between perspective and orthographic projection.
+   * Synchronises the incoming camera's position and up vector from the
+   * outgoing camera, sizes the orthographic frustum to match the current
+   * perspective view distance, then hands control over to the new camera.
+   */
+  toggleProjection(): void {
+    const outgoing =
+      this._projectionMode === 'perspective'
+        ? this.perspectiveCamera
+        : this.orthographicCamera
+    const incoming =
+      this._projectionMode === 'perspective'
+        ? this.orthographicCamera
+        : this.perspectiveCamera
+
+    incoming.position.copy(outgoing.position)
+    incoming.up.copy(outgoing.up)
+
+    if (this._projectionMode === 'perspective') {
+      // Switching perspective → orthographic: fit frustum to current view.
+      const distance = this.perspectiveCamera.position.distanceTo(
+        this.controls.target,
+      )
+      const halfH =
+        Math.tan((this.perspectiveCamera.fov / 2) * (Math.PI / 180)) * distance
+      const aspect =
+        this.renderer.domElement.clientWidth /
+        this.renderer.domElement.clientHeight
+      this.orthographicCamera.left = -halfH * aspect
+      this.orthographicCamera.right = halfH * aspect
+      this.orthographicCamera.top = halfH
+      this.orthographicCamera.bottom = -halfH
+      this.orthographicCamera.updateProjectionMatrix()
+    }
+
+    this._projectionMode =
+      this._projectionMode === 'perspective' ? 'orthographic' : 'perspective'
+
+    this.controls.object = this._activeCamera() as THREE.Camera
+    this.controls.update()
   }
 
   /** Enable or disable orbit controls (e.g. during face-selection mode). */

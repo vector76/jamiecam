@@ -47,6 +47,7 @@ vi.mock('three', async (importOriginal) => {
 // camera object wired to a renderer; a lightweight stub is sufficient here.
 vi.mock('three/addons/controls/OrbitControls.js', () => ({
   OrbitControls: class {
+    object: unknown = null
     enableDamping = false
     enablePan = false
     screenSpacePanning = true
@@ -71,6 +72,121 @@ function makeElements() {
 function priv<T>(obj: SceneManager, key: string): T {
   return (obj as unknown as Record<string, T>)[key]
 }
+
+// ── Projection toggle ─────────────────────────────────────────────────────────
+
+describe('SceneManager — projection toggle', () => {
+  let mgr: SceneManager
+
+  beforeEach(() => {
+    const { canvas, container } = makeElements()
+    mgr = new SceneManager(canvas, container)
+  })
+
+  afterEach(() => mgr.dispose())
+
+  it('starts in perspective mode', () => {
+    expect(mgr.getProjectionMode()).toBe('perspective')
+  })
+
+  it('toggles to orthographic on first call', () => {
+    mgr.toggleProjection()
+    expect(mgr.getProjectionMode()).toBe('orthographic')
+  })
+
+  it('toggles back to perspective on second call', () => {
+    mgr.toggleProjection()
+    mgr.toggleProjection()
+    expect(mgr.getProjectionMode()).toBe('perspective')
+  })
+
+  it('camera getter returns PerspectiveCamera in perspective mode', () => {
+    expect(mgr.camera).toBeInstanceOf(THREE.PerspectiveCamera)
+  })
+
+  it('camera getter returns OrthographicCamera in orthographic mode', () => {
+    mgr.toggleProjection()
+    expect(mgr.camera).toBeInstanceOf(THREE.OrthographicCamera)
+  })
+
+  it('orthographic camera gets position from perspective camera on toggle', () => {
+    const pCam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+    pCam.position.set(10, 20, 30)
+    mgr.toggleProjection()
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    expect(oCam.position.x).toBeCloseTo(10)
+    expect(oCam.position.y).toBeCloseTo(20)
+    expect(oCam.position.z).toBeCloseTo(30)
+  })
+
+  it('orthographic camera gets up from perspective camera on toggle', () => {
+    const pCam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+    pCam.up.set(0, 1, 0)
+    mgr.toggleProjection()
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    expect(oCam.up.x).toBeCloseTo(0)
+    expect(oCam.up.y).toBeCloseTo(1)
+    expect(oCam.up.z).toBeCloseTo(0)
+  })
+
+  it('orthographic frustum half-height matches perspective field of view at current distance', () => {
+    const pCam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+    const ctl = priv<{ target: THREE.Vector3 }>(mgr, 'controls')
+    // controls.target is a plain object stub, treat as origin
+    const distance = pCam.position.length()
+    const expectedHalfH = Math.tan((pCam.fov / 2) * (Math.PI / 180)) * distance
+    mgr.toggleProjection()
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    expect(oCam.top).toBeCloseTo(expectedHalfH)
+    expect(oCam.bottom).toBeCloseTo(-expectedHalfH)
+    void ctl
+  })
+
+  it('sets controls.object to the orthographic camera after toggling to ortho', () => {
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    const ctl = priv<{ object: unknown }>(mgr, 'controls')
+    mgr.toggleProjection()
+    expect(ctl.object).toBe(oCam)
+  })
+
+  it('sets controls.object to the perspective camera after toggling back', () => {
+    const pCam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+    const ctl = priv<{ object: unknown }>(mgr, 'controls')
+    mgr.toggleProjection()
+    mgr.toggleProjection()
+    expect(ctl.object).toBe(pCam)
+  })
+
+  it('calls controls.update() on toggle', () => {
+    const ctl = priv<{ update: ReturnType<typeof vi.fn> }>(mgr, 'controls')
+    const callsBefore = ctl.update.mock.calls.length
+    mgr.toggleProjection()
+    expect(ctl.update.mock.calls.length).toBeGreaterThan(callsBefore)
+  })
+
+  it('renderer.render is called with perspective camera in perspective mode', () => {
+    const pCam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+    const rdr = priv<{ render: ReturnType<typeof vi.fn> }>(mgr, 'renderer')
+    rdr.render.mockClear()
+    // Drive a single animation frame manually
+    const group = priv<TWEEN.Group>(mgr, '_tweenGroup')
+    group.update(performance.now())
+    priv<{ update: ReturnType<typeof vi.fn> }>(mgr, 'controls').update()
+    mgr['renderer'].render(mgr.scene, mgr.camera)
+    const lastCall = rdr.render.mock.calls.at(-1)!
+    expect(lastCall[1]).toBe(pCam)
+  })
+
+  it('renderer.render is called with orthographic camera in orthographic mode', () => {
+    mgr.toggleProjection()
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    const rdr = priv<{ render: ReturnType<typeof vi.fn> }>(mgr, 'renderer')
+    rdr.render.mockClear()
+    mgr['renderer'].render(mgr.scene, mgr.camera)
+    const lastCall = rdr.render.mock.calls.at(-1)!
+    expect(lastCall[1]).toBe(oCam)
+  })
+})
 
 // ── Scene graph ───────────────────────────────────────────────────────────────
 
