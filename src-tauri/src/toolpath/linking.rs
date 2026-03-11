@@ -475,11 +475,41 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
         };
 
         // Decide whether to use helical or ramp entry for this pass.
-        let use_helical = params.helical_entry_radius.is_some() && is_closed_contour(pass);
+        // Guard: if the radius is too small for chord approximation
+        // (segments_per_revolution == 0), treat it as if no helical entry was
+        // requested so the standard plunge fallback runs instead.
+        let use_helical = params
+            .helical_entry_radius
+            .is_some_and(|r| segments_per_revolution(r) > 0)
+            && is_closed_contour(pass);
         let use_ramp = !use_helical
             && params.ramp_entry_angle_deg.is_some()
             && pass.cuts.len() >= 2
             && !is_closed_contour(pass);
+
+        // Arc lead-in start S = P − R·T + R·N.  Pre-computed so it can be used
+        // as the plunge/ramp end target in every branch: the Linking pass must
+        // end exactly where the arc starts, keeping the path continuous.
+        let arc_lead_in_start: Option<(f64, f64)> = params
+            .arc_lead_in_radius
+            .filter(|_| pass.cuts.len() >= 2)
+            .and_then(|arc_r| {
+                let p0 = &pass.cuts[0].position;
+                let p1 = &pass.cuts[1].position;
+                let ddx = p1.x - p0.x;
+                let ddy = p1.y - p0.y;
+                let dlen = (ddx * ddx + ddy * ddy).sqrt();
+                if dlen >= 1e-12 {
+                    let (tx, ty) = (ddx / dlen, ddy / dlen);
+                    let (nx, ny) = (-ty, tx); // left perpendicular
+                    Some((
+                        p0.x - arc_r * tx + arc_r * nx,
+                        p0.y - arc_r * ty + arc_r * ny,
+                    ))
+                } else {
+                    None
+                }
+            });
 
         if use_helical {
             let radius = params.helical_entry_radius.unwrap();
@@ -534,6 +564,7 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                 tracing::warn!(
                     "helical entry: radius too large for pocket, falling back to plunge"
                 );
+                let (desc_x, desc_y) = arc_lead_in_start.unwrap_or((approach_x, approach_y));
                 result.push(Pass {
                     kind: PassKind::Linking,
                     cuts: vec![
@@ -543,13 +574,13 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                             z: clearance_z,
                         }),
                         rapid_point(Vec3 {
-                            x: approach_x,
-                            y: approach_y,
+                            x: desc_x,
+                            y: desc_y,
                             z: clearance_z,
                         }),
                         rapid_point(Vec3 {
-                            x: approach_x,
-                            y: approach_y,
+                            x: desc_x,
+                            y: desc_y,
                             z: cutting_z,
                         }),
                     ],
@@ -558,9 +589,14 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
         } else if use_ramp {
             let angle_deg = params.ramp_entry_angle_deg.unwrap();
             let first_cut = &pass.cuts[0].position;
+            // When arc lead-in is also active, the ramp should end at the arc
+            // start S so there is no positional gap between the Linking pass and
+            // the LeadIn arc.  Without arc lead-in the ramp ends at the first
+            // cut point as usual.
+            let ramp_end = arc_lead_in_start.unwrap_or((first_cut.x, first_cut.y));
             let ramp_moves = ramp_descent_moves(
                 (approach_x, approach_y),
-                (first_cut.x, first_cut.y),
+                ramp_end,
                 clearance_z,
                 cutting_z,
                 angle_deg,
@@ -570,6 +606,7 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                 tracing::warn!(
                     "ramp entry: invalid angle {angle_deg}° or zero depth, falling back to plunge"
                 );
+                let (desc_x, desc_y) = arc_lead_in_start.unwrap_or((approach_x, approach_y));
                 result.push(Pass {
                     kind: PassKind::Linking,
                     cuts: vec![
@@ -579,13 +616,13 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                             z: clearance_z,
                         }),
                         rapid_point(Vec3 {
-                            x: approach_x,
-                            y: approach_y,
+                            x: desc_x,
+                            y: desc_y,
                             z: clearance_z,
                         }),
                         rapid_point(Vec3 {
-                            x: approach_x,
-                            y: approach_y,
+                            x: desc_x,
+                            y: desc_y,
                             z: cutting_z,
                         }),
                     ],
@@ -610,29 +647,10 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
                 });
             }
         } else {
-            // For arc lead-in, descend to the arc start S = P − R·T + R·N so
-            // the Linking plunge ends exactly where the arc approach begins,
-            // keeping the path continuous at cutting depth.
-            let (desc_x, desc_y) =
-                if let Some(arc_r) = params.arc_lead_in_radius.filter(|_| pass.cuts.len() >= 2) {
-                    let p0 = &pass.cuts[0].position;
-                    let p1 = &pass.cuts[1].position;
-                    let ddx = p1.x - p0.x;
-                    let ddy = p1.y - p0.y;
-                    let dlen = (ddx * ddx + ddy * ddy).sqrt();
-                    if dlen >= 1e-12 {
-                        let (tx, ty) = (ddx / dlen, ddy / dlen);
-                        let (nx, ny) = (-ty, tx); // left perpendicular
-                        (
-                            p0.x - arc_r * tx + arc_r * nx,
-                            p0.y - arc_r * ty + arc_r * ny,
-                        )
-                    } else {
-                        (approach_x, approach_y)
-                    }
-                } else {
-                    (approach_x, approach_y)
-                };
+            // Descend to the arc start S (pre-computed above) when arc lead-in
+            // is active, so the Linking plunge ends exactly where the arc begins.
+            // Falls back to approach_xy when no arc lead-in is configured.
+            let (desc_x, desc_y) = arc_lead_in_start.unwrap_or((approach_x, approach_y));
             result.push(Pass {
                 kind: PassKind::Linking,
                 cuts: vec![
@@ -1046,6 +1064,40 @@ mod tests {
         }
     }
 
+    #[test]
+    fn helical_entry_degenerate_radius_falls_back_to_plunge() {
+        // A radius ≤ CHORDAL_ERROR/2 (= 0.005 mm) makes segments_per_revolution
+        // return 0, which would leave the Linking pass with no Z descent if not
+        // guarded.  Verify the guard causes a clean 3-point plunge fallback.
+        let passes = vec![make_closed_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: Some(0.001), // way below CHORDAL_ERROR/2 = 0.005
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        assert_eq!(
+            linking.cuts.len(),
+            3,
+            "degenerate helical radius must fall back to 3-point plunge, got {}",
+            linking.cuts.len()
+        );
+        let last_z = linking.cuts.last().unwrap().position.z;
+        assert!(
+            (last_z - (-5.0)).abs() < 1e-9,
+            "plunge fallback must reach cutting_z, got {last_z}"
+        );
+        for cut in &linking.cuts {
+            assert_eq!(cut.move_kind, MoveKind::Rapid);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Ramp entry tests
     // -----------------------------------------------------------------------
@@ -1295,6 +1347,72 @@ mod tests {
         for cut in &linking.cuts {
             assert_eq!(cut.move_kind, MoveKind::Rapid);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Ramp + arc lead-in combination test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ramp_entry_with_arc_lead_in_is_continuous() {
+        // When both ramp entry and arc lead-in are active the Linking pass must
+        // end at the arc start S = P − R·T + R·N (not at the first cut point P)
+        // so there is no positional gap at cutting depth.
+        //
+        // make_open_pass creates (0,0,-5)→(20,0,-5): T=(1,0), N=(0,1).
+        // With arc_r=2: S = (0,0) − 2·(1,0) + 2·(0,1) = (−2, 2).
+        let arc_r = 2.0_f64;
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: Some(arc_r),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(15.0),
+        };
+        let result = link_passes(passes, &params);
+
+        let linking = result.iter().find(|p| p.kind == PassKind::Linking).unwrap();
+        let lead_in = result.iter().find(|p| p.kind == PassKind::LeadIn).unwrap();
+
+        // Linking pass must descend to cutting_z.
+        let link_last = linking.cuts.last().unwrap();
+        assert!(
+            (link_last.position.z - (-5.0)).abs() < 1e-9,
+            "Linking pass must end at cutting_z, got z={}",
+            link_last.position.z
+        );
+
+        // The arc start S = P − R·T + R·N = (−2, 2).  The Linking pass must end
+        // there so the arc can depart from S without a positional discontinuity.
+        let expected_sx = -2.0_f64;
+        let expected_sy = 2.0_f64;
+        assert!(
+            (link_last.position.x - expected_sx).abs() < 1e-9
+                && (link_last.position.y - expected_sy).abs() < 1e-9,
+            "Linking end ({:.4},{:.4}) must equal arc start S ({expected_sx},{expected_sy})",
+            link_last.position.x,
+            link_last.position.y,
+        );
+
+        // LeadIn arc last point must be the first cut point P = (0, 0).
+        let arc_last = lead_in.cuts.last().unwrap();
+        assert!(
+            (arc_last.position.x).abs() < 1e-9 && (arc_last.position.y).abs() < 1e-9,
+            "LeadIn arc must end at first cut point, got ({:.4},{:.4})",
+            arc_last.position.x,
+            arc_last.position.y,
+        );
+
+        // Previously the ramp ended at P=(0,0) instead of S=(−2,2); confirm it's
+        // no longer at P.
+        assert!(
+            link_last.position.x.abs() > 1e-9 || link_last.position.y.abs() > 1e-9,
+            "Linking end should not be at P=(0,0): ramp must land at arc start S"
+        );
     }
 
     // -----------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-11. Based on git history (141 commits, branch `main`)._
+_Last updated: 2026-03-11. Based on git history (154 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -47,15 +47,22 @@ milestones during `calculate_toolpath` via a Tauri `AppHandle`, a
 `OperationListPanel` that subscribes to events filtered to the active
 calculation row.
 
-Phase 2 (2.5D Operations) is **partially complete**. The first chunk of Phase 2
-deliverables has been implemented: the OCCT Z-section primitive
+Phase 2 (2.5D Operations) is **partially complete**. The following Phase 2
+deliverables have been implemented: the OCCT Z-section primitive
 (`cg_shape_section_at_z`), Z-Level Roughing operation (data model, algorithm,
 IPC, UI, golden test), viewport standard view snap shortcuts (T/F/R/I keys with
 animated transitions), perspective/orthographic projection toggle (P key and
 toolbar button), and display mode selector (Shaded / Shaded+Edges / Wireframe /
-Transparent) are all implemented and tested.
+Transparent). Additionally: the `LinkingParams` struct refactor, multi-level
+profile stepdown (`ProfileParams.stepdown: Option<f64>`), entry motion data
+model fields (`arc_lead_in_radius`, `arc_lead_out_radius`, `helical_entry_radius`,
+`helical_entry_pitch`, `ramp_entry_angle_deg`) on Profile/Pocket/ZLevelRoughing
+params, IPC plumbing of those fields, UI controls for them in the operation forms,
+helical entry (spiral descent into closed pockets), ramp entry (linear angled
+descent for open contours), and arc lead-in / lead-out (quarter-circle approach
+and departure tangent arcs) are all implemented and tested.
 
-Full test suite: 377 Rust tests, 316 frontend tests — all passing.
+Full test suite: 406 Rust tests, 324 frontend tests — all passing.
 
 ---
 
@@ -387,8 +394,9 @@ immediately once algorithms are written.
   inputs when the selected operation changes
 - Tests in `OperationEditorForm.test.tsx` cover pocket, profile, and drill
   forms; including add/remove point, override inputs, and geometry section
-  (Select Faces / Done Selecting / Clear) — 9 new tests for geometry section
-  (z_level_roughing branch added in Phase 2, bringing total to 42 tests)
+  (Select Faces / Done Selecting / Clear) — 9 new tests for geometry section;
+  z_level_roughing branch added in Phase 2; entry motion fields added (Phase 2)
+  bringing the total to 50 tests across 9 describe blocks
 
 **Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`, `9706ff9`, `085504f`, `8491f7f`, `31e1286`, `d9139d1`)
 - Row click sets `selectedOperationId`; selected row highlighted
@@ -833,6 +841,147 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
   sync on change, SceneManager `setDisplayMode` called, `setModelMesh` on mesh
   load/clear); SceneManager display-mode tests in `scene.test.ts`
 
+### LinkingParams struct refactor (`00726e9`)
+
+**Types** (`src-tauri/src/toolpath/types.rs`)
+- New `LinkingParams` struct with fields `tool_diameter: f64`, `clearance_z: f64`,
+  `lead_ratio: f64` — replaces the previous separate positional arguments and
+  hardcoded `LEAD_RATIO` constant in `link_passes`
+- `link_passes(passes, params: &LinkingParams)` — signature updated; no behaviour
+  change
+
+**Command handler** (`src-tauri/src/commands/toolpath.rs`)
+- `calculate_toolpath_inner` constructs `LinkingParams` from operation context
+  and passes it to `link_passes`
+
+### Multi-level profile stepdown (`d093656`, `3bc5b09`)
+
+**Data model** (`src-tauri/src/models/operation.rs`)
+- `ProfileParams.stepdown` changed from `f64` to `Option<f64>` with
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`
+- `None` or `Some(v <= 0)` → single pass at full depth (backward compatible)
+- `Some(v > 0)` → integer-indexed Z loop identical to `zlevel_roughing` pattern:
+  `Z = stock_top - n*sd` clamped to `floor_z`; final pass is always at floor
+
+**Algorithm** (`src-tauri/src/toolpath/operations/profile.rs`)
+- `profile_passes` matches on `params.stepdown`; multi-level loop when
+  `Some(sd > 0)`, single-pass otherwise
+- 8 new ungated tests (in `tests_no_bindings`): `None` → one pass at floor,
+  `Some(0)` → one pass, `Some(-1)` → one pass, JSON absence when None,
+  backward-compat deserialization, `None` → one Z level, `stepdown=2/depth=8` →
+  four passes at Z=8/6/4/2, `stepdown=3/depth=8` → three passes, last clamped to floor
+
+**TypeScript** (`src/api/types.ts`)
+- `ProfileParams.stepdown` changed to `stepdown?: number | null`
+
+### Entry motion data model and plumbing (`c8a8b0d`, `5cef144`)
+
+**Data model** (`src-tauri/src/models/operation.rs`)
+- Five new `Option<f64>` fields added to `ProfileParams`, `PocketParams`, and
+  `ZLevelRoughingParams` (all with `#[serde(default, skip_serializing_if = "Option::is_none")]`
+  for backward compatibility):
+  - `arc_lead_in_radius` — radius for arc lead-in; `None` = straight lead-in
+  - `arc_lead_out_radius` — radius for arc lead-out; `None` = straight lead-out
+  - `helical_entry_radius` — helix radius for closed-pocket entry; `None` = plunge
+  - `helical_entry_pitch` — Z descent per revolution (mm); uses tool_diameter/3
+    default when `None` but radius is `Some`
+  - `ramp_entry_angle_deg` — ramp angle (degrees) for open-contour entry; `None` = plunge
+
+**LinkingParams** (`src-tauri/src/toolpath/types.rs`)
+- Same five fields added to `LinkingParams` struct
+
+**Command handler** (`src-tauri/src/commands/toolpath.rs`)
+- `calculate_toolpath_inner` now extracts all five entry motion fields from the
+  active operation's params and forwards them into `LinkingParams`; previously
+  all were hardcoded `None`
+
+**TypeScript** (`src/api/types.ts`)
+- camelCase variants added to `ProfileParams`, `PocketParams`, `ZLevelRoughingParams`
+  interfaces: `arcLeadInRadius?`, `arcLeadOutRadius?`, `helicalEntryRadius?`,
+  `helicalEntryPitch?`, `rampEntryAngleDeg?` (all `number | null`)
+
+### Entry motion UI (`e6b5af3`)
+
+**OperationEditorForm** (`src/components/operations/OperationEditorForm.tsx`)
+- Profile and Pocket forms each gain five optional numeric inputs:
+  Arc lead-in radius (mm), Arc lead-out radius (mm), Helical entry radius (mm),
+  Helical entry pitch (mm), Ramp entry angle (°)
+- All fields use the `value === '' ? null : Number(...)` pattern on blur
+- Profile `stepdown` field corrected to send `null` (not `NaN`) when cleared
+- `ProfileParams.stepdown` type corrected to `number | null` in the form
+- 8 new OperationEditorForm tests:
+  - Profile: all five fields render, all five empty by default, arc lead-in blur
+    sets value, arc lead-in blur with blank sends null, stepdown blank sends null
+  - Pocket: all five fields render, arc lead-out blur sets value, arc lead-out blur
+    with blank sends null
+
+### Helical entry (`a7feffc`, `734afe2`)
+
+**Algorithm** (`src-tauri/src/toolpath/linking.rs`)
+- `segments_per_revolution(radius)` — number of chord segments per revolution for
+  ≤0.01 mm chordal error; returns 0 when radius ≤ 0.005 mm (avoids divide-by-zero)
+- `chord_len_for_radius(radius)` — chord length formula
+- `helical_descent_moves(center, radius, pitch, start_z, end_z)` → `Vec<CutPoint>` —
+  CCW spiral from `start_z` to `end_z`, `pitch` mm per revolution; all moves are
+  `MoveKind::Feed`
+- `cleanup_arc_moves(center, radius, z, start_angle)` — full CCW cleanup circle at
+  cutting depth `z` starting from the helix endpoint angle (positional continuity)
+- `centroid_xy(points)` — closed-contour centroid; excludes closing duplicate point
+  (within 0.001 mm) to avoid skew
+- `link_passes` integration: when `params.helical_entry_radius` is `Some(r)` and
+  the cutting pass is a closed contour, replaces the straight plunge with
+  `helical_descent_moves` centred on the contour centroid + `cleanup_arc_moves`;
+  falls back to plunge when radius is too large for contour or contour is degenerate
+- 7 helical-specific unit tests: Z monotonically decreasing, XY on circle, pitch
+  controls revolution count, `None` radius falls back to plunge, closed contour uses
+  helix, cleanup arc starts at helix endpoint, helix fallback when radius too large
+
+### Ramp entry (`734afe2`, `d02acd1`)
+
+**Algorithm** (`src-tauri/src/toolpath/linking.rs`)
+- `ramp_descent_moves(start_xy, end_xy, z_start, z_end, angle_deg)` → `Vec<CutPoint>` —
+  linear XY+Z descent for open contours; guards against zero-length segments and
+  angle ≥ 90°; clamps horizontal distance to segment length when the ramp would
+  require more travel than available
+- `link_passes` integration: when `params.ramp_entry_angle_deg` is `Some(a)` and
+  the cutting pass is an open contour, uses ramp descent; `None` or closed contour
+  falls back to plunge/helical as appropriate
+- 11 ramp/combination unit tests: Z spans retract to cut depth, Z decreases
+  monotonically, horizontal distance consistent with angle and depth, `None` angle
+  falls back to plunge, short segment clamps and still reaches cut depth, angles
+  ≥ 90° produce no ramp moves, zero-length segment stays at start XY, open-contour
+  ramp integration, non-clamped path reaches cut depth, invalid angle falls back
+  to plunge in `link_passes`, ramp+arc-lead-in combination continuity (when both
+  are active, `Linking` ends at arc start S so there is no XY gap at cutting depth)
+
+### Arc lead-in / lead-out (`f658547`, `a5125f5`, `d02acd1`)
+
+**Algorithm** (`src-tauri/src/toolpath/linking.rs`)
+- `arc_approach_moves(first_cut_point, second_cut_point, radius, cut_z)` → `Vec<CutPoint>` —
+  generates a quarter-circle CCW arc at `cut_z`, tangent to the direction from
+  `first_cut_point` toward `second_cut_point`; chord-approximated to ≤0.01 mm
+  chordal error; S = P − R·T + R·N; all moves are `MoveKind::Feed`; degenerate
+  arcs (tiny radius, coincident points) return empty (fall back to straight feed
+  at the `link_passes` call site rather than silently omitting the pass)
+- `arc_departure_moves(last_cut_point, second_to_last_cut_point, radius, cut_z)` →
+  `Vec<CutPoint>` — symmetric quarter-circle CCW departure arc tangent to the
+  direction from `second_to_last_cut_point` toward `last_cut_point`
+- `link_passes` integration:
+  - When `params.arc_lead_in_radius` is `Some(r)`: the `LeadIn` pass replaces
+    the straight lead-in feed with arc approach moves; the `Linking` pass descent
+    targets the arc start point S (not the first cut point) so the arc entry lands
+    exactly on the cut
+  - When `params.arc_lead_out_radius` is `Some(r)`: the `LeadOut` pass replaces
+    the straight lead-out feed with arc departure moves; `from_x/from_y` after
+    a lead-out arc tracks the true arc endpoint for subsequent linking
+  - `None` values preserve the existing behaviour exactly
+- 11 arc-specific unit tests: `None` radius preserves straight lead-in, `Some`
+  radius produces arc approach moves, last approach move lands exactly at first cut
+  point (≤1e-9 mm), first approach move is ≥ radius from first cut point, all
+  approach moves are `Feed`, departure `None`/`Some` variants, all departure moves
+  are `Feed`, linking descent targets arc start point, lift after lead-out departs
+  from arc end, ramp not applied to closed contours
+
 ---
 
 ## Phases 3–5
@@ -857,7 +1006,7 @@ encountered.
 | `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (6 incl. Z-Level Roughing button), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 47 tests across 10 describe blocks |
-| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form, pocket form, tool change saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), error handling — 42 tests across 9 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), error handling — 50 tests across 9 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
 | `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
@@ -875,7 +1024,7 @@ encountered.
 | `src-tauri/src/postprocessor/` (inline) | Config parse, formatter, modal, arcs, block, program, public API |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops, tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration); plus two OCCT-gated integration tests in `commands/toolpath.rs` for geometry-selection end-to-end and invalid-fingerprint error |
 | `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde, `cache.rs` key stability + sensitivity (4 tests), `linking.rs` pass wrapping, `planner.rs` dispatch + feed/speed override/fallback + geometry-none-uses-stock + geometry-some-no-shape-error + progress-events emission, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse, `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (incl. `LinkingParams` struct tests, Arc/Feed/Rapid MoveKind variants), `cache.rs` key stability + sensitivity (4 tests), `linking.rs` 32 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 29 entry-motion: 7 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback) + 11 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` dispatch + feed/speed override/fallback + geometry-none-uses-stock + geometry-some-no-shape-error + progress-events emission, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
 | `src-tauri/src/project/` (inline) | `serialization.rs` round-trips, toolpath ZIP entry write (positive + negative), round-trip with valid toolpath, graceful load with missing entry |
 | `src-tauri/src/geometry/clipper.rs` (inline) | Stub path always; integration path (offset/boolean) gated on bindings |
 | `src-tauri/src/geometry/safe.rs` (inline) | `shape_section_at_z` stub returns NotImplemented; OCCT-gated integration test verifies single loop from box mid-height section |
@@ -901,9 +1050,9 @@ requires no geometry bindings.
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
-| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`), `ProfileParams`, `PocketParams`, `DrillParams`, `DrillPoint`, `ZLevelRoughingParams`, `CompensationSide`, `CacheState`, `CachedStats` |
-| `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData` |
-| `src-tauri/src/toolpath/linking.rs` | `link_passes()` — lift/traverse/descend between cutting passes |
+| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`), `ProfileParams` (incl. `stepdown: Option<f64>` and five entry motion fields), `PocketParams` (incl. five entry motion fields), `DrillParams`, `DrillPoint`, `ZLevelRoughingParams` (incl. five entry motion fields), `CompensationSide`, `CacheState`, `CachedStats` |
+| `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData`, `LinkingParams` |
+| `src-tauri/src/toolpath/linking.rs` | `link_passes(passes, params: &LinkingParams)` — lift/traverse/descend between cutting passes with optional helical entry, ramp entry, arc lead-in, and arc lead-out |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — resolves geometry boundary, dispatches to algorithm, returns passes + stats; linking and `Toolpath` assembly happen in `calculate_toolpath_inner` |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
@@ -958,7 +1107,7 @@ requires no geometry bindings.
 ### TypeScript frontend
 | File | Purpose |
 |---|---|
-| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'` |
+| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`) |
 | `src/api/file.ts` | File operation IPC wrappers |
 | `src/api/tools.ts` | Tool CRUD IPC wrappers |
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
@@ -973,7 +1122,7 @@ requires no geometry bindings.
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
 | `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms |
 | `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
 | `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
 | `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
