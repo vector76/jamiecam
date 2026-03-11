@@ -334,4 +334,81 @@ mod tests_no_bindings {
         let params: ProfileParams = serde_json::from_str(json).expect("deserialize");
         assert_eq!(params.stepdown, Some(2.5));
     }
+
+    #[test]
+    fn profile_stepdown_none_single_z_level() {
+        // stepdown: None → exactly one Z level (single pass at floor depth)
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 10.0,
+            stepdown: None,
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        let z_set: std::collections::HashSet<i64> = passes
+            .iter()
+            .flat_map(|p| p.cuts.iter())
+            .map(|c| (c.position.z * 1000.0) as i64)
+            .collect();
+        assert_eq!(
+            z_set.len(),
+            1,
+            "None stepdown must produce exactly 1 Z level, got {}",
+            z_set.len()
+        );
+    }
+
+    #[test]
+    fn profile_stepdown_2_depth_8_produces_four_passes() {
+        // stock height=10 → stock_top_z=10, depth=8 → floor_z=2
+        // stepdown=2.0 → passes at z=8, 6, 4, 2 (exactly 4)
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 8.0,
+            stepdown: Some(2.0),
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        assert_eq!(
+            passes.len(),
+            4,
+            "stepdown=2, depth=8 must produce exactly 4 passes, got {}",
+            passes.len()
+        );
+        let z_values: Vec<f64> = passes.iter().map(|p| p.cuts[0].position.z).collect();
+        let expected = vec![8.0, 6.0, 4.0, 2.0];
+        for (got, exp) in z_values.iter().zip(expected.iter()) {
+            assert!((got - exp).abs() < 1e-9, "expected Z={exp}, got Z={got}");
+        }
+    }
+
+    #[test]
+    fn profile_stepdown_3_depth_8_final_pass_at_floor() {
+        // stock height=10 → stock_top_z=10, depth=8 → floor_z=2
+        // stepdown=3.0 → passes at z=7, 4, then clamped to floor_z=2 (3 passes total)
+        let stock = make_stock_10();
+        let params = ProfileParams {
+            depth: 8.0,
+            stepdown: Some(3.0),
+            compensation_side: CompensationSide::Center,
+            geometry: None,
+        };
+        let boundary = vec![(0.0_f64, 0.0_f64), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)];
+        let passes = profile_passes(&stock, &params, 6.0, &boundary).expect("should succeed");
+        assert_eq!(
+            passes.len(),
+            3,
+            "stepdown=3, depth=8 must produce exactly 3 passes, got {}",
+            passes.len()
+        );
+        let last_z = passes.last().unwrap().cuts[0].position.z;
+        assert!(
+            (last_z - 2.0_f64).abs() < 1e-9,
+            "final pass must be at exact floor_z=2.0, got {last_z}"
+        );
+    }
 }
