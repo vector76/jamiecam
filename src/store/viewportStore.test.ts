@@ -15,6 +15,7 @@ beforeEach(() => {
     orbitTarget: [0, 0, 0],
     zoom: 1,
     displayMode: 'Shaded',
+    projectionMode: 'perspective',
     selectionMode: false,
     hoveredFaceIdx: null,
     selectedFaceFingerprints: [],
@@ -162,6 +163,23 @@ describe('viewportStore — clearFaceSelection', () => {
     useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
     useViewportStore.getState().clearFaceSelection()
     expect(useViewportStore.getState().selectedFaceFingerprints).toEqual([])
+  })
+})
+
+describe('viewportStore — projectionMode', () => {
+  it('starts with perspective', () => {
+    expect(useViewportStore.getState().projectionMode).toBe('perspective')
+  })
+
+  it('setProjectionMode sets orthographic', () => {
+    useViewportStore.getState().setProjectionMode('orthographic')
+    expect(useViewportStore.getState().projectionMode).toBe('orthographic')
+  })
+
+  it('setProjectionMode can toggle back to perspective', () => {
+    useViewportStore.getState().setProjectionMode('orthographic')
+    useViewportStore.getState().setProjectionMode('perspective')
+    expect(useViewportStore.getState().projectionMode).toBe('perspective')
   })
 })
 

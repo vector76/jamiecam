@@ -5,7 +5,7 @@
  * createAxisTriad is kept real (it's pure Three.js geometry).
  */
 
-import { render, act } from '@testing-library/react'
+import { render, act, fireEvent, screen } from '@testing-library/react'
 import * as THREE from 'three'
 import { Viewport } from './Viewport'
 import { useViewportStore } from '../store/viewportStore'
@@ -38,6 +38,8 @@ vi.mock('./scene', () => ({
     snapFront: vi.fn(),
     snapRight: vi.fn(),
     snapIsometric: vi.fn(),
+    toggleProjection: vi.fn(),
+    getProjectionMode: vi.fn().mockReturnValue('perspective'),
   })),
 }))
 
@@ -60,6 +62,8 @@ function latestMgr() {
     snapFront: ReturnType<typeof vi.fn>
     snapRight: ReturnType<typeof vi.fn>
     snapIsometric: ReturnType<typeof vi.fn>
+    toggleProjection: ReturnType<typeof vi.fn>
+    getProjectionMode: ReturnType<typeof vi.fn>
   }
 }
 
@@ -83,6 +87,7 @@ beforeEach(() => {
     hoveredFaceIdx: null,
     selectedFaceFingerprints: [],
     faceDescriptors: [],
+    projectionMode: 'perspective',
   })
 })
 
@@ -263,5 +268,69 @@ describe('Viewport — keyboard shortcuts', () => {
     const keydownRemovals = removeSpy.mock.calls.filter(([type]) => type === 'keydown')
     expect(keydownRemovals.length).toBeGreaterThan(0)
     removeSpy.mockRestore()
+  })
+
+  it('P key toggles projectionMode in the store from perspective to orthographic', async () => {
+    render(<Viewport />)
+    await act(async () => { fireKey('p') })
+    expect(useViewportStore.getState().projectionMode).toBe('orthographic')
+  })
+
+  it('P key toggles projectionMode back to perspective on second press', async () => {
+    render(<Viewport />)
+    await act(async () => { fireKey('p') })
+    await act(async () => { fireKey('p') })
+    expect(useViewportStore.getState().projectionMode).toBe('perspective')
+  })
+})
+
+describe('Viewport — toolbar button', () => {
+  it('renders a button labelled Perspective by default', () => {
+    render(<Viewport />)
+    expect(screen.getByRole('button', { name: 'Perspective' })).toBeInTheDocument()
+  })
+
+  it('clicking the button toggles projectionMode to orthographic', async () => {
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Perspective' }))
+    })
+    expect(useViewportStore.getState().projectionMode).toBe('orthographic')
+  })
+
+  it('button label changes to Orthographic after toggle', async () => {
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Perspective' }))
+    })
+    expect(screen.getByRole('button', { name: 'Orthographic' })).toBeInTheDocument()
+  })
+})
+
+describe('Viewport — projection mode sync', () => {
+  it('does not call toggleProjection on initial mount when both start as perspective', () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    expect(mgr.toggleProjection).not.toHaveBeenCalled()
+  })
+
+  it('calls toggleProjection when projectionMode changes to orthographic', async () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    // Mock returns 'perspective', store changes to 'orthographic' → mismatch → toggle called.
+    await act(async () => {
+      useViewportStore.getState().setProjectionMode('orthographic')
+    })
+    expect(mgr.toggleProjection).toHaveBeenCalledOnce()
+  })
+
+  it('does not call toggleProjection when store and manager already agree', async () => {
+    render(<Viewport />)
+    const mgr = latestMgr()
+    // getProjectionMode returns 'perspective'; store is already 'perspective'.
+    await act(async () => {
+      useViewportStore.getState().setProjectionMode('perspective')
+    })
+    expect(mgr.toggleProjection).not.toHaveBeenCalled()
   })
 })

@@ -31,16 +31,20 @@ export function Viewport({ style }: ViewportProps) {
   const hoveredFaceIdx = useViewportStore((state) => state.hoveredFaceIdx)
   const selectedFaceFingerprints = useViewportStore((state) => state.selectedFaceFingerprints)
   const faceDescriptors = useViewportStore((state) => state.faceDescriptors)
+  const projectionMode = useViewportStore((state) => state.projectionMode)
+  const setProjectionMode = useViewportStore((state) => state.setProjectionMode)
   const setHoveredFaceIdx = useViewportStore((state) => state.setHoveredFaceIdx)
   const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
 
   // Mutable refs to avoid stale closures in mount-registered event handlers.
   const selectionModeRef = useRef(selectionMode)
+  const projectionModeRef = useRef(projectionMode)
   const hoveredFaceIdxRef = useRef(hoveredFaceIdx)
   const faceDescriptorsRef = useRef(faceDescriptors)
   const meshDataRef = useRef(meshData)
 
   useEffect(() => { selectionModeRef.current = selectionMode }, [selectionMode])
+  useEffect(() => { projectionModeRef.current = projectionMode }, [projectionMode])
   useEffect(() => { hoveredFaceIdxRef.current = hoveredFaceIdx }, [hoveredFaceIdx])
   useEffect(() => { faceDescriptorsRef.current = faceDescriptors }, [faceDescriptors])
   useEffect(() => { meshDataRef.current = meshData }, [meshData])
@@ -116,6 +120,7 @@ export function Viewport({ style }: ViewportProps) {
         case 'F': mgrRef.current?.snapFront(); break
         case 'R': mgrRef.current?.snapRight(); break
         case 'I': mgrRef.current?.snapIsometric(); break
+        case 'P': setProjectionMode(projectionModeRef.current === 'perspective' ? 'orthographic' : 'perspective'); break
       }
     }
 
@@ -208,6 +213,14 @@ export function Viewport({ style }: ViewportProps) {
     }
   }, [selectionMode, meshData])
 
+  // ── Projection mode sync ───────────────────────────────────────────────────
+  useEffect(() => {
+    const mgr = mgrRef.current
+    if (mgr && mgr.getProjectionMode() !== projectionMode) {
+      mgr.toggleProjection()
+    }
+  }, [projectionMode])
+
   // ── Highlight rebuild effect ───────────────────────────────────────────────
   useEffect(() => {
     const overlay = highlightMeshRef.current
@@ -266,5 +279,17 @@ export function Viewport({ style }: ViewportProps) {
     overlay.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   }, [selectionMode, hoveredFaceIdx, selectedFaceFingerprints, faceDescriptors, meshData])
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%', ...style }} />
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4 }}>
+        <button
+          onClick={() => setProjectionMode(projectionMode === 'perspective' ? 'orthographic' : 'perspective')}
+          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+        >
+          {projectionMode === 'perspective' ? 'Perspective' : 'Orthographic'}
+        </button>
+      </div>
+    </div>
+  )
 }

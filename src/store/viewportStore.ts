@@ -23,6 +23,8 @@ interface ViewportState {
    * Phase 0: only 'Shaded' is supported; additional modes added later.
    */
   displayMode: 'Shaded'
+  /** Camera projection mode. */
+  projectionMode: 'perspective' | 'orthographic'
   /** Whether face-selection mode is active. */
   selectionMode: boolean
   /** Index of the face currently under the cursor, or null. */
@@ -49,6 +51,8 @@ interface ViewportState {
   clearFaceSelection: () => void
   /** Replace the face descriptor list. */
   setFaceDescriptors: (descriptors: FaceDescriptor[]) => void
+  /** Set the camera projection mode. */
+  setProjectionMode: (mode: 'perspective' | 'orthographic') => void
 }
 
 export const useViewportStore = create<ViewportState>((set) => ({
@@ -57,6 +61,7 @@ export const useViewportStore = create<ViewportState>((set) => ({
   orbitTarget: [0, 0, 0],
   zoom: 1,
   displayMode: 'Shaded',
+  projectionMode: 'perspective',
   selectionMode: false,
   hoveredFaceIdx: null,
   selectedFaceFingerprints: [],
@@ -77,4 +82,5 @@ export const useViewportStore = create<ViewportState>((set) => ({
   ),
   clearFaceSelection: () => set({ selectedFaceFingerprints: [] }),
   setFaceDescriptors: (faceDescriptors) => set({ faceDescriptors }),
+  setProjectionMode: (projectionMode) => set({ projectionMode }),
 }))
