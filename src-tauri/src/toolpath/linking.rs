@@ -162,6 +162,117 @@ fn vec3_scale(v: &Vec3, s: f64) -> Vec3 {
 }
 
 // ---------------------------------------------------------------------------
+// Arc lead-in / lead-out helpers
+// ---------------------------------------------------------------------------
+
+/// Quarter-circle arc approach into `first_cut_point` at `cut_z`.
+///
+/// The arc is in the XY plane, tangent to the direction from `first_cut_point`
+/// toward `second_cut_point`.  The center is offset to the left of the travel
+/// direction, so the arc sweeps CCW from outside the material into
+/// `first_cut_point`.  All returned moves are [`MoveKind::Feed`].
+///
+/// Segment count: `(π/2 / acos(1 − CHORDAL_ERROR/radius)).ceil()`.
+fn arc_approach_moves(
+    first_cut_point: (f64, f64, f64),
+    second_cut_point: (f64, f64, f64),
+    radius: f64,
+    cut_z: f64,
+) -> Vec<CutPoint> {
+    if radius <= CHORDAL_ERROR / 2.0 {
+        return vec![];
+    }
+    let n_segs = (std::f64::consts::FRAC_PI_2 / (1.0 - CHORDAL_ERROR / radius).max(-1.0).acos())
+        .ceil() as usize;
+    if n_segs == 0 {
+        return vec![];
+    }
+
+    let dx = second_cut_point.0 - first_cut_point.0;
+    let dy = second_cut_point.1 - first_cut_point.1;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1e-12 {
+        return vec![];
+    }
+    let (tx, ty) = (dx / len, dy / len);
+    // Left normal to the cutting direction.
+    let (nx, ny) = (-ty, tx);
+
+    // Circle center: to the left of the entry tangent at first_cut_point.
+    let cx = first_cut_point.0 + radius * nx;
+    let cy = first_cut_point.1 + radius * ny;
+
+    // Angle of first_cut_point relative to center.
+    // first_cut_point - center = -radius * (nx, ny) = (radius*ty, -radius*tx)
+    let alpha = (-radius * tx).atan2(radius * ty);
+
+    // Arc: CCW from (alpha - π/2) to alpha.
+    let start_angle = alpha - std::f64::consts::FRAC_PI_2;
+
+    (1..=n_segs)
+        .map(|i| {
+            let t = i as f64 / n_segs as f64;
+            let angle = start_angle + std::f64::consts::FRAC_PI_2 * t;
+            feed_point(Vec3 {
+                x: cx + radius * angle.cos(),
+                y: cy + radius * angle.sin(),
+                z: cut_z,
+            })
+        })
+        .collect()
+}
+
+/// Quarter-circle arc departure from `last_cut_point` at `cut_z`.
+///
+/// Symmetric to [`arc_approach_moves`]: the arc sweeps CCW starting at
+/// `last_cut_point`, tangent to the direction from `second_to_last_cut_point`
+/// toward `last_cut_point`, ending at a point geometrically outside the
+/// original boundary.  All returned moves are [`MoveKind::Feed`].
+fn arc_departure_moves(
+    last_cut_point: (f64, f64, f64),
+    second_to_last_cut_point: (f64, f64, f64),
+    radius: f64,
+    cut_z: f64,
+) -> Vec<CutPoint> {
+    if radius <= CHORDAL_ERROR / 2.0 {
+        return vec![];
+    }
+    let n_segs = (std::f64::consts::FRAC_PI_2 / (1.0 - CHORDAL_ERROR / radius).max(-1.0).acos())
+        .ceil() as usize;
+    if n_segs == 0 {
+        return vec![];
+    }
+
+    let dx = last_cut_point.0 - second_to_last_cut_point.0;
+    let dy = last_cut_point.1 - second_to_last_cut_point.1;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1e-12 {
+        return vec![];
+    }
+    let (tx, ty) = (dx / len, dy / len);
+    let (nx, ny) = (-ty, tx);
+
+    let cx = last_cut_point.0 + radius * nx;
+    let cy = last_cut_point.1 + radius * ny;
+
+    // Angle of last_cut_point relative to center.
+    let alpha = (last_cut_point.1 - cy).atan2(last_cut_point.0 - cx);
+
+    // Arc: CCW from alpha to (alpha + π/2).
+    (1..=n_segs)
+        .map(|i| {
+            let t = i as f64 / n_segs as f64;
+            let angle = alpha + std::f64::consts::FRAC_PI_2 * t;
+            feed_point(Vec3 {
+                x: cx + radius * angle.cos(),
+                y: cy + radius * angle.sin(),
+                z: cut_z,
+            })
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // Ramp entry helpers
 // ---------------------------------------------------------------------------
 
@@ -308,10 +419,27 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
 
         // 1. LeadOut — based on the tail of the previous cutting pass.
         if let Some(ref pos) = lead_out_pos {
-            result.push(Pass {
-                kind: PassKind::LeadOut,
-                cuts: vec![feed_point(pos.clone())],
-            });
+            let lead_out_cuts = if let Some(arc_r) = params.arc_lead_out_radius {
+                let prev = &cutting_passes[i - 1];
+                let n = prev.cuts.len();
+                // n > 1 is guaranteed because lead_out_pos is Some only when n > 1.
+                let tail = &prev.cuts[n - 1].position;
+                let pre_tail = &prev.cuts[n - 2].position;
+                arc_departure_moves(
+                    (tail.x, tail.y, tail.z),
+                    (pre_tail.x, pre_tail.y, pre_tail.z),
+                    arc_r,
+                    tail.z,
+                )
+            } else {
+                vec![feed_point(pos.clone())]
+            };
+            if !lead_out_cuts.is_empty() {
+                result.push(Pass {
+                    kind: PassKind::LeadOut,
+                    cuts: lead_out_cuts,
+                });
+            }
         }
 
         // 2. Linking — lift, traverse, descend.
@@ -493,10 +621,19 @@ pub fn link_passes(cutting_passes: Vec<Pass>, params: &LinkingParams) -> Vec<Pas
 
         // 3. LeadIn — feed from approach position to the first cut point.
         if pass.cuts.len() > 1 {
-            result.push(Pass {
-                kind: PassKind::LeadIn,
-                cuts: vec![feed_point(pass.cuts[0].position.clone())],
-            });
+            let lead_in_cuts = if let Some(arc_r) = params.arc_lead_in_radius {
+                let p0 = &pass.cuts[0].position;
+                let p1 = &pass.cuts[1].position;
+                arc_approach_moves((p0.x, p0.y, p0.z), (p1.x, p1.y, p1.z), arc_r, cutting_z)
+            } else {
+                vec![feed_point(pass.cuts[0].position.clone())]
+            };
+            if !lead_in_cuts.is_empty() {
+                result.push(Pass {
+                    kind: PassKind::LeadIn,
+                    cuts: lead_in_cuts,
+                });
+            }
         }
 
         // 4. Cutting pass (unchanged).
@@ -1116,6 +1253,160 @@ mod tests {
         );
         for cut in &linking.cuts {
             assert_eq!(cut.move_kind, MoveKind::Rapid);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Arc lead-in / lead-out tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn arc_approach_moves_none_radius_gives_straight_lead_in() {
+        let passes = vec![make_open_pass(-5.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+        let lead_in = result.iter().find(|p| p.kind == PassKind::LeadIn).unwrap();
+        // Straight lead-in: single feed move to first cut point.
+        assert_eq!(lead_in.cuts.len(), 1);
+        assert_eq!(lead_in.cuts[0].move_kind, MoveKind::Feed);
+    }
+
+    #[test]
+    fn arc_approach_moves_some_radius_gives_arc_lead_in() {
+        let passes = vec![make_open_pass(-5.0)];
+        let arc_r = 3.0_f64;
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: Some(arc_r),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+        let lead_in = result.iter().find(|p| p.kind == PassKind::LeadIn).unwrap();
+        // Arc lead-in: multiple feed moves.
+        assert!(
+            lead_in.cuts.len() > 1,
+            "arc lead-in should have more than 1 move, got {}",
+            lead_in.cuts.len()
+        );
+        // All arc moves must be Feed.
+        for cut in &lead_in.cuts {
+            assert_eq!(cut.move_kind, MoveKind::Feed, "arc move must be Feed");
+        }
+    }
+
+    #[test]
+    fn arc_approach_last_move_ends_at_first_cut_point() {
+        let first = (0.0_f64, 0.0_f64, -5.0_f64);
+        let second = (10.0_f64, 0.0_f64, -5.0_f64);
+        let radius = 2.0_f64;
+        let moves = arc_approach_moves(first, second, radius, first.2);
+        assert!(!moves.is_empty());
+        let last = moves.last().unwrap();
+        let dx = last.position.x - first.0;
+        let dy = last.position.y - first.1;
+        let dist = (dx * dx + dy * dy).sqrt();
+        assert!(
+            dist < 1e-9,
+            "last arc approach move should be at first_cut_point, distance = {dist}"
+        );
+    }
+
+    #[test]
+    fn arc_approach_first_move_is_outside_first_cut_point() {
+        let first = (0.0_f64, 0.0_f64, -5.0_f64);
+        let second = (10.0_f64, 0.0_f64, -5.0_f64);
+        let radius = 2.0_f64;
+        let moves = arc_approach_moves(first, second, radius, first.2);
+        assert!(!moves.is_empty());
+        let start = &moves[0];
+        let dx = start.position.x - first.0;
+        let dy = start.position.y - first.1;
+        let dist = (dx * dx + dy * dy).sqrt();
+        assert!(
+            dist >= radius - 1e-9,
+            "first arc approach move should be ≥ radius ({radius}) from first_cut_point, got {dist}"
+        );
+    }
+
+    #[test]
+    fn arc_approach_all_moves_are_feed() {
+        let first = (5.0_f64, 3.0_f64, -2.0_f64);
+        let second = (15.0_f64, 3.0_f64, -2.0_f64);
+        let moves = arc_approach_moves(first, second, 1.5, first.2);
+        assert!(!moves.is_empty());
+        for m in &moves {
+            assert_eq!(m.move_kind, MoveKind::Feed);
+        }
+    }
+
+    #[test]
+    fn arc_departure_none_radius_gives_straight_lead_out() {
+        let passes = vec![make_open_pass(-5.0), make_open_pass(-10.0)];
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+        let lead_out = result.iter().find(|p| p.kind == PassKind::LeadOut).unwrap();
+        // Straight lead-out: single feed move.
+        assert_eq!(lead_out.cuts.len(), 1);
+        assert_eq!(lead_out.cuts[0].move_kind, MoveKind::Feed);
+    }
+
+    #[test]
+    fn arc_departure_some_radius_gives_arc_lead_out() {
+        let passes = vec![make_open_pass(-5.0), make_open_pass(-10.0)];
+        let arc_r = 3.0_f64;
+        let params = LinkingParams {
+            tool_diameter: 6.0,
+            clearance_z: 5.0,
+            lead_ratio: 0.4,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: Some(arc_r),
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let result = link_passes(passes, &params);
+        let lead_out = result.iter().find(|p| p.kind == PassKind::LeadOut).unwrap();
+        assert!(
+            lead_out.cuts.len() > 1,
+            "arc lead-out should have more than 1 move, got {}",
+            lead_out.cuts.len()
+        );
+        for cut in &lead_out.cuts {
+            assert_eq!(cut.move_kind, MoveKind::Feed, "arc move must be Feed");
+        }
+    }
+
+    #[test]
+    fn arc_departure_all_moves_are_feed() {
+        let last = (20.0_f64, 0.0_f64, -5.0_f64);
+        let pre_last = (10.0_f64, 0.0_f64, -5.0_f64);
+        let moves = arc_departure_moves(last, pre_last, 2.0, last.2);
+        assert!(!moves.is_empty());
+        for m in &moves {
+            assert_eq!(m.move_kind, MoveKind::Feed);
         }
     }
 
