@@ -285,6 +285,47 @@ fn linuxcnc_drill_cycle_golden_matches() {
 }
 
 #[test]
+fn fanuc_0i_drill_cycle_golden_matches() {
+    let toolpath = five_hole_peck_toolpath();
+    let dir = golden_dir("fanuc-0i");
+    std::fs::create_dir_all(&dir).expect("create fanuc-0i golden dir");
+
+    let toolpath_fixture = dir.join("drill_cycle.toolpath.json");
+    let nc_fixture = dir.join("drill_cycle.nc");
+
+    let pp = PostProcessor::builtin("fanuc-0i").expect("load fanuc-0i");
+    let tool_info = ToolInfo {
+        number: 1,
+        diameter: 5.0,
+        description: "5mm Drill".to_string(),
+    };
+    let output = pp
+        .generate(
+            &[toolpath.clone()],
+            &[tool_info],
+            GenerateOptions {
+                program_number: None,
+                include_comments: false,
+            },
+        )
+        .expect("generate");
+
+    if !nc_fixture.exists() {
+        let json = serde_json::to_string_pretty(&toolpath).expect("serialize toolpath");
+        std::fs::write(&toolpath_fixture, &json).expect("write toolpath fixture");
+        std::fs::write(&nc_fixture, &output).expect("write nc fixture");
+        panic!(
+            "Fixtures written. Inspect {:?} — verify: G83 with correct Z/R/Q words, G80 cancel, sorted hole order. Re-run to lock.",
+            nc_fixture
+        );
+    }
+
+    let golden = std::fs::read_to_string(&nc_fixture)
+        .unwrap_or_else(|e| panic!("read golden {nc_fixture:?}: {e}"));
+    assert_eq!(output, golden, "fanuc-0i drill_cycle golden file mismatch");
+}
+
+#[test]
 fn linuxcnc_golden_matches() {
     let toolpath = load_toolpath("linuxcnc");
     let pp = PostProcessor::builtin("linuxcnc").expect("load linuxcnc");
