@@ -37,6 +37,7 @@ const TOOL_ID_B = 'aaaaaaaa-0000-0000-0000-000000000002'
 const POCKET_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000001'
 const PROFILE_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000002'
 const DRILL_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000003'
+const ZLEVEL_ROUGHING_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000004'
 
 const POCKET_OP: Operation = {
   id: POCKET_OP_ID,
@@ -63,6 +64,15 @@ const DRILL_OP: Operation = {
   toolId: TOOL_ID_A,
   type: 'drill',
   params: { depth: 10.0, peckDepth: 3.0, points: [] },
+}
+
+const ZLEVEL_ROUGHING_OP: Operation = {
+  id: ZLEVEL_ROUGHING_OP_ID,
+  name: 'Z-Level Roughing',
+  enabled: true,
+  toolId: TOOL_ID_A,
+  type: 'z_level_roughing',
+  params: { depth: 5.0, stepdown: 1.0, stepover: 0.5 },
 }
 
 const SNAPSHOT_BASE: ProjectSnapshot = {
@@ -477,6 +487,127 @@ describe('OperationEditorForm — geometry section', () => {
       POCKET_OP_ID,
       expect.objectContaining({ params: expect.objectContaining({ geometry: null }) }),
     ))
+  })
+})
+
+// ── Z-Level Roughing form ─────────────────────────────────────────────────────
+
+describe('OperationEditorForm — z_level_roughing branch', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([ZLEVEL_ROUGHING_OP])
+    vi.mocked(opsApi.editOperation).mockResolvedValue(ZLEVEL_ROUGHING_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('renders tool selector, Depth, Stepdown, Stepover inputs, geometry section', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Stepdown (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Stepover (%)')).toBeInTheDocument()
+    expect(screen.getByText('Select Faces')).toBeInTheDocument()
+  })
+
+  it('depth input blur calls editOperation with correct params.depth', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Depth (mm)'), { target: { value: '8' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ZLEVEL_ROUGHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ depth: 8 }) }),
+    ))
+  })
+
+  it('stepdown input blur calls editOperation with correct params.stepdown', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Stepdown (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Stepdown (mm)'), { target: { value: '0.5' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ZLEVEL_ROUGHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepdown: 0.5 }) }),
+    ))
+  })
+
+  it('stepover input displays value as percentage (0.5 → 50)', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Stepover (%)')).toHaveValue(50))
+  })
+
+  it('stepover input blur with 40 saves params.stepover as 0.4', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Stepover (%)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Stepover (%)'), { target: { value: '40' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ZLEVEL_ROUGHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepover: 0.4 }) }),
+    ))
+  })
+
+  it('Select Faces button enters selection mode', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(true))
+  })
+
+  it('Done Selecting saves geometry fingerprints', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(screen.getByText('Done Selecting')).toBeInTheDocument())
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
+    fireEvent.click(screen.getByText('Done Selecting'))
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ZLEVEL_ROUGHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: ['fp-1', 'fp-2'] }) }),
+    ))
+  })
+
+  it('Clear button saves geometry as null', async () => {
+    const OP_WITH_GEO: Operation = {
+      ...ZLEVEL_ROUGHING_OP,
+      params: { depth: 5.0, stepdown: 1.0, stepover: 0.5, geometry: ['fp-a'] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([OP_WITH_GEO])
+
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Clear')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Clear'))
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ZLEVEL_ROUGHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: null }) }),
+    ))
+  })
+
+  it('Calculate button is disabled when stock is null', async () => {
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).toBeDisabled())
+  })
+
+  it('Calculate button is enabled when stock is defined', async () => {
+    useProjectStore.setState({
+      snapshot: {
+        ...SNAPSHOT_BASE,
+        stock: { type: 'box', origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 100, height: 50 },
+      },
+    })
+    render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).not.toBeDisabled())
   })
 })
 

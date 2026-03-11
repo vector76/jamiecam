@@ -11,11 +11,11 @@
  */
 
 import { useEffect, useState } from 'react'
-import { useTools, useProjectStore } from '../../store/projectStore'
+import { useTools, useProjectStore, useStock } from '../../store/projectStore'
 import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
-import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams } from '../../api/types'
+import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams } from '../../api/types'
 import { useViewportStore } from '../../store/viewportStore'
 import { getModelFaces } from '../../api/geometry'
 
@@ -25,6 +25,7 @@ interface Props {
 
 export function OperationEditorForm({ operationId }: Props) {
   const tools = useTools()
+  const stock = useStock()
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
   const pushNotification = useProjectStore((s) => s.pushNotification)
   const [operation, setOperation] = useState<Operation | null>(null)
@@ -54,7 +55,7 @@ export function OperationEditorForm({ operationId }: Props) {
   async function handleSelectFaces() {
     const faces = await getModelFaces()
     setFaceDescriptors(faces)
-    const savedGeo = (operation!.params as PocketParams | ProfileParams).geometry
+    const savedGeo = (operation!.params as PocketParams | ProfileParams | ZLevelRoughingParams).geometry
     if (savedGeo?.length) {
       useViewportStore.getState().clearFaceSelection()
       savedGeo.forEach(fp => useViewportStore.getState().toggleFaceSelection(fp))
@@ -264,6 +265,68 @@ export function OperationEditorForm({ operationId }: Props) {
             </div>
           ))}
           <button onClick={() => void save({ params: { ...params, points: [...points, { x: 0, y: 0 }] } })}>Add point</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (operation.type === 'z_level_roughing') {
+    const params = operation.params as ZLevelRoughingParams
+    return (
+      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-tool">Tool</label>
+          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+            {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-depth">Depth (mm)</label>
+          <input id="oef-depth" type="number" defaultValue={params.depth}
+            onBlur={(e) => void save({ params: { ...params, depth: Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-stepdown">Stepdown (mm)</label>
+          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+            onBlur={(e) => void save({ params: { ...params, stepdown: Number(e.target.value) } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          {/* stepover stored as fraction 0–1; displayed and edited as percentage */}
+          <label htmlFor="oef-stepover">Stepover (%)</label>
+          <input id="oef-stepover" type="number" defaultValue={params.stepover * 100}
+            onBlur={(e) => void save({ params: { ...params, stepover: Number(e.target.value) / 100 } })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
+          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+            onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
+          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+            onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
+        </div>
+        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
+          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+            {selectionMode
+              ? `${selectedFps.length} face(s) selected`
+              : (() => {
+                  const g = (operation.params as ZLevelRoughingParams).geometry
+                  return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
+                })()
+            }
+          </div>
+          {selectionMode ? (
+            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
+          ) : (
+            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
+          )}
+          {!selectionMode && (operation.params as ZLevelRoughingParams).geometry?.length ? (
+            <button onClick={() => void handleClearGeometry()}>Clear</button>
+          ) : null}
+        </div>
+        <div style={{ marginTop: '0.5rem' }}>
+          <button disabled={stock === null}>Calculate</button>
         </div>
       </div>
     )
