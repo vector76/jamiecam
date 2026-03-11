@@ -1,6 +1,7 @@
 pub mod arcs;
 pub mod block;
 pub mod config;
+pub mod cycles;
 pub mod formatter;
 pub mod modal;
 pub mod program;
