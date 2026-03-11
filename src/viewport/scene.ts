@@ -110,9 +110,9 @@ export class SceneManager {
     this.perspectiveCamera.aspect = aspect
     this.perspectiveCamera.updateProjectionMatrix()
 
-    const frustumHalf = 250
-    this.orthographicCamera.left = -frustumHalf * aspect
-    this.orthographicCamera.right = frustumHalf * aspect
+    const halfH = this.orthographicCamera.top
+    this.orthographicCamera.left = -halfH * aspect
+    this.orthographicCamera.right = halfH * aspect
     this.orthographicCamera.updateProjectionMatrix()
 
     this.renderer.setSize(w, h)
@@ -171,7 +171,7 @@ export class SceneManager {
         Math.tan((this.perspectiveCamera.fov / 2) * (Math.PI / 180)) * distance
       const aspect =
         this.renderer.domElement.clientWidth /
-        this.renderer.domElement.clientHeight
+        Math.max(this.renderer.domElement.clientHeight, 1)
       this.orthographicCamera.left = -halfH * aspect
       this.orthographicCamera.right = halfH * aspect
       this.orthographicCamera.top = halfH

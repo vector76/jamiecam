@@ -188,6 +188,34 @@ describe('SceneManager — projection toggle', () => {
   })
 })
 
+// ── Projection + resize consistency ───────────────────────────────────────────
+
+describe('SceneManager — orthographic resize consistency', () => {
+  it('left/right respects the toggled top/bottom after a resize', () => {
+    const container = document.createElement('div')
+    Object.defineProperty(container, 'clientWidth', { get: () => 800, configurable: true })
+    Object.defineProperty(container, 'clientHeight', { get: () => 400, configurable: true })
+    const canvas = document.createElement('canvas')
+    const mgr = new SceneManager(canvas, container)
+
+    // Toggle to orthographic — this sets top/bottom from camera FOV + distance.
+    mgr.toggleProjection()
+    const oCam = priv<THREE.OrthographicCamera>(mgr, 'orthographicCamera')
+    const halfH = oCam.top // value set by toggleProjection
+
+    // Simulate a resize at a different aspect ratio (1600×400 → aspect 4).
+    Object.defineProperty(container, 'clientWidth', { get: () => 1600, configurable: true })
+    ;(mgr as unknown as Record<string, (c: HTMLElement) => void>)['_onResize'](container)
+
+    const newAspect = 1600 / 400
+    expect(oCam.left).toBeCloseTo(-halfH * newAspect)
+    expect(oCam.right).toBeCloseTo(halfH * newAspect)
+    expect(oCam.top).toBeCloseTo(halfH) // top/bottom must not change on resize
+
+    mgr.dispose()
+  })
+})
+
 // ── Scene graph ───────────────────────────────────────────────────────────────
 
 describe('SceneManager — scene graph', () => {
