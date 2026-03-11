@@ -148,6 +148,15 @@ export interface DrillParams {
   points: DrillPoint[]
 }
 
+/** Parameters for a Z-Level Roughing operation. */
+export interface ZLevelRoughingParams {
+  depth: number
+  stepdown: number
+  /** Radial stepover as a fraction of tool diameter (0–1). */
+  stepover: number
+  geometry?: string[] | null
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -159,8 +168,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill'
-  params: ProfileParams | PocketParams | DrillParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -175,8 +184,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill'
-  params: ProfileParams | PocketParams | DrillParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -185,7 +194,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
   enabled: boolean
   needsRecalculate: boolean
 }

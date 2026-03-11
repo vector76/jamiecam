@@ -267,6 +267,21 @@ mod tests {
     }
 
     #[test]
+    fn zlevel_roughing_round_trips() {
+        let params = ZLevelRoughingParams {
+            depth: 5.0,
+            stepdown: 1.0,
+            stepover: 0.5,
+            geometry: None,
+        };
+        let op = OperationParams::ZLevelRoughing(params);
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("\"type\":\"z_level_roughing\""));
+        let back: OperationParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(op, back);
+    }
+
+    #[test]
     fn zlevel_roughing_operation_serde_round_trip() {
         let original = make_zlevel_op();
         let json = serde_json::to_string(&original).expect("serialize");
