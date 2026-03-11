@@ -291,7 +291,7 @@ fn ramp_descent_moves(
     cut_z: f64,
     angle_deg: f64,
 ) -> Vec<CutPoint> {
-    let depth = (retract_z - cut_z).abs();
+    let depth = retract_z - cut_z;
     // angle_deg must be in (0°, 90°): at 0° the ramp is horizontal (infinite
     // length), at ≥ 90° tan becomes zero or negative and required_horiz would
     // be infinite or negative, producing moves in the wrong direction.
@@ -1229,6 +1229,14 @@ mod tests {
         // angle_deg ≤ 0 was already guarded but verify too.
         assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, 0.0).is_empty());
         assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), 5.0, -5.0, -5.0).is_empty());
+    }
+
+    #[test]
+    fn ramp_inverted_z_produces_no_moves() {
+        // When retract_z < cut_z (inverted — tool would have to move upward to
+        // reach cut_z), the function must return empty rather than producing
+        // moves that travel in the wrong Z direction.
+        assert!(ramp_descent_moves((0.0, 0.0), (100.0, 0.0), -5.0, 5.0, 15.0).is_empty());
     }
 
     #[test]
