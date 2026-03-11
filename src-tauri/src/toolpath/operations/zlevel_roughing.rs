@@ -249,6 +249,74 @@ mod tests {
 
     #[cfg(cam_geometry_bindings)]
     #[test]
+    fn zlr_stock_boundary_produces_correct_z_levels() {
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 50.0,
+            depth: 50.0,
+            height: 10.0,
+        });
+        let params = ZLevelRoughingParams {
+            depth: 6.0,
+            stepdown: 2.0,
+            stepover: 0.5,
+            geometry: None,
+        };
+        let passes = zlevel_roughing_passes(&stock, &params, 6.0, None).unwrap();
+        assert!(!passes.is_empty());
+        // stock_top_z = 10.0; Z levels: 10, 8, 6, 4 (all >= 10 - 6 = 4.0) -> 4 levels
+        let unique_zs: std::collections::HashSet<_> = passes
+            .iter()
+            .map(|p| (p.cuts[0].position.z * 1000.0) as i64)
+            .collect();
+        assert_eq!(unique_zs.len(), 4);
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn zlr_geometry_uses_section_boundaries() {
+        use crate::geometry::OcctShape;
+        let path = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fixtures/box.step"
+        ));
+        let shape = OcctShape::load_step(path).expect("load box.step");
+        let (xmin, ymin, zmin, xmax, ymax, zmax) = shape.bounding_box();
+        let stock = StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: xmin,
+                y: ymin,
+                z: zmin,
+            },
+            width: xmax - xmin,
+            depth: ymax - ymin,
+            height: zmax - zmin,
+        });
+        let params = ZLevelRoughingParams {
+            depth: 5.0,
+            stepdown: 2.0,
+            stepover: 0.4,
+            geometry: None,
+        };
+        let passes = zlevel_roughing_passes(&stock, &params, 6.0, Some(&shape)).unwrap();
+        assert!(!passes.is_empty());
+        // all cut Z values must lie within [zmax - 5.0, zmax]
+        for pass in &passes {
+            for cut in &pass.cuts {
+                assert!(
+                    cut.position.z >= zmax - 5.0 - f64::EPSILON
+                        && cut.position.z <= zmax + f64::EPSILON
+                );
+            }
+        }
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
     fn collapses_when_tool_too_large() {
         let stock = make_box_stock(10.0, 10.0, 5.0);
         let params = ZLevelRoughingParams {
