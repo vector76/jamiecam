@@ -12,6 +12,7 @@
 
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import * as TWEEN from '@tweenjs/tween.js'
 
 export class SceneManager {
   /** The Three.js scene.  Viewport.tsx adds/removes model meshes here. */
@@ -24,6 +25,8 @@ export class SceneManager {
   private frameId: number | null = null
   private resizeObserver: ResizeObserver
   private toolpathGroup: THREE.Group
+  private _tweenGroup: TWEEN.Group
+  private _activeTween: TWEEN.Tween<any> | null = null
 
   constructor(canvas: HTMLCanvasElement, container: HTMLElement) {
     this.scene = new THREE.Scene()
@@ -71,6 +74,8 @@ export class SceneManager {
     this.toolpathGroup.name = 'ToolpathGroup'
     this.scene.add(this.toolpathGroup)
 
+    this._tweenGroup = new TWEEN.Group()
+
     // ── Three-point lighting (intensities from docs/viewport-design.md) ───
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4)
     this.scene.add(ambientLight)
@@ -111,6 +116,7 @@ export class SceneManager {
 
   private _animate(): void {
     this.frameId = requestAnimationFrame(() => this._animate())
+    this._tweenGroup.update(performance.now())
     this.controls.update()
     this.renderer.render(this.scene, this.perspectiveCamera)
   }
@@ -153,9 +159,93 @@ export class SceneManager {
       cancelAnimationFrame(this.frameId)
       this.frameId = null
     }
+    this._activeTween?.stop()
+    this._activeTween = null
     this.resizeObserver.disconnect()
     this.controls.dispose()
     this.renderer.dispose()
+  }
+
+  /**
+   * Animate the perspective camera to a new view direction, preserving the
+   * current orbit distance from the target so the model stays the same
+   * apparent size.  Any in-flight animation is cancelled before starting.
+   *
+   * @param position  Unit-vector direction (will be normalised internally).
+   * @param up        Desired camera up vector.
+   */
+  snapToView(position: THREE.Vector3, up: THREE.Vector3): void {
+    const orbitDistance = this.perspectiveCamera.position.distanceTo(
+      this.controls.target,
+    )
+    const targetPos = position.clone().normalize().multiplyScalar(orbitDistance)
+
+    const ε = 0.001
+    if (
+      this.perspectiveCamera.position.distanceTo(targetPos) < ε &&
+      this.perspectiveCamera.up.distanceTo(up) < ε
+    ) {
+      return
+    }
+
+    this._activeTween?.stop()
+    this._activeTween = null
+
+    const state = {
+      x: this.perspectiveCamera.position.x,
+      y: this.perspectiveCamera.position.y,
+      z: this.perspectiveCamera.position.z,
+      ux: this.perspectiveCamera.up.x,
+      uy: this.perspectiveCamera.up.y,
+      uz: this.perspectiveCamera.up.z,
+    }
+    this._activeTween = new TWEEN.Tween(state, this._tweenGroup)
+      .to(
+        {
+          x: targetPos.x,
+          y: targetPos.y,
+          z: targetPos.z,
+          ux: up.x,
+          uy: up.y,
+          uz: up.z,
+        },
+        300,
+      )
+      .easing(TWEEN.Easing.Quadratic.InOut)
+      .onUpdate(() => {
+        this.perspectiveCamera.position.set(state.x, state.y, state.z)
+        this.perspectiveCamera.up.set(state.ux, state.uy, state.uz)
+        this.controls.target.set(0, 0, 0)
+        this.controls.update()
+      })
+      .onComplete(() => {
+        this._activeTween = null
+        this.controls.update()
+      })
+      .start()
+  }
+
+  /** Snap camera to top-down view (+Z up, looking down). */
+  snapTop(): void {
+    this.snapToView(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0))
+  }
+
+  /** Snap camera to front view (looking in from -Y). */
+  snapFront(): void {
+    this.snapToView(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1))
+  }
+
+  /** Snap camera to right-side view (looking in from +X). */
+  snapRight(): void {
+    this.snapToView(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1))
+  }
+
+  /** Snap camera to isometric view (equal parts X, -Y, Z). */
+  snapIsometric(): void {
+    this.snapToView(
+      new THREE.Vector3(1, -1, 1).normalize(),
+      new THREE.Vector3(0, 0, 1),
+    )
   }
 
   /**

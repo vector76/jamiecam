@@ -7,6 +7,7 @@
  */
 
 import * as THREE from 'three'
+import * as TWEEN from '@tweenjs/tween.js'
 import { SceneManager } from './scene'
 
 // ── Global stubs ─────────────────────────────────────────────────────────────
@@ -49,7 +50,7 @@ vi.mock('three/addons/controls/OrbitControls.js', () => ({
     enableDamping = false
     enablePan = false
     screenSpacePanning = true
-    target = { set: vi.fn(), copy: vi.fn() }
+    target = { x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() }
     update = vi.fn()
     dispose = vi.fn()
   },
@@ -280,5 +281,119 @@ describe('SceneManager — frameModel', () => {
     const center = new THREE.Vector3(5, 10, 15)
     mgr.frameModel(new THREE.Sphere(center, 30))
     expect(ctl.target.copy).toHaveBeenCalledWith(center)
+  })
+})
+
+// ── snapToView / snap* ────────────────────────────────────────────────────────
+
+describe('SceneManager — snapToView', () => {
+  let mgr: SceneManager
+  let cam: THREE.PerspectiveCamera
+
+  beforeEach(() => {
+    const { canvas, container } = makeElements()
+    mgr = new SceneManager(canvas, container)
+    cam = priv<THREE.PerspectiveCamera>(mgr, 'perspectiveCamera')
+  })
+
+  afterEach(() => mgr.dispose())
+
+  /** Drive the tween group 400 ms into the future to complete any active tween. */
+  function driveToCompletion() {
+    const group = priv<TWEEN.Group>(mgr, '_tweenGroup')
+    group.update(performance.now() + 400)
+  }
+
+  it('snapFront sets _activeTween while animating', () => {
+    mgr.snapFront()
+    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).not.toBeNull()
+  })
+
+  it('snapFront positions camera on the -Y axis after completion', () => {
+    mgr.snapFront()
+    driveToCompletion()
+    expect(cam.position.x).toBeCloseTo(0, 3)
+    expect(cam.position.z).toBeCloseTo(0, 3)
+    expect(cam.position.y).toBeLessThan(0)
+  })
+
+  it('snapTop positions camera on the +Z axis after completion', () => {
+    mgr.snapTop()
+    driveToCompletion()
+    expect(cam.position.x).toBeCloseTo(0, 3)
+    expect(cam.position.y).toBeCloseTo(0, 3)
+    expect(cam.position.z).toBeGreaterThan(0)
+  })
+
+  it('snapRight positions camera on the +X axis after completion', () => {
+    mgr.snapRight()
+    driveToCompletion()
+    expect(cam.position.y).toBeCloseTo(0, 3)
+    expect(cam.position.z).toBeCloseTo(0, 3)
+    expect(cam.position.x).toBeGreaterThan(0)
+  })
+
+  it('snapIsometric positions camera at equal |X|, |Y|, |Z| components after completion', () => {
+    mgr.snapIsometric()
+    driveToCompletion()
+    expect(cam.position.x).toBeCloseTo(Math.abs(cam.position.y), 3)
+    expect(cam.position.x).toBeCloseTo(cam.position.z, 3)
+    expect(cam.position.y).toBeLessThan(0)
+  })
+
+  it('preserves the orbit distance', () => {
+    // Initial camera at (0,-500,300); mock controls.target at origin.
+    const expectedDist = new THREE.Vector3(0, -500, 300).length()
+    mgr.snapFront()
+    driveToCompletion()
+    expect(cam.position.length()).toBeCloseTo(expectedDist, 1)
+  })
+
+  it('clears _activeTween after completion', () => {
+    mgr.snapFront()
+    driveToCompletion()
+    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+  })
+
+  it('is a no-op if camera is already at the target view', () => {
+    mgr.snapFront()
+    driveToCompletion()
+    // A second snapFront should hit the early-return path.
+    mgr.snapFront()
+    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+  })
+
+  it('cancels an in-flight tween when a new snap is requested', () => {
+    mgr.snapFront()
+    const firstTween = priv<TWEEN.Tween<any>>(mgr, '_activeTween')!
+    const stopSpy = vi.spyOn(firstTween, 'stop')
+    mgr.snapRight()
+    expect(stopSpy).toHaveBeenCalled()
+    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).not.toBe(firstTween)
+  })
+
+  it('dispose() stops and clears an in-flight tween', () => {
+    mgr.snapFront()
+    const activeTween = priv<TWEEN.Tween<any>>(mgr, '_activeTween')!
+    const stopSpy = vi.spyOn(activeTween, 'stop')
+    mgr.dispose()
+    expect(stopSpy).toHaveBeenCalled()
+    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+  })
+
+  it('snapFront sets camera up to (0,0,1) after completion', () => {
+    mgr.snapFront()
+    driveToCompletion()
+    expect(cam.up.x).toBeCloseTo(0, 5)
+    expect(cam.up.y).toBeCloseTo(0, 5)
+    expect(cam.up.z).toBeCloseTo(1, 5)
+  })
+
+  it('snapTop sets camera up to (0,1,0) after completion', () => {
+    mgr.snapTop()
+    driveToCompletion()
+    expect(cam.up.x).toBeCloseTo(0, 5)
+    expect(cam.up.y).toBeCloseTo(1, 5)
+    expect(cam.up.z).toBeCloseTo(0, 5)
   })
 })
