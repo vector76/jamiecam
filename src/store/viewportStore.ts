@@ -9,6 +9,8 @@
 import { create } from 'zustand'
 import type { MeshData, LineGeometryData, FaceDescriptor } from '../api/types'
 
+export type DisplayMode = 'shaded' | 'shaded-edges' | 'wireframe' | 'transparent'
+
 interface ViewportState {
   /** Tessellated mesh currently loaded into the viewport, or null. */
   meshData: MeshData | null
@@ -18,11 +20,8 @@ interface ViewportState {
   orbitTarget: [number, number, number]
   /** Camera zoom level (1 = default). */
   zoom: number
-  /**
-   * Shading mode for the mesh.
-   * Phase 0: only 'Shaded' is supported; additional modes added later.
-   */
-  displayMode: 'Shaded'
+  /** Shading mode for the mesh. */
+  displayMode: DisplayMode
   /** Camera projection mode. */
   projectionMode: 'perspective' | 'orthographic'
   /** Whether face-selection mode is active. */
@@ -41,6 +40,8 @@ interface ViewportState {
   setOrbitTarget: (x: number, y: number, z: number) => void
   /** Set the camera zoom level. */
   setZoom: (z: number) => void
+  /** Set the display mode. */
+  setDisplayMode: (mode: DisplayMode) => void
   /** Enable or disable face-selection mode. Disabling clears hover and descriptors. */
   setSelectionMode: (mode: boolean) => void
   /** Update the hovered face index. */
@@ -60,7 +61,7 @@ export const useViewportStore = create<ViewportState>((set) => ({
   toolpathGeometry: null,
   orbitTarget: [0, 0, 0],
   zoom: 1,
-  displayMode: 'Shaded',
+  displayMode: 'shaded',
   projectionMode: 'perspective',
   selectionMode: false,
   hoveredFaceIdx: null,
@@ -70,6 +71,7 @@ export const useViewportStore = create<ViewportState>((set) => ({
   setToolpathGeometry: (toolpathGeometry) => set({ toolpathGeometry }),
   setOrbitTarget: (x, y, z) => set({ orbitTarget: [x, y, z] }),
   setZoom: (zoom) => set({ zoom }),
+  setDisplayMode: (displayMode) => set({ displayMode }),
   setSelectionMode: (mode) => set(() => mode
     ? { selectionMode: true }
     : { selectionMode: false, hoveredFaceIdx: null, faceDescriptors: [] }

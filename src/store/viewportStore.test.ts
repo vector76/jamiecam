@@ -1,4 +1,5 @@
 import { useViewportStore } from './viewportStore'
+import type { DisplayMode } from './viewportStore'
 import type { FaceDescriptor, MeshData } from '../api/types'
 
 const MESH: MeshData = {
@@ -14,7 +15,7 @@ beforeEach(() => {
     meshData: null,
     orbitTarget: [0, 0, 0],
     zoom: 1,
-    displayMode: 'Shaded',
+    displayMode: 'shaded',
     projectionMode: 'perspective',
     selectionMode: false,
     hoveredFaceIdx: null,
@@ -36,8 +37,8 @@ describe('viewportStore — initial state', () => {
     expect(useViewportStore.getState().zoom).toBe(1)
   })
 
-  it('starts with displayMode Shaded', () => {
-    expect(useViewportStore.getState().displayMode).toBe('Shaded')
+  it('starts with displayMode shaded', () => {
+    expect(useViewportStore.getState().displayMode).toBe('shaded')
   })
 })
 
@@ -191,5 +192,26 @@ describe('viewportStore — setFaceDescriptors', () => {
     ]
     useViewportStore.getState().setFaceDescriptors(descriptors)
     expect(useViewportStore.getState().faceDescriptors).toEqual(descriptors)
+  })
+})
+
+describe('viewportStore — setDisplayMode', () => {
+  const modes: DisplayMode[] = ['shaded', 'shaded-edges', 'wireframe', 'transparent']
+
+  it('starts with shaded', () => {
+    expect(useViewportStore.getState().displayMode).toBe('shaded')
+  })
+
+  for (const mode of modes) {
+    it(`setDisplayMode('${mode}') stores the mode`, () => {
+      useViewportStore.getState().setDisplayMode(mode)
+      expect(useViewportStore.getState().displayMode).toBe(mode)
+    })
+  }
+
+  it('can switch between modes', () => {
+    useViewportStore.getState().setDisplayMode('wireframe')
+    useViewportStore.getState().setDisplayMode('transparent')
+    expect(useViewportStore.getState().displayMode).toBe('transparent')
   })
 })

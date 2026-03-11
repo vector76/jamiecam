@@ -13,6 +13,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import * as TWEEN from '@tweenjs/tween.js'
+import type { DisplayMode } from '../store/viewportStore'
 
 export class SceneManager {
   /** The Three.js scene.  Viewport.tsx adds/removes model meshes here. */
@@ -28,6 +29,8 @@ export class SceneManager {
   private _tweenGroup: TWEEN.Group
   private _activeTween: TWEEN.Tween<any> | null = null
   private _projectionMode: 'perspective' | 'orthographic' = 'perspective'
+  private _modelMesh: THREE.Mesh | null = null
+  private _edgeOverlay: THREE.LineSegments | null = null
 
   constructor(canvas: HTMLCanvasElement, container: HTMLElement) {
     this.scene = new THREE.Scene()
@@ -216,6 +219,11 @@ export class SceneManager {
     }
     this._activeTween?.stop()
     this._activeTween = null
+    if (this._edgeOverlay !== null) {
+      this._edgeOverlay.geometry.dispose()
+      ;(this._edgeOverlay.material as THREE.Material).dispose()
+      this._edgeOverlay = null
+    }
     this.resizeObserver.disconnect()
     this.controls.dispose()
     this.renderer.dispose()
@@ -301,6 +309,65 @@ export class SceneManager {
       new THREE.Vector3(1, -1, 1).normalize(),
       new THREE.Vector3(0, 0, 1),
     )
+  }
+
+  /** Store a reference to the model mesh for display-mode changes. */
+  setModelMesh(mesh: THREE.Mesh | null): void {
+    // Dispose the edge overlay built from the previous mesh — it is now stale.
+    if (this._edgeOverlay !== null) {
+      this.scene.remove(this._edgeOverlay)
+      this._edgeOverlay.geometry.dispose()
+      ;(this._edgeOverlay.material as THREE.Material).dispose()
+      this._edgeOverlay = null
+    }
+    this._modelMesh = mesh
+  }
+
+  /** Apply a display mode to the current model mesh. No-op if no mesh is loaded. */
+  setDisplayMode(mode: DisplayMode): void {
+    if (this._modelMesh === null) return
+    const material = this._modelMesh.material as THREE.MeshStandardMaterial
+
+    switch (mode) {
+      case 'shaded':
+        material.wireframe = false
+        material.transparent = false
+        material.opacity = 1
+        material.needsUpdate = true
+        if (this._edgeOverlay !== null) this._edgeOverlay.visible = false
+        break
+
+      case 'shaded-edges':
+        material.wireframe = false
+        material.transparent = false
+        material.opacity = 1
+        material.needsUpdate = true
+        if (this._edgeOverlay === null) {
+          this._edgeOverlay = new THREE.LineSegments(
+            new THREE.EdgesGeometry(this._modelMesh.geometry),
+            new THREE.LineBasicMaterial({ color: 0x000000 }),
+          )
+          this.scene.add(this._edgeOverlay)
+        }
+        this._edgeOverlay.visible = true
+        break
+
+      case 'wireframe':
+        material.wireframe = true
+        material.transparent = false
+        material.opacity = 1
+        material.needsUpdate = true
+        if (this._edgeOverlay !== null) this._edgeOverlay.visible = false
+        break
+
+      case 'transparent':
+        material.wireframe = false
+        material.transparent = true
+        material.opacity = 0.3
+        material.needsUpdate = true
+        if (this._edgeOverlay !== null) this._edgeOverlay.visible = false
+        break
+    }
   }
 
   /**
