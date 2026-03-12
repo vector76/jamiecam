@@ -20,6 +20,19 @@
 
 #include "cam_geometry.h"
 
+// OCCT headers for fixture generation
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
+#include <STEPControl_Writer.hxx>
+#include <gp_Ax2.hxx>
+#include <gp_Trsf.hxx>
+#include <gp_Vec.hxx>
+#include <TopoDS_Shape.hxx>
+#include <IFSelect_ReturnStatus.hxx>
+
+#include <cmath>
 #include <cstring>
 #include <string>
 
@@ -445,3 +458,90 @@ TEST_CASE("cg_section_free of nullptr does not crash") {
 }
 
 } // TEST_SUITE shape_section_at_z
+
+// ---------------------------------------------------------------------------
+// Test suite: STEP fixture generation — plate_with_holes.step
+// ---------------------------------------------------------------------------
+//
+// Expected hole data (downstream tests assert against these values):
+//   Hole 1: center=(25,25), diameter=10, depth=20, through=true
+//   Hole 2: center=(75,25), diameter=6,  depth=20, through=true
+//   Hole 3: center=(50,75), diameter=8,  depth=12, through=false (blind)
+//   Hole 4: center=(25,75), diameter=5,  tilted 30° from Z —
+//           should NOT appear in Z-parallel filtered results
+// ---------------------------------------------------------------------------
+
+static const char* PLATE_PATH = FIXTURES_DIR "/plate_with_holes.step";
+
+TEST_SUITE("step_fixture_generation") {
+
+TEST_CASE("generate plate_with_holes.step fixture and verify round-trip") {
+    // --- Build the plate: 100×100×20 mm box ---
+    TopoDS_Shape plate = BRepPrimAPI_MakeBox(100.0, 100.0, 20.0).Shape();
+
+    // Helper: subtract a vertical cylinder at (cx, cy) from top face downward.
+    auto subtract_vertical_hole = [&](double cx, double cy,
+                                       double diameter, double depth) {
+        double radius = diameter / 2.0;
+        // Place cylinder axis at (cx, cy, 20-depth) pointing up, height = depth+1
+        // For through-holes depth >= 20, start below the box.
+        double z_start = 20.0 - depth;
+        double cyl_height = depth + 1.0; // extra to ensure clean cut
+        if (z_start <= 0.0) {
+            cyl_height += (-z_start) + 0.5;
+            z_start = -0.5; // start slightly below bottom face
+        }
+        gp_Ax2 ax(gp_Pnt(cx, cy, z_start), gp_Dir(0, 0, 1));
+        TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(ax, radius, cyl_height).Shape();
+        plate = BRepAlgoAPI_Cut(plate, cyl).Shape();
+    };
+
+    // Hole 1: through-hole at (25,25), diameter 10 mm
+    subtract_vertical_hole(25.0, 25.0, 10.0, 20.0);
+
+    // Hole 2: through-hole at (75,25), diameter 6 mm
+    subtract_vertical_hole(75.0, 25.0, 6.0, 20.0);
+
+    // Hole 3: blind hole at (50,75), diameter 8 mm, depth 12 mm
+    subtract_vertical_hole(50.0, 75.0, 8.0, 12.0);
+
+    // Hole 4: tilted hole at (25,75), diameter 5 mm, axis 30° from Z
+    {
+        double radius = 2.5;
+        double tilt_rad = 30.0 * M_PI / 180.0;
+        // Axis tilted 30° from Z toward X
+        gp_Dir tilted_dir(std::sin(tilt_rad), 0.0, std::cos(tilt_rad));
+        gp_Ax2 ax(gp_Pnt(25.0, 75.0, 20.0), tilted_dir);
+        // Cylinder long enough to penetrate the plate and extend past both faces
+        TopoDS_Shape cyl = BRepPrimAPI_MakeCylinder(ax, radius, 40.0).Shape();
+        // Shift so it starts below the bottom face and extends past the top
+        gp_Trsf shift;
+        shift.SetTranslation(gp_Vec(
+            -30.0 * std::sin(tilt_rad), 0.0, -30.0 * std::cos(tilt_rad)));
+        TopoDS_Shape shifted = BRepBuilderAPI_Transform(cyl, shift, true).Shape();
+        plate = BRepAlgoAPI_Cut(plate, shifted).Shape();
+    }
+
+    // --- Export to STEP ---
+    STEPControl_Writer writer;
+    IFSelect_ReturnStatus ws = writer.Transfer(plate, STEPControl_AsIs);
+    REQUIRE(ws == IFSelect_RetDone);
+
+    IFSelect_ReturnStatus stat = writer.Write(PLATE_PATH);
+    REQUIRE(stat == IFSelect_RetDone);
+
+    // --- Round-trip: load back via C API ---
+    CgShapeId id = cg_load_step(PLATE_PATH);
+    INFO("last error: " << last_error());
+    REQUIRE(id != CG_NULL_ID);
+
+    // Verify bounding box is approximately 100×100×20
+    CgBbox bb = cg_shape_bounding_box(id);
+    CHECK(bb.xmax - bb.xmin == doctest::Approx(100.0).epsilon(1e-3));
+    CHECK(bb.ymax - bb.ymin == doctest::Approx(100.0).epsilon(1e-3));
+    CHECK(bb.zmax - bb.zmin == doctest::Approx(20.0).epsilon(1e-3));
+
+    cg_shape_free(id);
+}
+
+} // TEST_SUITE step_fixture_generation
