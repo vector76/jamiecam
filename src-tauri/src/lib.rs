@@ -80,6 +80,7 @@ pub fn run() {
             commands::toolpath::get_gcode_preview,
             commands::file::export_gcode,
             commands::geometry::get_model_faces,
+            commands::geometry::detect_holes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
