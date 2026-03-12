@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-12. Based on git history (167 commits, branch `main`)._
+_Last updated: 2026-03-12. Based on git history (177 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -67,11 +67,20 @@ nearest-neighbor hole ordering in `drill_passes`), **canned cycle emission**
 (G81/G83 blocks emitted by the post-processor assembler when
 `cycles.supported = true`), and **canned cycle expansion** (confirmed correct
 for GRBL with `cycles.supported = false`). New golden fixtures cover Fanuc 0i,
-LinuxCNC, and GRBL drill output.
+LinuxCNC, and GRBL drill output. The Phase 2 built-in post-processors
+(`mach4.toml`, `grbl.toml`) were delivered early and are documented under
+Phase 1.
 
-Full test suite: 448 Rust tests (438 with OCCT bindings, 400 without — the
-difference is 48 OCCT-gated tests for real geometry operations and 10
-stub-path tests for the non-OCCT fallback), 324 frontend tests — all passing.
+Two additional Phase 2 deliverables are now complete: **arc fitting** (detect
+circular-arc sequences in toolpath chord segments and emit G2/G3 instead of
+linear G1 moves; `arc_fitting::fit_arcs()` runs on every pass after linking
+with 0.01 mm tolerance; pocket and profile G-code golden files regenerated with
+G02/G03 arc commands) and **hole auto-detection** (`cg_shape_find_holes` C++
+function using OCCT cylindrical surface analysis, Rust wrapper, `detect_holes`
+IPC command, and "Detect Holes" button in the drill operation editor that
+populates drill points from model geometry).
+
+Full test suite: 464 Rust tests, 332 frontend tests — all passing.
 
 ---
 
@@ -214,12 +223,16 @@ immediately once algorithms are written.
 - `export_gcode(ExportParams)` → writes `.nc` to disk; `ExportParams` includes
   operation IDs, post-processor ID, output path, program number, include-comments
 
-**Golden file integration tests** (`4877867`)
+**Golden file integration tests** (`4877867`, updated `f241586`)
 - `src-tauri/tests/gcode_golden.rs`: `fanuc_0i_golden_matches` and
-  `linuxcnc_golden_matches`; each reads fixture JSON, generates G-code, asserts
-  byte-for-byte match against checked-in `.nc` golden file
-- Fixture toolpath JSON: `tests/integration/golden_gcode/fanuc-0i/simple_pocket.toolpath.json`,
-  same for `linuxcnc/` (covers: rapid + arc lead-in pass, feed cutting pass, rapid lead-out pass)
+  `linuxcnc_golden_matches`; each generates a pocket toolpath through the full
+  production pipeline (planner → linking → arc fitting), produces G-code, and
+  asserts byte-for-byte match against checked-in `.nc` golden file; gated on
+  `cam_geometry_bindings` (planner dependency)
+- `fanuc_0i_pocket_contains_arcs`: regression test asserting G02/G03 arc
+  commands appear in the Fanuc 0i pocket output (gated)
+- Toolpath JSON files: `tests/integration/golden_gcode/fanuc-0i/simple_pocket.toolpath.json`,
+  same for `linuxcnc/` (written by the auto-write pattern for human inspection)
 - Golden files: `tests/integration/golden_gcode/fanuc-0i/simple_pocket.nc`,
   `linuxcnc/simple_pocket.nc`
 
@@ -371,7 +384,7 @@ immediately once algorithms are written.
 ### IPC commands (calculate and geometry)
 
 **`calculate_toolpath`** and **`get_toolpath_geometry`** (`0c1d802`, updated `e7b5da1`, `b90c440`, `544e758`, `c3531c8`)
-- `calculate_toolpath_inner`: parses operation UUID; holds the read lock through `planner::plan()` so the `OcctShape` can be borrowed from the persisted `LoadedModel` without cloning (non-Clone handle); reads operation/stock/tool/model SHA under the same read lock; calls `planner::plan(operation, tool, stock, shape)`; after plan returns, calls `link_passes` for Pocket/Profile/ZLevelRoughing operations (Drill skips `link_passes` — `drill_passes()` handles its own linking internally) and assembles `Toolpath`; computes SHA-256 cache key; stores `Toolpath` and populates `operation.cache` (`key`, `valid`, `computed_at`, `stats`; `binary_file` remains `None`) under write lock; returns `ToolpathStats`
+- `calculate_toolpath_inner`: parses operation UUID; holds the read lock through `planner::plan()` so the `OcctShape` can be borrowed from the persisted `LoadedModel` without cloning (non-Clone handle); reads operation/stock/tool/model SHA under the same read lock; calls `planner::plan(operation, tool, stock, shape)`; after plan returns, calls `link_passes` for Pocket/Profile/ZLevelRoughing operations (Drill skips `link_passes` — `drill_passes()` handles its own linking internally); runs `arc_fitting::fit_arcs` on every pass (0.01 mm tolerance) to replace linearized arc segments with `MoveKind::Arc` moves; assembles `Toolpath`; computes SHA-256 cache key; stores `Toolpath` and populates `operation.cache` (`key`, `valid`, `computed_at`, `stats`; `binary_file` remains `None`) under write lock; returns `ToolpathStats`
 - Progress events (`c3531c8`): `ToolpathProgressEvent { operation_id: String, percent: u32, message: String }` (pub, camelCase serde); `calculate_toolpath_inner` accepts `emit: Option<&dyn Fn(ToolpathProgressEvent)>` and fires it at five milestones (0% / 50% / 80% / 95% / 100%); the `#[tauri::command]` wrapper receives `AppHandle` and emits `"toolpath:progress"` events to the frontend
 - `get_toolpath_geometry_inner`: retrieves stored `Toolpath` and operation
   index (for palette colouring); converts passes to flat-array
@@ -409,8 +422,8 @@ immediately once algorithms are written.
 - Tests in `OperationEditorForm.test.tsx` cover pocket, profile, and drill
   forms; including add/remove point, override inputs, and geometry section
   (Select Faces / Done Selecting / Clear) — 9 new tests for geometry section;
-  z_level_roughing branch added in Phase 2; entry motion fields added (Phase 2)
-  bringing the total to 50 tests across 9 describe blocks
+  z_level_roughing branch added in Phase 2; entry motion fields added (Phase 2);
+  detect holes tests added (Phase 2) — 58 tests across 10 describe blocks
 
 **Operation list panel — row selection and Calculate** (`f94a19a`, updated `4f62a9d`, `d178a20`, `1318d96`, `9706ff9`, `085504f`, `8491f7f`, `31e1286`, `d9139d1`)
 - Row click sets `selectedOperationId`; selected row highlighted
@@ -1128,6 +1141,144 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
   to lock the fixture. The `.toolpath.json` files are identical in content
   across all three directories but are separate files.
 
+### Arc fitting (`379a89f`, `5e576ca`, `f241586`)
+
+**Algorithm** (`src-tauri/src/toolpath/arc_fitting.rs`)
+- `fit_arcs(cuts: Vec<CutPoint>, tolerance: f64) -> Vec<CutPoint>` — replaces
+  qualifying sequences of linear `Feed` moves with `MoveKind::Arc` moves
+- Scans for consecutive `Feed` moves at constant Z; fits circles through
+  sliding windows of 3 points via `fit_circle_3pt()` (algebraic circumscribed
+  circle); greedily extends arcs while all points remain within `tolerance` of
+  the fitted circle and CW/CCW direction is consistent
+- Minimum 4 points (3 segments) required for arc replacement; prevents false
+  positives on short straight runs
+- Z-change breaks detection (2D arcs only, constant Z within each run)
+- Determines CW/CCW direction from center-relative cross product via
+  `direction_from_center()`
+- Preserves existing `Arc`, `Rapid`, and `Dwell` moves unchanged (no
+  double-processing of entry motion arcs)
+- Arc `CutPoint` convention: `position` = arc start (used for IJK offset
+  computation), `end` inside `MoveKind::Arc` = arc destination
+- 18 unit tests: `points_on_known_circle_produce_single_arc`,
+  `cw_circle_detected_correctly`, `mixed_straight_and_curved_only_curve_replaced`,
+  `tolerance_boundary_just_inside_merges`, `tolerance_boundary_just_outside_breaks_arc`,
+  `fewer_than_3_segments_no_replacement`, `z_change_breaks_detection`,
+  `full_360_circle_detection`, `existing_arc_moves_pass_through`,
+  `straight_collinear_points_no_false_positive`, `empty_input_returns_empty`,
+  `single_point_returns_unchanged`, `all_rapid_moves_pass_through`,
+  `dwell_moves_pass_through`, `arc_center_and_end_are_correct`,
+  `all_feed_points_on_circle_no_leading_rapid`, `arc_after_dwell_interruption`,
+  `two_arcs_different_radii`
+
+**Pipeline integration** (`src-tauri/src/commands/toolpath.rs`)
+- `calculate_toolpath_inner` calls `arc_fitting::fit_arcs(pass.cuts, 0.01)`
+  on every pass after `link_passes` and before `Toolpath` assembly
+- Applied to all pass kinds (Cutting, Linking, LeadIn, LeadOut, SpringPass)
+- Hardcoded tolerance 0.01 mm
+
+**Golden file regeneration** (`src-tauri/tests/gcode_golden.rs`)
+- `pocket_toolpath()` helper generates toolpaths through the full production
+  pipeline (planner → linking → arc fitting) instead of loading hand-crafted
+  fixture JSON; ensures golden tests match the actual `calculate_toolpath` flow
+- `simple_pocket_golden(controller)` with auto-write pattern for regeneration
+- `fanuc_0i_pocket_contains_arcs` assertion test: verifies G02/G03 arc
+  commands appear in the Fanuc 0i pocket G-code output
+- Fanuc 0i and LinuxCNC `simple_pocket.nc` golden files regenerated with arc
+  commands; pocket golden tests gated on `cam_geometry_bindings` (planner
+  dependency)
+
+### Hole auto-detection (`8b58e3b`, `0dc273d`, `ad08963`, `c1f76e0`, `d740dfc`, `a1f9f1b`)
+
+**Test fixture** (`tests/fixtures/plate_with_holes.step`)
+- 100×100×20 mm plate with four holes:
+  - Two through-holes (diameter 10 mm at (25,25) and 6 mm at (75,25))
+  - One blind hole (diameter 8 mm, 12 mm deep at (50,75))
+  - One tilted hole (diameter 5 mm, 30° from Z) — used to test axis filtering
+- Generated via C++ doctest using OCCT BRepPrimAPI_MakeCylinder and
+  BRepAlgoAPI_Cut; exported to STEP and verified via round-trip load
+
+**C++ implementation** (`cam_geometry.cpp`)
+- `cg_shape_find_holes(id, min_diameter, max_diameter, CgHoleInfo** out_holes)
+  → size_t` — walks all faces via `TopExp_Explorer`; identifies
+  `Geom_CylindricalSurface` faces; filters by Z-axis parallelism (1° angular
+  tolerance via `cos_tol = cos(1°)`); filters by diameter range; computes
+  depth from face bounding box Z-span; classifies through vs. blind by
+  comparing face Z-extent to solid bounding box (0.1 mm tolerance); applies
+  face location transforms for axis direction and center position; merges
+  duplicate faces from seam-split cylinders (same center ±0.5 mm, same
+  diameter ±0.01 mm) by keeping maximum depth
+- `CgHoleInfo` struct: `center` (CgPoint3), `axis` (CgVec3), `diameter`,
+  `depth`, `is_through` (int: 1=through, 0=blind)
+- `cg_holes_free(CgHoleInfo*)` — caller frees via `delete[]`
+- 3 C++ doctests: plate fixture returns 3 holes (tilted hole filtered),
+  diameter filter test, no-holes model test
+
+**Rust safe wrapper** (`src-tauri/src/geometry/holes.rs`)
+- `HoleDescriptor { center_x: f64, center_y: f64, radius: f64, depth: f64,
+  is_through: bool }` struct with `#[serde(rename_all = "camelCase")]`
+- `find_holes(shape: &OcctShape, min_diameter: f64, max_diameter: f64)
+  -> Result<Vec<HoleDescriptor>, GeometryError>` — calls FFI, converts
+  diameter to radius, converts `is_through: int` to bool
+- Dual-compiled: real FFI behind `#[cfg(cam_geometry_bindings)]`; stub
+  returning `GeometryError::NotImplemented` otherwise
+- 2 tests: `find_holes_stub_returns_not_implemented` (ungated),
+  `find_holes_in_plate_fixture` (OCCT-gated: verifies 3 holes with correct
+  centers, radii, depths, and through/blind flags)
+
+**IPC command** (`src-tauri/src/commands/geometry.rs`)
+- `HoleDescriptorIpc { center_x: f32, center_y: f32, radius: f32, depth: f32,
+  is_through: bool }` — f64→f32 downcast, camelCase serde
+- `detect_holes_inner(state) -> Result<Vec<HoleDescriptorIpc>, AppError>` —
+  reads project lock, validates loaded model + shape; calls `find_holes` with
+  full diameter range (0..MAX); returns `NotFound` when no model/shape
+- `detect_holes` Tauri command — thin async wrapper
+- 4 tests: `hole_descriptor_ipc_serializes_camel_case`, `detect_holes_inner_returns_not_found_when_no_model`,
+  `detect_holes_inner_returns_not_found_when_shape_is_none`,
+  `detect_holes_inner_returns_holes_for_plate_step` (OCCT-gated)
+
+**Frontend integration** (`d740dfc`)
+- `src/api/types.ts`: `HoleDescriptor { centerX, centerY, radius, depth,
+  isThrough }` TypeScript interface
+- `src/api/geometry.ts`: `detectHoles()` IPC wrapper via `typedInvoke`
+- `OperationEditorForm.tsx`: "Detect Holes" button for drill operations;
+  calls `detectHoles()`, maps results to `DrillPoint[]` (centerX→x, centerY→y),
+  shows "No holes detected" notification when empty, prompts confirmation via
+  `window.confirm` when replacing existing points, saves updated points via
+  `editOperation`
+- 8 new OperationEditorForm tests in "detect holes" describe block:
+  `Detect Holes button renders only for drill operations`,
+  `does not render for pocket operations`,
+  `does not render for profile operations`,
+  `clicking Detect Holes calls detectHoles API and populates points`,
+  `shows confirmation dialog when existing points would be replaced`,
+  `does not replace points when user cancels confirmation`,
+  `shows notification when no holes are detected`,
+  `shows notification when detectHoles API rejects`
+
+**End-to-end integration test** (`src-tauri/tests/hole_detection_e2e.rs`)
+- `detect_holes_returns_expected_geometry` (OCCT-gated): loads
+  `plate_with_holes.step`, verifies 3 holes with correct centers, radii,
+  depths, and through/blind flags (tilted hole correctly filtered out)
+- `detected_holes_produce_valid_drill_toolpath` (OCCT-gated): feeds detected
+  holes into a drill operation, runs `calculate_toolpath_inner`, verifies
+  toolpath XY positions match detected hole centers within 0.5 mm tolerance
+- `open_model_inner` and `detect_holes_inner` promoted to `pub` for
+  integration test access
+
+### Phase 2 remaining items
+
+The following Phase 2 deliverables from `development-roadmap.md` are **not yet
+implemented**:
+
+- **Adaptive (trochoidal) clearing** — constant engagement angle, high-speed
+  machining (operation + algorithm)
+- **3D contour / Z-level finishing** — wall finishing via OCCT
+  `BRepAlgoAPI_Section` (operation + algorithm)
+- **Rest machining (basic)** — compute stock remaining after roughing pass,
+  clip finishing paths to un-machined regions only
+
+All other Phase 2 items (15 of 18) are complete.
+
 ---
 
 ## Phases 3–5
@@ -1151,7 +1302,7 @@ when a 5-axis path is encountered.
 | `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (8: disabled/enabled/profile/pocket/drill/zlr-disabled/zlr-calls/snapshot-refresh), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 47 tests across 10 describe blocks |
-| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), error handling — 50 tests across 9 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), error handling — 58 tests across 10 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
 | `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
@@ -1159,28 +1310,32 @@ when a 5-axis path is encountered.
 | `src/viewport/Viewport.test.tsx` | Seven describe blocks: mount/unmount (4), mesh updates (4), face selection mode (1), keyboard shortcuts — T/F/R/I routing, uppercase T, INPUT/TEXTAREA focus guards, remove-listener on unmount, P-key projection toggle ×2 (10), toolbar button — renders Perspective label, click toggles, label updates (3), projection mode sync — no-op on mount, syncs on store change, skips when modes agree (3), display mode — select rendered, all options, store sync, SceneManager calls, setModelMesh on load/clear (6) — 31 tests |
 | `src/App.test.tsx` | App smoke test (renders AppShell) |
 | `src/components/gcode/GCodePreviewPanel.test.tsx` | GCodePreviewPanel: placeholder when no op selected, placeholder when NotFound, renders G-code text, Export button calls exportGcode, PP selector populated from listPostProcessors — 5 tests |
-| `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean + `cg_shape_section_at_z` (doctest) |
-| `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i simple pocket, linuxcnc simple pocket; assembler-level canned cycle tests (`test_assemble_nonpeck_cycle_g81`, `test_assemble_peck_cycle_g83`, `test_assemble_cycles_not_supported_uses_linear`); GRBL drill expansion golden (`grbl_drill_expansion_golden_matches`); LinuxCNC drill cycle golden (`linuxcnc_drill_cycle_golden_matches`); Fanuc 0i drill cycle golden (`fanuc_0i_drill_cycle_golden_matches`) |
+| `src-tauri/cpp/tests/` | C++ geometry wrapper: OCCT loaders + Clipper2 offset/boolean + `cg_shape_section_at_z` + `cg_shape_find_holes` (plate fixture 3-hole detection, diameter filter, no-holes model) + plate_with_holes.step fixture generation (doctest) |
+| `src-tauri/tests/gcode_golden.rs` | Golden-file integration: fanuc-0i simple pocket (full pipeline with arc fitting, gated), linuxcnc simple pocket (full pipeline, gated), `fanuc_0i_pocket_contains_arcs` (G02/G03 assertion); assembler-level canned cycle tests (`test_assemble_nonpeck_cycle_g81`, `test_assemble_peck_cycle_g83`, `test_assemble_cycles_not_supported_uses_linear`); GRBL drill expansion golden; LinuxCNC drill cycle golden; Fanuc 0i drill cycle golden — 9 tests |
 | `src-tauri/tests/pocket_golden.rs` | Golden-file integration: pocket algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/profile_golden.rs` | Golden-file integration: profile algorithm JSON output (`#[cfg(cam_geometry_bindings)]`) |
 | `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
 | `src-tauri/tests/toolpath_cache.rs` | End-to-end cache round-trip: save/load preserves toolpath + validity; param mutation marks stale (ungated; uses drill operations) |
 | `src-tauri/tests/zlevel_roughing_golden.rs` | Golden-file integration: Z-Level Roughing algorithm JSON output (`#[cfg(cam_geometry_bindings)]`; box.step, depth=5/stepdown=2/stepover=0.4) |
+| `src-tauri/tests/hole_detection_e2e.rs` | End-to-end hole detection: `detect_holes_returns_expected_geometry` (3 holes from plate fixture, tilted filtered), `detected_holes_produce_valid_drill_toolpath` (detected holes → drill op → toolpath XY match) — 2 OCCT-gated tests |
 | `src-tauri/src/postprocessor/` (inline) | Config parse (incl. `PeckRetractMode` — full/chip_break/absent/invalid), formatter, modal, arcs, block, program, public API; `cycles.rs` — `is_drill_cutting_pass` (simple/peck/mixed-XY/wrong-count), `classify_drill_pass`, `format_cycle_header` (G81/G83), `format_cycle_cancel` (G80/err-when-absent), `cycles_not_supported`, `peck_retract_mode_selects_g83` |
-| `src-tauri/src/commands/` (inline) | All command handlers: file ops (save/load/new/export_gcode round-trip and error tests; 5 `#[tokio::test]` for `open_model` — file-not-found, geometry-error without OCCT, full mesh load, shape stored, shape absent without OCCT), tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration); plus three OCCT-gated tests in `commands/toolpath.rs`: pocket toolpath end-to-end, geometry-selection boundary clamping, and invalid-fingerprint error |
+| `src-tauri/src/commands/` (inline) | All command handlers: file ops (save/load/new/export_gcode round-trip and error tests; 5 `#[tokio::test]` for `open_model` — file-not-found, geometry-error without OCCT, full mesh load, shape stored, shape absent without OCCT), tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration; detect_holes: camelCase, no-model, no-shape, OCCT integration with plate fixture); plus three OCCT-gated tests in `commands/toolpath.rs`: pocket toolpath end-to-end, geometry-selection boundary clamping, and invalid-fingerprint error |
 | `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants (profile/pocket/drill/zlr op round-trips; `operation_type_field_at_top_level`; `operation_fields_are_camel_case`; `operation_enabled_defaults_to_true_when_absent`); `drill_peck_depth_absent_when_none`; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip + type-field assertion; geometry field serde for Pocket/Profile/ZLevelRoughing (absent-when-None, present-when-set, round-trip with fingerprints, defaults-absent-in-old-JSON — 12 tests) |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; 8 tests), `cache.rs` key stability + sensitivity (4 tests), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 12 tests: stats non-zero for Pocket/Profile (gated) + profile-error without bindings (stub path) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; 8 tests), `cache.rs` key stability + sensitivity (4 tests), `arc_fitting.rs` 18 tests (known circle CW/CCW, mixed straight+curved, tolerance boundary inside/outside, min-segment count, Z-change breaks, full 360°, existing arc passthrough, collinear rejection, empty/single-point, rapid/dwell passthrough, center+end correctness, dwell interruption, two arcs different radii), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 12 tests: stats non-zero for Pocket/Profile (gated) + profile-error without bindings (stub path) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
 | `src-tauri/src/project/` (inline) | `serialization.rs` (13 tests): multiple round-trips (with/without model, with tool, with stock+WCS, with operations); schema version rejection (`load_rejects_unknown_schema_version`); graceful missing file (`load_fails_gracefully_on_missing_file`); ZIP structure validation (`save_creates_valid_zip`); backward-compat load without `tools` field (`load_phase0_schema_without_tools_field_succeeds`); toolpath ZIP entry write (positive + negative); round-trip with valid toolpath; graceful load with missing toolpath entry |
-| `src-tauri/src/geometry/` (inline) | `clipper.rs`: 2 stub tests (offset + boolean, ungated/not-bindings-only) + 2 OCCT-gated integration tests (offset shrinks square, offset returns error on collapse) — 4 tests; `safe.rs`: GeometryError Display + externally-tagged serde serialization (8), MeshData accessibility + serialization + FaceGroup camelCase (3), OcctShape/Mesh Send + null-drop safety (4), loader stubs return correct error variants (5), OCCT-gated fixture load + bounding-box + tessellate (3), `section_at_z` stub returns NotImplemented (ungated) + box midheight returns single loop (gated) (25 tests); `importer.rs`: missing file + unknown/no/uppercase extension dispatch (7 ungated) + OCCT-gated fixture load and `import_with_shape` (2 gated) — 9 tests; `faces.rs`: fingerprint determinism + fingerprint sensitivity (differs for different inputs) + known value + two stub-path error tests (5 tests); `mod.rs`: FFI constant sizes and enum discriminants (18 tests) |
+| `src-tauri/src/geometry/` (inline) | `clipper.rs`: 2 stub tests (offset + boolean, ungated/not-bindings-only) + 2 OCCT-gated integration tests (offset shrinks square, offset returns error on collapse) — 4 tests; `safe.rs`: GeometryError Display + externally-tagged serde serialization (8), MeshData accessibility + serialization + FaceGroup camelCase (3), OcctShape/Mesh Send + null-drop safety (4), loader stubs return correct error variants (5), OCCT-gated fixture load + bounding-box + tessellate (3), `section_at_z` stub returns NotImplemented (ungated) + box midheight returns single loop (gated) (25 tests); `importer.rs`: missing file + unknown/no/uppercase extension dispatch (7 ungated) + OCCT-gated fixture load and `import_with_shape` (2 gated) — 9 tests; `faces.rs`: fingerprint determinism + fingerprint sensitivity (differs for different inputs) + known value + two stub-path error tests (5 tests); `holes.rs`: stub returns NotImplemented (ungated) + plate fixture 3-hole detection with centers/radii/depths/through-flags (OCCT-gated) — 2 tests; `mod.rs`: FFI constant sizes and enum discriminants incl. `cg_hole_info_size` (18 tests) |
 | `src-tauri/src/` (inline) | `error.rs`: all AppError variant serde format tests incl. `InvalidInput` + adjacently-tagged encoding + Display (11 tests); `state.rs`: Project/AppState defaults and `RwLock` write access (7 tests); `lib.rs`: 2 placeholder tests (sanity arithmetic + serde round-trip) |
 
 Golden-file tests cover the post-processor output stage (G-code) and all four
 CAM algorithm output stages (pocket, profile, drill, and Z-Level Roughing
 toolpath JSON). The pocket, profile, and ZLR golden tests are gated on
 `cam_geometry_bindings`; the drill algorithm golden test is ungated since
-drilling requires no geometry bindings. The G-code golden tests (fanuc-0i and
-linuxcnc simple pocket; fanuc-0i, linuxcnc, and grbl drill cycle/expansion)
-are all ungated.
+drilling requires no geometry bindings. The G-code golden tests for simple
+pocket (fanuc-0i and linuxcnc) are now gated on `cam_geometry_bindings` as
+they generate toolpaths through the full planner pipeline including arc
+fitting; the drill cycle golden tests (fanuc-0i, linuxcnc, grbl) remain
+ungated. The `fanuc_0i_pocket_contains_arcs` regression test verifies that
+arc fitting produces G02/G03 commands in the output.
 
 ---
 
@@ -1199,11 +1354,12 @@ are all ungated.
 | `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`), `ProfileParams` (incl. `stepdown: Option<f64>` and five entry motion fields), `PocketParams` (incl. five entry motion fields), `DrillParams`, `DrillPoint`, `ZLevelRoughingParams` (incl. five entry motion fields), `CompensationSide`, `CacheState`, `CachedStats` |
 | `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData`, `LinkingParams` |
 | `src-tauri/src/toolpath/linking.rs` | `link_passes(passes, params: &LinkingParams)` — lift/traverse/descend between cutting passes with optional helical entry, ramp entry, arc lead-in, and arc lead-out |
-| `src-tauri/src/toolpath/planner.rs` | `plan()` — resolves geometry boundary, dispatches to algorithm, returns passes + stats; linking and `Toolpath` assembly happen in `calculate_toolpath_inner` |
+| `src-tauri/src/toolpath/planner.rs` | `plan()` — resolves geometry boundary, dispatches to algorithm, returns passes + stats; linking, arc fitting, and `Toolpath` assembly happen in `calculate_toolpath_inner` |
 | `src-tauri/src/toolpath/operations/pocket.rs` | Pocket clearing algorithm (concentric offset contours per Z level) |
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
 | `src-tauri/src/toolpath/operations/drill.rs` | Drill cycle algorithm (nearest-neighbor sort, linking + cutting passes per hole, peck support) |
 | `src-tauri/src/toolpath/operations/zlevel_roughing.rs` | Z-Level Roughing algorithm (OCCT section at each Z level + concentric offset per level; stock-boundary fallback) |
+| `src-tauri/src/toolpath/arc_fitting.rs` | `fit_arcs(cuts, tolerance)` — replaces qualifying linear Feed sequences with Arc moves; 3-point circle fitting, direction consistency, constant-Z constraint |
 | `src-tauri/src/toolpath/cache.rs` | `compute_cache_key()` — deterministic SHA-256 cache key for toolpath operations |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
 | `src-tauri/src/postprocessor/config.rs` | TOML schema deserialization + validation |
@@ -1216,7 +1372,7 @@ are all ungated.
 | `src-tauri/src/postprocessor/mod.rs` | `PostProcessor` public API; `PostProcessorError` enum (variants: `Config`, `NotSupported`, `ArcError`, `Assembly`); `PostProcessorMeta` struct; re-exports `program::ToolInfo` |
 | `src-tauri/src/postprocessor/builtins/` | `fanuc-0i.toml`, `linuxcnc.toml`, `mach4.toml`, `grbl.toml` (first three have `peck_retract_mode = "full"` under `[cycles]`) |
 | `src-tauri/src/commands/file.rs` | `open_model`, `save_project`, `load_project`, `new_project`, `export_gcode` |
-| `src-tauri/src/commands/geometry.rs` | `get_model_faces` — enumerates faces from persisted `OcctShape`; returns `Vec<FaceDescriptorIpc>` (fingerprint, face_idx, centroid/normal as `[f32;3]`, area) |
+| `src-tauri/src/commands/geometry.rs` | `get_model_faces` — enumerates faces from persisted `OcctShape`; returns `Vec<FaceDescriptorIpc>` (fingerprint, face_idx, centroid/normal as `[f32;3]`, area); `detect_holes` — finds cylindrical holes in loaded shape; returns `Vec<HoleDescriptorIpc>` (center_x/y, radius, depth, is_through as f32+bool) |
 | `src-tauri/src/commands/toolpath.rs` | `list_post_processors`, `get_gcode_preview`, `calculate_toolpath` (with progress events), `get_toolpath_geometry` |
 | `src-tauri/src/commands/tools.rs` | Tool CRUD commands |
 | `src-tauri/src/commands/stock.rs` | Stock/WCS commands |
@@ -1225,6 +1381,7 @@ are all ungated.
 | `src-tauri/src/geometry/importer.rs` | Format dispatch (STEP/IGES/STL); `import_with_shape()` returns live `OcctShape` for STEP/IGES |
 | `src-tauri/src/geometry/safe.rs` | Safe Rust wrappers: `OcctShape` (with `unsafe impl Sync`), `OcctMesh` (with `Drop` impls); `MeshData` struct (incl. `face_groups`); `FaceGroup` struct; `GeometryError` enum (variants incl. `NotImplemented`); `shape_section_at_z()` + `stitch_segments_into_loops()` |
 | `src-tauri/src/geometry/faces.rs` | `FaceInfo`, `FaceDescriptor` structs; `enumerate_faces()` (skips non-planar); `face_boundary(shape, face_idx)`; `face_fingerprint()` (64-char hex SHA-256); dual-compiled (OCCT / stub) |
+| `src-tauri/src/geometry/holes.rs` | `HoleDescriptor` struct; `find_holes(shape, min_diameter, max_diameter)` — cylindrical hole detection via OCCT; dual-compiled (OCCT / stub) |
 | `src-tauri/src/geometry/ffi.rs` | FFI bindings module: includes bindgen output written to `$OUT_DIR` at build time |
 | `src-tauri/src/project/types.rs` | On-disk serialization types: `ProjectMeta`, `SourceModelRef`, `ProjectFile` (mirrors `project.json` schema; distinct from the in-memory `Project` in `state.rs`) |
 | `src-tauri/src/project/serialization.rs` | `.jcam` ZIP read/write; toolpath JSON persistence per operation |
@@ -1242,10 +1399,10 @@ are all ungated.
 |---|---|
 | `tests/fixtures/box.step` | STEP geometry fixture |
 | `tests/fixtures/box.stl` | STL geometry fixture |
-| `tests/integration/golden_gcode/fanuc-0i/simple_pocket.toolpath.json` | Fixture toolpath (rapids, feeds, arc) |
-| `tests/integration/golden_gcode/fanuc-0i/simple_pocket.nc` | Golden G-code output for Fanuc 0i |
-| `tests/integration/golden_gcode/linuxcnc/simple_pocket.toolpath.json` | Same fixture for LinuxCNC |
-| `tests/integration/golden_gcode/linuxcnc/simple_pocket.nc` | Golden G-code output for LinuxCNC |
+| `tests/integration/golden_gcode/fanuc-0i/simple_pocket.toolpath.json` | Auto-generated pocket toolpath JSON (full pipeline: planner → linking → arc fitting) for human inspection |
+| `tests/integration/golden_gcode/fanuc-0i/simple_pocket.nc` | Golden G-code output for Fanuc 0i (includes G02/G03 arcs) |
+| `tests/integration/golden_gcode/linuxcnc/simple_pocket.toolpath.json` | Same auto-generated pocket toolpath for LinuxCNC |
+| `tests/integration/golden_gcode/linuxcnc/simple_pocket.nc` | Golden G-code output for LinuxCNC (includes G02/G03 arcs) |
 | `tests/integration/pocket/toolpath.json` | Golden pocket algorithm output (50×50×10 mm, 10 mm tool) |
 | `tests/integration/profile/toolpath.json` | Golden profile algorithm output (50×50×10 mm, 6 mm tool, Left compensation) |
 | `tests/integration/drill/toolpath.json` | Golden drill algorithm output (50×50×10 mm, 5 mm drill, 5 holes, 3 mm peck) |
@@ -1253,16 +1410,17 @@ are all ungated.
 | `tests/integration/golden_gcode/linuxcnc/drill_cycle.nc` | Golden G-code for LinuxCNC canned cycle drill (G83/Q/G80, 5 holes, peck=3 mm) |
 | `tests/integration/golden_gcode/grbl/drill_expansion.nc` | Golden G-code for GRBL drill expansion (G0/G1 peck sequences, no cycle codes) |
 | `tests/fixtures/zlevel_roughing_golden.json` | Golden Z-Level Roughing output (box.step, depth=5/stepdown=2/stepover=0.4) |
+| `tests/fixtures/plate_with_holes.step` | 100×100×20 mm plate with 4 holes (2 through, 1 blind, 1 tilted) for hole detection tests |
 
 ### TypeScript frontend
 | File | Purpose |
 |---|---|
-| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`) |
+| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `HoleDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`) |
 | `src/api/file.ts` | File operation IPC wrappers |
 | `src/api/tools.ts` | Tool CRUD IPC wrappers |
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
 | `src/api/operations.ts` | Operation CRUD IPC wrappers |
-| `src/api/geometry.ts` | `getModelFaces()` IPC wrapper |
+| `src/api/geometry.ts` | `getModelFaces()` and `detectHoles()` IPC wrappers |
 | `src/api/toolpath.ts` | `listPostProcessors`, `getGcodePreview`, `exportGcode`, `calculateToolpath`, `getToolpathGeometry`, `listenToolpathProgress` |
 | `src/store/projectStore.ts` | Project Zustand store; selector hooks: `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock`, `useWcs`, `useNotifications`, `useSelectedOperationId`, `usePushNotification` |
 | `src/store/viewportStore.ts` | Viewport Zustand store (incl. `meshData`, `orbitTarget`, `zoom`, `toolpathGeometry`, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `projectionMode`, `displayMode`) |
@@ -1272,7 +1430,7 @@ are all ungated.
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
 | `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms; Detect Holes button (drill only) |
 | `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
 | `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
 | `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
