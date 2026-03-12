@@ -24,6 +24,7 @@ vi.mock('../../api/file', () => ({
 
 vi.mock('../../api/geometry', () => ({
   getModelFaces: vi.fn(),
+  detectHoles: vi.fn(),
 }))
 
 const opsApi = await import('../../api/operations')
@@ -714,6 +715,124 @@ describe('OperationEditorForm — z_level_roughing branch', () => {
     render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).not.toBeDisabled())
+  })
+})
+
+// ── Detect Holes ──────────────────────────────────────────────────────────────
+
+describe('OperationEditorForm — detect holes', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.editOperation).mockResolvedValue(DRILL_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('Detect Holes button renders only for drill operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+  })
+
+  it('Detect Holes button does not render for pocket operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+    await waitFor(() => expect(screen.getByLabelText('Floor depth (mm)')).toBeInTheDocument())
+    expect(screen.queryByText('Detect Holes')).not.toBeInTheDocument()
+  })
+
+  it('Detect Holes button does not render for profile operations', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([PROFILE_OP])
+    render(<OperationEditorForm operationId={PROFILE_OP_ID} />)
+    await waitFor(() => expect(screen.getByLabelText('Floor depth (mm)')).toBeInTheDocument())
+    expect(screen.queryByText('Detect Holes')).not.toBeInTheDocument()
+  })
+
+  it('clicking Detect Holes calls detectHoles API and populates points', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+    vi.mocked(geoApi.detectHoles).mockResolvedValue([
+      { centerX: 10, centerY: 20, radius: 3, depth: 5, isThrough: false },
+      { centerX: 30, centerY: 40, radius: 3, depth: 5, isThrough: true },
+    ])
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Detect Holes'))
+
+    await waitFor(() => expect(geoApi.detectHoles).toHaveBeenCalled())
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      DRILL_OP_ID,
+      expect.objectContaining({
+        params: expect.objectContaining({
+          points: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
+        }),
+      }),
+    ))
+  })
+
+  it('shows confirmation dialog when existing points would be replaced', async () => {
+    const DRILL_WITH_POINTS: Operation = {
+      ...DRILL_OP,
+      params: { depth: 10.0, peckDepth: 3.0, points: [{ x: 1, y: 2 }] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_WITH_POINTS])
+    vi.mocked(geoApi.detectHoles).mockResolvedValue([
+      { centerX: 10, centerY: 20, radius: 3, depth: 5, isThrough: false },
+    ])
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Detect Holes'))
+
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalledWith('Replace existing drill points with 1 detected holes?'))
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalled())
+    confirmSpy.mockRestore()
+  })
+
+  it('does not replace points when user cancels confirmation', async () => {
+    const DRILL_WITH_POINTS: Operation = {
+      ...DRILL_OP,
+      params: { depth: 10.0, peckDepth: 3.0, points: [{ x: 1, y: 2 }] },
+    }
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_WITH_POINTS])
+    vi.mocked(geoApi.detectHoles).mockResolvedValue([
+      { centerX: 10, centerY: 20, radius: 3, depth: 5, isThrough: false },
+    ])
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Detect Holes'))
+
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled())
+    expect(opsApi.editOperation).not.toHaveBeenCalled()
+    confirmSpy.mockRestore()
+  })
+
+  it('shows notification when no holes are detected', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+    vi.mocked(geoApi.detectHoles).mockResolvedValue([])
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Detect Holes'))
+
+    await waitFor(() =>
+      expect(useProjectStore.getState().notifications).toContain('No holes detected')
+    )
+    expect(opsApi.editOperation).not.toHaveBeenCalled()
+  })
+
+  it('shows notification when detectHoles API rejects', async () => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([DRILL_OP])
+    vi.mocked(geoApi.detectHoles).mockRejectedValue({ kind: 'BackendError', message: 'No model loaded' })
+
+    render(<OperationEditorForm operationId={DRILL_OP_ID} />)
+    await waitFor(() => expect(screen.getByText('Detect Holes')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Detect Holes'))
+
+    await waitFor(() =>
+      expect(useProjectStore.getState().notifications).toContain('No model loaded')
+    )
   })
 })
 

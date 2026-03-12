@@ -292,6 +292,15 @@ export interface FaceDescriptor {
   area: number
 }
 
+/** Descriptor for a detected hole in the loaded model. */
+export interface HoleDescriptor {
+  centerX: number
+  centerY: number
+  radius: number
+  depth: number
+  isThrough: boolean
+}
+
 /** Progress event emitted during toolpath calculation. */
 export interface ToolpathProgressEvent {
   operationId: string

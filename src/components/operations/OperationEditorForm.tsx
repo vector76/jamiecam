@@ -17,7 +17,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams } from '../../api/types'
 import { useViewportStore } from '../../store/viewportStore'
-import { getModelFaces } from '../../api/geometry'
+import { getModelFaces, detectHoles } from '../../api/geometry'
 
 interface Props {
   operationId: string | null
@@ -297,6 +297,26 @@ export function OperationEditorForm({ operationId }: Props) {
           <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
           <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <button onClick={() => {
+            void (async () => {
+              try {
+                const holes = await detectHoles()
+                if (holes.length === 0) {
+                  pushNotification('No holes detected')
+                  return
+                }
+                const mappedPoints = holes.map((h) => ({ x: h.centerX, y: h.centerY }))
+                if (points.length > 0) {
+                  if (!window.confirm(`Replace existing drill points with ${holes.length} detected holes?`)) return
+                }
+                void save({ params: { ...params, points: mappedPoints } })
+              } catch (e) {
+                handleError(e)
+              }
+            })()
+          }}>Detect Holes</button>
         </div>
         <div>
           {points.map((pt, i) => (
