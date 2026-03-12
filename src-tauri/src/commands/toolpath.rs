@@ -14,7 +14,7 @@ use crate::models::StockDefinition;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
 use crate::toolpath::types::{LinkingParams, PassKind, Toolpath, DEFAULT_CLEARANCE_OFFSET};
-use crate::toolpath::{linking, LineGeometryData, ToolpathStats};
+use crate::toolpath::{arc_fitting, linking, LineGeometryData, ToolpathStats};
 
 use super::{build_tool_infos, parse_entity_id, read_project, write_project};
 
@@ -202,6 +202,16 @@ pub fn calculate_toolpath_inner(
         OperationParams::Drill(_) => raw_passes,
     };
     progress(80, "Passes linked");
+
+    // Fit arcs: replace sequences of collinear feed moves that approximate
+    // circular arcs with proper MoveKind::Arc moves.
+    let linked_passes: Vec<_> = linked_passes
+        .into_iter()
+        .map(|mut pass| {
+            pass.cuts = arc_fitting::fit_arcs(pass.cuts, 0.01);
+            pass
+        })
+        .collect();
 
     // Assemble Toolpath.
     let spindle_speed = operation
