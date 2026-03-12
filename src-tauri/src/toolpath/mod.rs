@@ -1,3 +1,4 @@
+pub mod arc_fitting;
 pub mod cache;
 pub mod linking;
 pub mod operations;
