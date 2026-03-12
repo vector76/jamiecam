@@ -97,7 +97,7 @@ pub async fn get_model_faces(
 /// Returns the list of detected holes for the currently loaded model, or an
 /// appropriate [`AppError`] if no model is loaded or no B-rep shape is
 /// available.
-pub(crate) fn detect_holes_inner(
+pub fn detect_holes_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<Vec<HoleDescriptorIpc>, AppError> {
     let descriptors = {

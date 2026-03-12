@@ -30,7 +30,7 @@ use super::{build_tool_infos, parse_entity_id, read_project, write_project};
 /// 2. Offloads tessellation + checksum computation to a blocking thread pool.
 /// 3. Stores the resulting [`LoadedModel`] in `project_lock`.
 /// 4. Returns the [`MeshData`] for the frontend to render.
-pub(crate) async fn open_model_inner(
+pub async fn open_model_inner(
     path_str: &str,
     project_lock: &RwLock<Project>,
 ) -> Result<MeshData, AppError> {
