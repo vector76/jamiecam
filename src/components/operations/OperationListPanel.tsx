@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing') {
     const tool = tools[0]
     if (!tool) return
 
@@ -142,6 +142,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'z_level_roughing',
         params: { depth: 5.0, stepdown: 1.0, stepover: 0.5 } as ZLevelRoughingParams,
+      }
+    } else if (type === 'z_level_finishing') {
+      input = {
+        name: 'Z-Level Finishing',
+        toolId: tool.id,
+        type: 'z_level_finishing',
+        params: { depth: 5.0, stepdown: 1.0, finishingAllowance: 0.1, springPass: false, restMachining: false } as ZLevelFinishingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -237,6 +244,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Z-Level Roughing
+        </button>
+        <button
+          onClick={() => void handleAdd('z_level_finishing')}
+          disabled={noTools}
+        >
+          + Z-Level Finishing
         </button>
       </div>
     </div>
