@@ -119,6 +119,40 @@ pub struct ZLevelRoughingParams {
     pub ramp_entry_angle_deg: Option<f64>,
 }
 
+/// Parameters for a Z-Level Finishing operation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZLevelFinishingParams {
+    /// Cut depth in project units.
+    pub depth: f64,
+    /// Maximum depth per pass in project units.
+    pub stepdown: f64,
+    /// Material left on walls/floors before the finishing pass.
+    pub finishing_allowance: f64,
+    /// Whether to run an extra spring pass with zero offset.
+    #[serde(default)]
+    pub spring_pass: bool,
+    /// Face fingerprints that define the machining boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+    /// Whether to enable rest machining (only cut material left by a prior op).
+    #[serde(default)]
+    pub rest_machining: bool,
+    /// ID of the reference operation for rest machining.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest_machining_reference_id: Option<String>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`

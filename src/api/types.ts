@@ -172,6 +172,22 @@ export interface ZLevelRoughingParams {
   rampEntryAngleDeg?: number | null
 }
 
+/** Parameters for a Z-Level Finishing operation. */
+export interface ZLevelFinishingParams {
+  depth: number
+  stepdown: number
+  finishingAllowance: number
+  springPass: boolean
+  geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
+  restMachining: boolean
+  restMachiningReferenceId?: string
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -183,8 +199,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -199,8 +215,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -209,7 +225,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
   enabled: boolean
   needsRecalculate: boolean
 }
