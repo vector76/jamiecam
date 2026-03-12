@@ -655,14 +655,135 @@ void cg_section_free(CgPoint3* points) {
     delete[] points;
 }
 
-/* ── Feature detection (stubs) ───────────────────────────────────────────── */
+/* ── Feature detection ──────────────────────────────────────────────────── */
 
-size_t cg_shape_find_holes(CgShapeId /*id*/,
-                            double /*min_diameter*/, double /*max_diameter*/,
+size_t cg_shape_find_holes(CgShapeId id,
+                            double min_diameter, double max_diameter,
                             CgHoleInfo** out_holes) {
-    set_last_error("not implemented");
     if (out_holes) *out_holes = nullptr;
-    return 0;
+
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_shape_find_holes: null handle");
+        return 0;
+    }
+
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+
+        // Compute overall bounding box of the solid for through-hole detection.
+        Bnd_Box solid_box;
+        BRepBndLib::AddOptimal(shape, solid_box);
+        if (solid_box.IsVoid()) {
+            return 0;
+        }
+        double sx0, sy0, sz0, sx1, sy1, sz1;
+        solid_box.Get(sx0, sy0, sz0, sx1, sy1, sz1);
+
+        // Angular tolerance: axis must be within 1° of Z.
+        const double cos_tol = std::cos(1.0 * M_PI / 180.0);
+
+        std::vector<CgHoleInfo> results;
+
+        for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+            const TopoDS_Face& face = TopoDS::Face(ex.Current());
+
+            TopLoc_Location loc;
+            Handle(Geom_Surface) surf = BRep_Tool::Surface(face, loc);
+            GeomAdaptor_Surface adaptor(surf);
+            if (adaptor.GetType() != GeomAbs_Cylinder) continue;
+
+            // Extract cylinder properties.
+            gp_Cylinder cyl = adaptor.Cylinder();
+            gp_Ax1 ax = cyl.Axis();
+            gp_Dir axis_dir = ax.Direction();
+
+            // Apply location transform if present.
+            if (!loc.IsIdentity()) {
+                ax.Transform(loc.Transformation());
+                axis_dir = ax.Direction();
+            }
+
+            // Filter: axis must be parallel to Z (within 1°).
+            if (std::fabs(axis_dir.Z()) < cos_tol) continue;
+
+            double radius = cyl.Radius();
+            double diameter = 2.0 * radius;
+
+            // Apply diameter filter.
+            if (diameter < min_diameter || diameter > max_diameter) continue;
+
+            // Compute the face bounding box along Z to get depth and position.
+            Bnd_Box face_box;
+            BRepBndLib::AddOptimal(face, face_box);
+            if (face_box.IsVoid()) continue;
+            double fx0, fy0, fz0, fx1, fy1, fz1;
+            face_box.Get(fx0, fy0, fz0, fx1, fy1, fz1);
+
+            double depth = fz1 - fz0;
+            if (depth < 1e-6) continue; // degenerate face
+
+            // Classify through vs blind: cylinder spans the full solid Z range
+            // within a small tolerance.
+            const double through_tol = 0.1; // mm
+            int is_through = (fz0 <= sz0 + through_tol && fz1 >= sz1 - through_tol) ? 1 : 0;
+
+            // Use the cylinder axis for the true XY center (robust even if
+            // OCCT splits the cylindrical face at a seam).
+            gp_Pnt axis_pt = ax.Location();
+            double cx = axis_pt.X();
+            double cy = axis_pt.Y();
+
+            // Check for duplicate: same center XY and diameter (two half-cylinders
+            // from a single hole). Keep the one with greater depth.
+            bool merged = false;
+            for (auto& h : results) {
+                if (std::fabs(h.center.x - cx) < 0.5 &&
+                    std::fabs(h.center.y - cy) < 0.5 &&
+                    std::fabs(h.diameter - diameter) < 0.01) {
+                    // Merge: keep maximum depth, highest top, through flag.
+                    if (depth > h.depth) h.depth = depth;
+                    if (fz1 > h.center.z) h.center.z = fz1;
+                    if (is_through) h.is_through = 1;
+                    merged = true;
+                    break;
+                }
+            }
+            if (merged) continue;
+
+            CgHoleInfo info;
+            info.center.x = cx;
+            info.center.y = cy;
+            info.center.z = fz1; // top of hole
+            info.axis.x = 0.0;
+            info.axis.y = 0.0;
+            info.axis.z = -1.0; // downward from entry (center.z = top of hole)
+            info.diameter = diameter;
+            info.depth = depth;
+            info.is_through = is_through;
+            results.push_back(info);
+        }
+
+        if (results.empty()) {
+            return 0;
+        }
+
+        if (out_holes) {
+            CgHoleInfo* arr = new CgHoleInfo[results.size()];
+            std::copy(results.begin(), results.end(), arr);
+            *out_holes = arr;
+        }
+        return results.size();
+
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_shape_find_holes: invalid shape ID");
+        return 0;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_shape_find_holes exception: ") + ex.GetMessageString());
+        return 0;
+    } catch (...) {
+        set_last_error("cg_shape_find_holes: unknown exception");
+        return 0;
+    }
 }
 
 void cg_holes_free(CgHoleInfo* holes) {

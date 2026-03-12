@@ -32,9 +32,11 @@
 #include <TopoDS_Shape.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <vector>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -545,3 +547,92 @@ TEST_CASE("generate plate_with_holes.step fixture and verify round-trip") {
 }
 
 } // TEST_SUITE step_fixture_generation
+
+// ---------------------------------------------------------------------------
+// Test suite: Hole detection — cg_shape_find_holes
+// ---------------------------------------------------------------------------
+
+TEST_SUITE("hole_detection") {
+
+TEST_CASE("plate_with_holes returns 3 Z-parallel holes") {
+    CgShapeId id = cg_load_step(PLATE_PATH);
+    INFO("last error: " << last_error());
+    REQUIRE(id != CG_NULL_ID);
+
+    CgHoleInfo* holes = nullptr;
+    size_t count = cg_shape_find_holes(id, 0.0, 1000.0, &holes);
+    INFO("last error: " << last_error());
+    REQUIRE(count == 3);
+    REQUIRE(holes != nullptr);
+
+    // Sort holes by diameter for deterministic assertions.
+    std::vector<CgHoleInfo> sorted(holes, holes + count);
+    std::sort(sorted.begin(), sorted.end(),
+              [](const CgHoleInfo& a, const CgHoleInfo& b) {
+                  return a.diameter < b.diameter;
+              });
+
+    // Hole with diameter 6mm: center=(75,25), depth=20, through
+    CHECK(sorted[0].diameter == doctest::Approx(6.0).epsilon(1e-3));
+    CHECK(sorted[0].center.x == doctest::Approx(75.0).epsilon(1e-3));
+    CHECK(sorted[0].center.y == doctest::Approx(25.0).epsilon(1e-3));
+    CHECK(sorted[0].depth == doctest::Approx(20.0).epsilon(1e-3));
+    CHECK(sorted[0].is_through == 1);
+
+    // Hole with diameter 8mm: center=(50,75), depth=12, blind
+    CHECK(sorted[1].diameter == doctest::Approx(8.0).epsilon(1e-3));
+    CHECK(sorted[1].center.x == doctest::Approx(50.0).epsilon(1e-3));
+    CHECK(sorted[1].center.y == doctest::Approx(75.0).epsilon(1e-3));
+    CHECK(sorted[1].depth == doctest::Approx(12.0).epsilon(1e-3));
+    CHECK(sorted[1].is_through == 0);
+
+    // Hole with diameter 10mm: center=(25,25), depth=20, through
+    CHECK(sorted[2].diameter == doctest::Approx(10.0).epsilon(1e-3));
+    CHECK(sorted[2].center.x == doctest::Approx(25.0).epsilon(1e-3));
+    CHECK(sorted[2].center.y == doctest::Approx(25.0).epsilon(1e-3));
+    CHECK(sorted[2].depth == doctest::Approx(20.0).epsilon(1e-3));
+    CHECK(sorted[2].is_through == 1);
+
+    cg_holes_free(holes);
+    cg_shape_free(id);
+}
+
+TEST_CASE("diameter filter restricts results") {
+    CgShapeId id = cg_load_step(PLATE_PATH);
+    REQUIRE(id != CG_NULL_ID);
+
+    CgHoleInfo* holes = nullptr;
+    size_t count = cg_shape_find_holes(id, 7.0, 11.0, &holes);
+    INFO("last error: " << last_error());
+    REQUIRE(count == 2);
+    REQUIRE(holes != nullptr);
+
+    // Should return only 8mm and 10mm holes.
+    std::vector<CgHoleInfo> sorted(holes, holes + count);
+    std::sort(sorted.begin(), sorted.end(),
+              [](const CgHoleInfo& a, const CgHoleInfo& b) {
+                  return a.diameter < b.diameter;
+              });
+    CHECK(sorted[0].diameter == doctest::Approx(8.0).epsilon(1e-3));
+    CHECK(sorted[1].diameter == doctest::Approx(10.0).epsilon(1e-3));
+
+    cg_holes_free(holes);
+    cg_shape_free(id);
+}
+
+TEST_CASE("model with no cylindrical faces returns 0 holes") {
+    // Load the plain box fixture (no holes).
+    static const char* BOX_PATH = FIXTURES_DIR "/box.step";
+    CgShapeId id = cg_load_step(BOX_PATH);
+    REQUIRE(id != CG_NULL_ID);
+
+    CgHoleInfo* holes = nullptr;
+    size_t count = cg_shape_find_holes(id, 0.0, 1000.0, &holes);
+    CHECK(count == 0);
+    CHECK(holes == nullptr);
+    // No error should be set for zero results on a valid shape.
+
+    cg_shape_free(id);
+}
+
+} // TEST_SUITE hole_detection
