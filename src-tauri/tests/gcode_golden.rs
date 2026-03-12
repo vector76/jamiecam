@@ -7,28 +7,113 @@ use jamiecam_lib::toolpath::Toolpath;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::models::operation::{CacheState, OperationParams, PocketParams};
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::models::tool::ToolType;
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::models::{Operation, Tool};
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::toolpath::arc_fitting;
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::toolpath::linking;
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::toolpath::planner;
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::toolpath::types::{LinkingParams, DEFAULT_CLEARANCE_OFFSET};
+
 fn golden_dir(controller: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../tests/integration/golden_gcode")
         .join(controller)
 }
 
-fn load_toolpath(controller: &str) -> Toolpath {
-    let path = golden_dir(controller).join("simple_pocket.toolpath.json");
-    let json =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read fixture {path:?}: {e}"));
-    serde_json::from_str(&json).expect("deserialize toolpath")
+#[cfg(cam_geometry_bindings)]
+fn pocket_toolpath() -> Toolpath {
+    let stock = StockDefinition::Box(BoxDimensions {
+        origin: Vec3::zero(),
+        width: 50.0,
+        depth: 50.0,
+        height: 10.0,
+    });
+    let tool = Tool {
+        id: Uuid::nil(),
+        name: "10mm Flat Endmill".to_string(),
+        tool_type: ToolType::FlatEndmill,
+        material: "carbide".to_string(),
+        diameter: 10.0,
+        flute_count: 4,
+        default_spindle_speed: Some(8000),
+        default_feed_rate: Some(500.0),
+    };
+    let arc_lead_in_radius = Some(5.0);
+    let arc_lead_out_radius = Some(5.0);
+    let operation = Operation {
+        id: Uuid::nil(),
+        name: "Pocket Op".to_string(),
+        enabled: true,
+        tool_id: Uuid::nil(),
+        spindle_speed_override: None,
+        feed_rate_override: None,
+        params: OperationParams::Pocket(PocketParams {
+            depth: 10.0,
+            stepdown: 2.0,
+            stepover_percent: 50.0,
+            geometry: None,
+            arc_lead_in_radius,
+            arc_lead_out_radius,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        }),
+        cache: CacheState::default(),
+    };
+    let (raw_passes, _stats) =
+        planner::plan(&operation, &tool, &stock, None).expect("plan should succeed");
+
+    // Apply linking (adds lead-in/lead-out with arc moves) + arc fitting,
+    // matching the full calculate_toolpath pipeline.
+    let stock_top_z = 10.0;
+    let linked_passes = linking::link_passes(
+        raw_passes,
+        &LinkingParams {
+            tool_diameter: tool.diameter,
+            clearance_z: stock_top_z + DEFAULT_CLEARANCE_OFFSET,
+            lead_ratio: linking::DEFAULT_LEAD_RATIO,
+            arc_lead_in_radius,
+            arc_lead_out_radius,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        },
+    );
+    let passes: Vec<_> = linked_passes
+        .into_iter()
+        .map(|mut pass| {
+            pass.cuts = arc_fitting::fit_arcs(pass.cuts, 0.01);
+            pass
+        })
+        .collect();
+
+    Toolpath {
+        operation_id: Uuid::nil(),
+        tool_number: 1,
+        spindle_speed: 8000.0,
+        feed_rate: 500.0,
+        passes,
+    }
 }
 
-fn load_golden(controller: &str) -> String {
-    let path = golden_dir(controller).join("simple_pocket.nc");
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read golden {path:?}: {e}"))
-}
+#[cfg(cam_geometry_bindings)]
+fn simple_pocket_golden(controller: &str) {
+    let toolpath = pocket_toolpath();
+    let dir = golden_dir(controller);
+    std::fs::create_dir_all(&dir).expect("create golden dir");
 
-#[test]
-fn fanuc_0i_golden_matches() {
-    let toolpath = load_toolpath("fanuc-0i");
-    let pp = PostProcessor::builtin("fanuc-0i").expect("load fanuc-0i");
+    let toolpath_fixture = dir.join("simple_pocket.toolpath.json");
+    let nc_fixture = dir.join("simple_pocket.nc");
+
+    let pp = PostProcessor::builtin(controller).expect("load postprocessor");
     let tool_info = ToolInfo {
         number: 1,
         diameter: 10.0,
@@ -36,7 +121,7 @@ fn fanuc_0i_golden_matches() {
     };
     let output = pp
         .generate(
-            &[toolpath],
+            &[toolpath.clone()],
             &[tool_info],
             GenerateOptions {
                 program_number: Some(1000),
@@ -44,10 +129,39 @@ fn fanuc_0i_golden_matches() {
             },
         )
         .expect("generate");
+
+    if !nc_fixture.exists() {
+        let json = serde_json::to_string_pretty(&toolpath).expect("serialize toolpath");
+        std::fs::write(&toolpath_fixture, &json).expect("write toolpath fixture");
+        std::fs::write(&nc_fixture, &output).expect("write nc fixture");
+        panic!(
+            "Fixtures written. Inspect {:?} — verify G02/G03 arcs from arc fitting. Re-run to lock.",
+            nc_fixture
+        );
+    }
+
+    let golden = std::fs::read_to_string(&nc_fixture)
+        .unwrap_or_else(|e| panic!("read golden {nc_fixture:?}: {e}"));
     assert_eq!(
-        output,
-        load_golden("fanuc-0i"),
-        "fanuc-0i golden file mismatch"
+        output, golden,
+        "{controller} simple_pocket golden file mismatch"
+    );
+}
+
+#[test]
+#[cfg(cam_geometry_bindings)]
+fn fanuc_0i_golden_matches() {
+    simple_pocket_golden("fanuc-0i");
+}
+
+#[test]
+#[cfg(cam_geometry_bindings)]
+fn fanuc_0i_pocket_contains_arcs() {
+    let nc = std::fs::read_to_string(golden_dir("fanuc-0i").join("simple_pocket.nc"))
+        .expect("read fanuc-0i simple_pocket.nc");
+    assert!(
+        nc.contains("G02") || nc.contains("G03"),
+        "expected arc commands (G02/G03) in pocket G-code"
     );
 }
 
@@ -326,27 +440,7 @@ fn fanuc_0i_drill_cycle_golden_matches() {
 }
 
 #[test]
+#[cfg(cam_geometry_bindings)]
 fn linuxcnc_golden_matches() {
-    let toolpath = load_toolpath("linuxcnc");
-    let pp = PostProcessor::builtin("linuxcnc").expect("load linuxcnc");
-    let tool_info = ToolInfo {
-        number: 1,
-        diameter: 10.0,
-        description: "10mm Flat Endmill".to_string(),
-    };
-    let output = pp
-        .generate(
-            &[toolpath],
-            &[tool_info],
-            GenerateOptions {
-                program_number: Some(1000),
-                include_comments: false,
-            },
-        )
-        .expect("generate");
-    assert_eq!(
-        output,
-        load_golden("linuxcnc"),
-        "linuxcnc golden file mismatch"
-    );
+    simple_pocket_golden("linuxcnc");
 }
