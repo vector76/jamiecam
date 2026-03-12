@@ -215,6 +215,31 @@ mod tests {
 
     #[cfg(cam_geometry_bindings)]
     #[test]
+    fn poly_boolean_difference_subtracts_overlap() {
+        // 10×10 square at origin; subtract 10×10 square shifted right by 5
+        // → result should be a rectangle roughly [0,5]×[0,10]
+        let a = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let b = vec![(5.0, 0.0), (15.0, 0.0), (15.0, 10.0), (5.0, 10.0)];
+        let result = poly_boolean(&a, &b, BoolOp::Difference).expect("difference should succeed");
+        assert!(result.len() >= 4, "result should have at least 4 vertices");
+        for (x, y) in &result {
+            assert!(*x >= -0.01 && *x <= 5.01, "x={x} should be in [0,5]");
+            assert!(*y >= -0.01 && *y <= 10.01, "y={y} should be in [0,10]");
+        }
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn poly_boolean_difference_full_cover_returns_error() {
+        // Subtracting a polygon that fully covers the subject → no result
+        let a = vec![(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0)];
+        let b = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
+        let result = poly_boolean(&a, &b, BoolOp::Difference);
+        assert!(result.is_err(), "full-cover difference should return Err");
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
     fn poly_offset_returns_error_on_collapse() {
         // 1×1 square offset inward by 2 mm collapses entirely
         let square = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
