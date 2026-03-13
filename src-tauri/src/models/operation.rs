@@ -153,6 +153,33 @@ pub struct ZLevelFinishingParams {
     pub rest_machining_reference_id: Option<String>,
 }
 
+/// Parameters for an Adaptive Clearing operation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdaptiveClearingParams {
+    /// Cut depth in project units.
+    pub depth: f64,
+    /// Maximum depth per pass in project units.
+    pub stepdown: f64,
+    /// Optimal tool load as a fraction of tool diameter (e.g. 0.25).
+    pub optimal_load: f64,
+    /// Radial stepover as a percentage of tool diameter (0–100).
+    pub stepover_percent: f64,
+    /// Face fingerprints that define the machining boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -166,6 +193,7 @@ pub enum OperationParams {
     Drill(DrillParams),
     ZLevelRoughing(ZLevelRoughingParams),
     ZLevelFinishing(ZLevelFinishingParams),
+    AdaptiveClearing(AdaptiveClearingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -770,6 +798,83 @@ mod tests {
             params.geometry.is_none(),
             "geometry must default to None when absent"
         );
+    }
+
+    #[test]
+    fn adaptive_clearing_serde_round_trip() {
+        let params = AdaptiveClearingParams {
+            depth: 10.0,
+            stepdown: 2.0,
+            optimal_load: 0.25,
+            stepover_percent: 40.0,
+            geometry: Some(vec!["face1".into(), "face2".into()]),
+            arc_lead_in_radius: Some(3.0),
+            arc_lead_out_radius: Some(2.5),
+            helical_entry_radius: Some(4.0),
+            helical_entry_pitch: Some(1.5),
+            ramp_entry_angle_deg: Some(5.0),
+        };
+        let op = OperationParams::AdaptiveClearing(params);
+        let json = serde_json::to_string(&op).unwrap();
+        assert!(json.contains("\"type\":\"adaptive_clearing\""));
+        let back: OperationParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(op, back);
+    }
+
+    #[test]
+    fn adaptive_clearing_operation_round_trip() {
+        let original = Operation {
+            id: Uuid::parse_str("eeee0000-0000-0000-0000-000000000005").unwrap(),
+            name: "Adaptive Clear".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::AdaptiveClearing(AdaptiveClearingParams {
+                depth: 12.0,
+                stepdown: 3.0,
+                optimal_load: 0.25,
+                stepover_percent: 40.0,
+                geometry: Some(vec!["fp1".into()]),
+                arc_lead_in_radius: Some(2.0),
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, recovered);
+    }
+
+    /// Existing variants must still deserialize after adding AdaptiveClearing.
+    #[test]
+    fn existing_variants_still_deserialize_after_adaptive_clearing() {
+        // Profile
+        let profile = make_profile_op();
+        let json = serde_json::to_string(&profile).unwrap();
+        let back: Operation = serde_json::from_str(&json).unwrap();
+        assert_eq!(profile, back);
+
+        // Pocket
+        let pocket = make_pocket_op();
+        let json = serde_json::to_string(&pocket).unwrap();
+        let back: Operation = serde_json::from_str(&json).unwrap();
+        assert_eq!(pocket, back);
+
+        // Drill
+        let drill = make_drill_op();
+        let json = serde_json::to_string(&drill).unwrap();
+        let back: Operation = serde_json::from_str(&json).unwrap();
+        assert_eq!(drill, back);
+
+        // ZLevelRoughing
+        let zlr = make_zlevel_op();
+        let json = serde_json::to_string(&zlr).unwrap();
+        let back: Operation = serde_json::from_str(&json).unwrap();
+        assert_eq!(zlr, back);
     }
 
     #[test]

@@ -122,6 +122,7 @@ impl From<&Project> for ProjectSnapshot {
                         OperationParams::Drill(_) => "drill".to_string(),
                         OperationParams::ZLevelRoughing(_) => "z_level_roughing".to_string(),
                         OperationParams::ZLevelFinishing(_) => "z_level_finishing".to_string(),
+                        OperationParams::AdaptiveClearing(_) => "adaptive_clearing".to_string(),
                     },
                     enabled: op.enabled,
                     needs_recalculate,

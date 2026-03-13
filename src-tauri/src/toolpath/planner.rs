@@ -67,6 +67,7 @@ pub fn plan(
                 roughing_data,
             )?
         }
+        OperationParams::AdaptiveClearing(_) => todo!("adaptive clearing: bead-6"),
     };
 
     // Step 3: Compute stats over the returned passes.

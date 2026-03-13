@@ -261,12 +261,14 @@ pub fn calculate_toolpath_inner(
             p.ramp_entry_angle_deg,
         ),
         OperationParams::Drill(_) => (None, None, None, None, None),
+        OperationParams::AdaptiveClearing(_) => (None, None, None, None, None),
     };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
         | OperationParams::Profile(_)
         | OperationParams::ZLevelRoughing(_)
-        | OperationParams::ZLevelFinishing(_) => linking::link_passes(
+        | OperationParams::ZLevelFinishing(_)
+        | OperationParams::AdaptiveClearing(_) => linking::link_passes(
             raw_passes,
             &LinkingParams {
                 tool_diameter: tool.diameter,

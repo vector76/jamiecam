@@ -188,6 +188,22 @@ export interface ZLevelFinishingParams {
   restMachiningReferenceId?: string
 }
 
+/** Parameters for an Adaptive Clearing operation. */
+export interface AdaptiveClearingParams {
+  depth: number
+  stepdown: number
+  /** Optimal tool load as a fraction of tool diameter (e.g. 0.25). */
+  optimalLoad: number
+  /** Radial stepover as a percentage of tool diameter (0–100). */
+  stepoverPercent: number
+  geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -199,8 +215,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -215,8 +231,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -225,7 +241,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing'
   enabled: boolean
   needsRecalculate: boolean
 }
