@@ -1,3 +1,4 @@
+pub mod adaptive_clearing;
 pub mod drill;
 pub mod engagement;
 pub mod pocket;
