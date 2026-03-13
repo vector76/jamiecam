@@ -154,29 +154,29 @@ stepped parts, parts with varying depth features.
 
 ### Operations Implemented
 
-- [ ] **Multi-level profile** — step-down over multiple Z depths
-- [ ] **Z-level roughing** — horizontal slice strategy with pocket fill per level
+- [x] **Multi-level profile** — step-down over multiple Z depths
+- [x] **Z-level roughing** — horizontal slice strategy with pocket fill per level
 - [ ] **Adaptive (trochoidal) clearing** — constant engagement angle, high-speed machining
-- [ ] **3D contour / Z-level finishing** — wall finishing via OCCT `BRepAlgoAPI_Section`
+- [x] **3D contour / Z-level finishing** — wall finishing via OCCT `BRepAlgoAPI_Section`
 
 ### Infrastructure Deliverables
 
-- [ ] **OCCT section at Z** — `cg_shape_section_at_z` implemented and tested
-- [ ] **Arc lead-in / lead-out** — circular arc approach/departure motions
-- [ ] **Helical entry** — spiral descent for pocket entry
-- [ ] **Ramp entry** — linear angled descent for slot entry
-- [ ] **Arc fitting** — detect chord sequences → emit G2/G3 in output
-- [ ] **Hole auto-detection** — `cg_shape_find_holes` from OCCT cylindrical face analysis
-- [ ] **Drill sorting** — nearest-neighbor hole ordering
-- [ ] **Canned cycle emission** — G81/G83/G73/G84/G85 blocks
-- [ ] **Canned cycle expansion** — for controllers that don't support them (GRBL)
-- [ ] **Built-in post-processors**: `mach4.toml`, `grbl.toml`
-- [ ] **Rest machining (basic)** — compute stock remaining after roughing pass,
+- [x] **OCCT section at Z** — `cg_shape_section_at_z` implemented and tested
+- [x] **Arc lead-in / lead-out** — circular arc approach/departure motions
+- [x] **Helical entry** — spiral descent for pocket entry
+- [x] **Ramp entry** — linear angled descent for slot entry
+- [x] **Arc fitting** — detect chord sequences → emit G2/G3 in output
+- [x] **Hole auto-detection** — `cg_shape_find_holes` from OCCT cylindrical face analysis
+- [x] **Drill sorting** — nearest-neighbor hole ordering
+- [x] **Canned cycle emission** — G81/G83/G73/G84/G85 blocks
+- [x] **Canned cycle expansion** — for controllers that don't support them (GRBL)
+- [x] **Built-in post-processors**: `mach4.toml`, `grbl.toml`
+- [x] **Rest machining (basic)** — compute stock remaining after roughing pass,
   clip finishing paths to un-machined regions only
-- [ ] **Viewport: standard views** — Top/Front/Right/Iso keyboard shortcuts,
+- [x] **Viewport: standard views** — Top/Front/Right/Iso keyboard shortcuts,
   smooth animated transitions
-- [ ] **Viewport: perspective / ortho toggle**
-- [ ] **Viewport: display mode selector** — Shaded, Shaded+Edges, Wireframe, Transparent
+- [x] **Viewport: perspective / ortho toggle**
+- [x] **Viewport: display mode selector** — Shaded, Shaded+Edges, Wireframe, Transparent
 
 ### Acceptance Criteria
 

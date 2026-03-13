@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-12. Based on git history (177 commits, branch `main`)._
+_Last updated: 2026-03-13. Based on git history (185 commits, branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -80,7 +80,17 @@ function using OCCT cylindrical surface analysis, Rust wrapper, `detect_holes`
 IPC command, and "Detect Holes" button in the drill operation editor that
 populates drill points from model geometry).
 
-Full test suite: 464 Rust tests, 332 frontend tests — all passing.
+Two more Phase 2 deliverables are now complete: **Z-Level Finishing** (3D
+contour / wall finishing via single offset contour per Z level with configurable
+finishing allowance and optional spring pass; data model, algorithm, planner
+dispatch, IPC, operation editor UI, golden tests) and **rest machining (basic)**
+(cross-operation data flow allowing Z-Level Finishing to reference a prior
+Z-Level Roughing operation's toolpath; rest region computation via polygon
+boolean difference clips finishing paths to un-machined regions only; validated
+with golden tests showing rest machining produces ≤ passes compared to
+unconstrained finishing).
+
+Full test suite: 472 Rust tests, 332 frontend tests — all passing.
 
 ---
 
@@ -813,6 +823,86 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
   serialized passes against committed golden fixture
 - Golden fixture: `tests/fixtures/zlevel_roughing_golden.json` (197 lines)
 
+### Z-Level Finishing (ZLF) — complete end-to-end (`7626a37`–`5af47ce`)
+
+**Data model** (`src-tauri/src/models/operation.rs`)
+- `ZLevelFinishingParams` struct: `depth: f64`, `stepdown: f64`,
+  `finishing_allowance: f64` (material left on walls before finishing, ≥ 0),
+  `spring_pass: bool` (optional zero-offset repeat pass for improved surface
+  finish, defaults to false), `geometry: Option<Vec<String>>`,
+  `rest_machining: bool` (defaults to false), `rest_machining_reference_id:
+  Option<String>` (UUID of a prior ZLevelRoughing operation); plus five entry
+  motion fields; tagged as `"type": "z_level_finishing"` in the `OperationParams`
+  enum
+- Serde round-trip test: `zlevel_finishing_round_trips` verifies discriminant and
+  camelCase serialization
+
+**Algorithm** (`src-tauri/src/toolpath/operations/zlevel_finishing.rs`)
+- `zlevel_finishing_passes(stock, params, tool_diameter, shape, roughing_data)` →
+  `Result<Vec<Pass>>`
+- Validates all params (stepdown > 0, depth > 0, finishing_allowance ≥ 0)
+- Integer-indexed Z-level loop ensures floor depth is always machined
+- At each Z level: gets OCCT section boundary (or stock extents fallback);
+  applies single inward offset by `tool_radius + finishing_allowance` for
+  wall-following contour (distinct from roughing's multiple concentric offsets);
+  emits `PassKind::Cutting` pass
+- Optional spring pass: when `params.spring_pass == true`, emits a second
+  `PassKind::SpringPass` at each Z level offset by `tool_radius` only (no
+  finishing allowance) for improved surface finish
+- Rest machining: when `roughing_data` is provided, computes target boundary
+  and roughing contours at each Z level, calls `compute_rest_region()` to find
+  uncovered areas; skips Z levels where roughing fully covered the material
+- 3 ungated param validation tests + 6 OCCT-gated algorithm tests + 3 rest
+  machining tests
+
+**Rest machining module** (`src-tauri/src/toolpath/rest.rs`)
+- `compute_rest_region(target_boundary, roughing_contours, roughing_tool_radius)`
+  → `Result<Vec<Vec<(f64, f64)>>, GeometryError>`
+- Offsets each roughing contour outward by tool radius to get swept areas,
+  unions all swept areas, then subtracts coverage from target boundary via
+  boolean difference; returns remaining un-machined regions (empty Vec when
+  roughing fully covers)
+- TDD tests: empty roughing leaves full target, full coverage returns empty,
+  partial coverage returns remainder
+
+**Cross-operation data flow** (`src-tauri/src/commands/toolpath.rs`)
+- When calculating a ZLevelFinishing operation with `rest_machining: true`:
+  validates `rest_machining_reference_id` is present, looks up the reference
+  operation (must be ZLevelRoughing), retrieves its cached toolpath (must
+  already be calculated), extracts cutting-only passes and reference tool
+  diameter into `RoughingData` struct, and passes it to `planner::plan()`
+- 4 error-path tests: no reference ID → `InvalidInput`, reference not found →
+  `NotFound`, wrong operation type → `InvalidInput`, reference not yet
+  calculated → `InvalidInput`
+
+**IPC and TypeScript types** (`a3f4ce1` + `7626a37`)
+- `z_level_finishing` case handled in `calculate_toolpath_inner` (linking
+  dispatch) and in `planner::plan()` (ZLevelFinishing arm)
+- `get_project_snapshot` emits `"z_level_finishing"` as the operation type
+- `ZLevelFinishingParams` interface in `src/api/types.ts`; `'z_level_finishing'`
+  added to `Operation`, `OperationInput`, and `OperationSummary` union types
+
+**Operation editor UI** (`e342ab8`)
+- `OperationEditorForm.tsx`: new `z_level_finishing` branch with tool selector,
+  depth/stepdown/finishing allowance inputs, spring pass checkbox, five entry
+  motion inputs, feed/speed overrides, geometry section, and rest machining
+  section (checkbox + reference operation dropdown listing ZLevelRoughing ops)
+- `OperationListPanel.tsx`: `+ Z-Level Finishing` button (disabled when no
+  tools), default params depth=5.0, stepdown=1.0, finishingAllowance=0.1,
+  springPass=false, restMachining=false
+
+**Golden tests** (`5af47ce`)
+- `src-tauri/tests/zlevel_finishing_golden.rs` (gated on `cam_geometry_bindings`):
+  - `zlevel_finishing_golden_matches`: loads box.step, depth=5/stepdown=1/
+    finishingAllowance=0.1/springPass=false; compares against
+    `tests/fixtures/zlevel_finishing_golden.json`
+  - `zlevel_finishing_spring_pass_golden_matches`: same with springPass=true;
+    verifies 2× pass count (Cutting + SpringPass per Z); compares against
+    `tests/fixtures/zlevel_finishing_spring_pass_golden.json`
+  - `rest_machining_reduces_or_equals_unconstrained`: runs roughing then
+    finishing with and without rest machining; asserts rest-machining produces
+    ≤ passes than unconstrained
+
 ### Viewport standard views (`1a752b2`, `728476a`)
 
 **SceneManager methods** (`src/viewport/scene.ts`)
@@ -1267,17 +1357,13 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
 
 ### Phase 2 remaining items
 
-The following Phase 2 deliverables from `development-roadmap.md` are **not yet
+The following Phase 2 deliverable from `development-roadmap.md` is **not yet
 implemented**:
 
 - **Adaptive (trochoidal) clearing** — constant engagement angle, high-speed
   machining (operation + algorithm)
-- **3D contour / Z-level finishing** — wall finishing via OCCT
-  `BRepAlgoAPI_Section` (operation + algorithm)
-- **Rest machining (basic)** — compute stock remaining after roughing pass,
-  clip finishing paths to un-machined regions only
 
-All other Phase 2 items (15 of 18) are complete.
+All other Phase 2 items (17 of 18) are complete.
 
 ---
 
@@ -1301,8 +1387,8 @@ when a 5-axis path is encountered.
 | `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks. Note: `useWcs`, `useNotifications`, and `useSelectedOperationId` selectors are implemented but not directly tested here (covered implicitly via component tests). |
 | `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
-| `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (8: disabled/enabled/profile/pocket/drill/zlr-disabled/zlr-calls/snapshot-refresh), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 47 tests across 10 describe blocks |
-| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), error handling — 58 tests across 10 describe blocks |
+| `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (incl. ZLF: disabled/enabled/profile/pocket/drill/zlr-disabled/zlr-calls/zlf-disabled/zlf-calls/snapshot-refresh), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (12), calculate loading state (4), reorder (7), progress bar (2) — 47 tests across 10 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), z_level_finishing form (tool select/depth/stepdown/finishing allowance/spring pass/rest machining/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), error handling — 58 tests across 10 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
 | `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
@@ -1317,11 +1403,12 @@ when a 5-axis path is encountered.
 | `src-tauri/tests/drill_golden.rs` | Golden-file integration: drill algorithm JSON output (ungated; 5 holes, peck drilling) |
 | `src-tauri/tests/toolpath_cache.rs` | End-to-end cache round-trip: save/load preserves toolpath + validity; param mutation marks stale (ungated; uses drill operations) |
 | `src-tauri/tests/zlevel_roughing_golden.rs` | Golden-file integration: Z-Level Roughing algorithm JSON output (`#[cfg(cam_geometry_bindings)]`; box.step, depth=5/stepdown=2/stepover=0.4) |
+| `src-tauri/tests/zlevel_finishing_golden.rs` | Golden-file integration: Z-Level Finishing algorithm JSON output (no spring pass), spring pass variant (2× pass count), rest machining ≤ unconstrained assertion (`#[cfg(cam_geometry_bindings)]`; box.step, depth=5/stepdown=1/finishingAllowance=0.1) — 3 tests |
 | `src-tauri/tests/hole_detection_e2e.rs` | End-to-end hole detection: `detect_holes_returns_expected_geometry` (3 holes from plate fixture, tilted filtered), `detected_holes_produce_valid_drill_toolpath` (detected holes → drill op → toolpath XY match) — 2 OCCT-gated tests |
 | `src-tauri/src/postprocessor/` (inline) | Config parse (incl. `PeckRetractMode` — full/chip_break/absent/invalid), formatter, modal, arcs, block, program, public API; `cycles.rs` — `is_drill_cutting_pass` (simple/peck/mixed-XY/wrong-count), `classify_drill_pass`, `format_cycle_header` (G81/G83), `format_cycle_cancel` (G80/err-when-absent), `cycles_not_supported`, `peck_retract_mode_selects_g83` |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops (save/load/new/export_gcode round-trip and error tests; 5 `#[tokio::test]` for `open_model` — file-not-found, geometry-error without OCCT, full mesh load, shape stored, shape absent without OCCT), tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration; detect_holes: camelCase, no-model, no-shape, OCCT integration with plate fixture); plus three OCCT-gated tests in `commands/toolpath.rs`: pocket toolpath end-to-end, geometry-selection boundary clamping, and invalid-fingerprint error |
-| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants (profile/pocket/drill/zlr op round-trips; `operation_type_field_at_top_level`; `operation_fields_are_camel_case`; `operation_enabled_defaults_to_true_when_absent`); `drill_peck_depth_absent_when_none`; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip + type-field assertion; geometry field serde for Pocket/Profile/ZLevelRoughing (absent-when-None, present-when-set, round-trip with fingerprints, defaults-absent-in-old-JSON — 12 tests) |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; 8 tests), `cache.rs` key stability + sensitivity (4 tests), `arc_fitting.rs` 18 tests (known circle CW/CCW, mixed straight+curved, tolerance boundary inside/outside, min-segment count, Z-change breaks, full 360°, existing arc passthrough, collinear rejection, empty/single-point, rapid/dwell passthrough, center+end correctness, dwell interruption, two arcs different radii), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 12 tests: stats non-zero for Pocket/Profile (gated) + profile-error without bindings (stub path) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse) |
+| `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants (profile/pocket/drill/zlr op round-trips; `operation_type_field_at_top_level`; `operation_fields_are_camel_case`; `operation_enabled_defaults_to_true_when_absent`); `drill_peck_depth_absent_when_none`; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip + type-field assertion; `ZLevelFinishingParams` round-trip + type-field assertion; geometry field serde for Pocket/Profile/ZLevelRoughing (absent-when-None, present-when-set, round-trip with fingerprints, defaults-absent-in-old-JSON — 12 tests) |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; 8 tests), `cache.rs` key stability + sensitivity (4 tests), `arc_fitting.rs` 18 tests (known circle CW/CCW, mixed straight+curved, tolerance boundary inside/outside, min-segment count, Z-change breaks, full 360°, existing arc passthrough, collinear rejection, empty/single-point, rapid/dwell passthrough, center+end correctness, dwell interruption, two arcs different radii), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 12 tests: stats non-zero for Pocket/Profile (gated) + profile-error without bindings (stub path) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput, `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse), `operations/zlevel_finishing.rs` 3 ungated param validation tests + 6 OCCT-gated algorithm tests + 3 rest machining tests, `rest.rs` rest region computation tests (empty roughing/full coverage/partial coverage) |
 | `src-tauri/src/project/` (inline) | `serialization.rs` (13 tests): multiple round-trips (with/without model, with tool, with stock+WCS, with operations); schema version rejection (`load_rejects_unknown_schema_version`); graceful missing file (`load_fails_gracefully_on_missing_file`); ZIP structure validation (`save_creates_valid_zip`); backward-compat load without `tools` field (`load_phase0_schema_without_tools_field_succeeds`); toolpath ZIP entry write (positive + negative); round-trip with valid toolpath; graceful load with missing toolpath entry |
 | `src-tauri/src/geometry/` (inline) | `clipper.rs`: 2 stub tests (offset + boolean, ungated/not-bindings-only) + 2 OCCT-gated integration tests (offset shrinks square, offset returns error on collapse) — 4 tests; `safe.rs`: GeometryError Display + externally-tagged serde serialization (8), MeshData accessibility + serialization + FaceGroup camelCase (3), OcctShape/Mesh Send + null-drop safety (4), loader stubs return correct error variants (5), OCCT-gated fixture load + bounding-box + tessellate (3), `section_at_z` stub returns NotImplemented (ungated) + box midheight returns single loop (gated) (25 tests); `importer.rs`: missing file + unknown/no/uppercase extension dispatch (7 ungated) + OCCT-gated fixture load and `import_with_shape` (2 gated) — 9 tests; `faces.rs`: fingerprint determinism + fingerprint sensitivity (differs for different inputs) + known value + two stub-path error tests (5 tests); `holes.rs`: stub returns NotImplemented (ungated) + plate fixture 3-hole detection with centers/radii/depths/through-flags (OCCT-gated) — 2 tests; `mod.rs`: FFI constant sizes and enum discriminants incl. `cg_hole_info_size` (18 tests) |
 | `src-tauri/src/` (inline) | `error.rs`: all AppError variant serde format tests incl. `InvalidInput` + adjacently-tagged encoding + Display (11 tests); `state.rs`: Project/AppState defaults and `RwLock` write access (7 tests); `lib.rs`: 2 placeholder tests (sanity arithmetic + serde round-trip) |
@@ -1351,7 +1438,7 @@ arc fitting produces G02/G03 commands in the output.
 | `src-tauri/src/models/tool.rs` | `Tool`, `ToolType` |
 | `src-tauri/src/models/stock.rs` | `StockDefinition`, `BoxDimensions`, `Vec3` |
 | `src-tauri/src/models/wcs.rs` | `WorkCoordinateSystem` |
-| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`), `ProfileParams` (incl. `stepdown: Option<f64>` and five entry motion fields), `PocketParams` (incl. five entry motion fields), `DrillParams`, `DrillPoint`, `ZLevelRoughingParams` (incl. five entry motion fields), `CompensationSide`, `CacheState`, `CachedStats` |
+| `src-tauri/src/models/operation.rs` | `Operation` struct, `OperationParams` enum (`Profile`/`Pocket`/`Drill`/`ZLevelRoughing`/`ZLevelFinishing`), `ProfileParams` (incl. `stepdown: Option<f64>` and five entry motion fields), `PocketParams` (incl. five entry motion fields), `DrillParams`, `DrillPoint`, `ZLevelRoughingParams` (incl. five entry motion fields), `ZLevelFinishingParams` (incl. `finishing_allowance`, `spring_pass`, `rest_machining`, `rest_machining_reference_id`, and five entry motion fields), `CompensationSide`, `CacheState`, `CachedStats` |
 | `src-tauri/src/toolpath/types.rs` | `Toolpath`, `Pass`, `PassKind`, `CutPoint`, `MoveKind`, `ToolOrientation`, `ToolpathStats`, `LineGeometryData`, `LinkingParams` |
 | `src-tauri/src/toolpath/linking.rs` | `link_passes(passes, params: &LinkingParams)` — lift/traverse/descend between cutting passes with optional helical entry, ramp entry, arc lead-in, and arc lead-out |
 | `src-tauri/src/toolpath/planner.rs` | `plan()` — resolves geometry boundary, dispatches to algorithm, returns passes + stats; linking, arc fitting, and `Toolpath` assembly happen in `calculate_toolpath_inner` |
@@ -1359,6 +1446,8 @@ arc fitting produces G02/G03 commands in the output.
 | `src-tauri/src/toolpath/operations/profile.rs` | Profile contouring algorithm (single offset contour per Z level) |
 | `src-tauri/src/toolpath/operations/drill.rs` | Drill cycle algorithm (nearest-neighbor sort, linking + cutting passes per hole, peck support) |
 | `src-tauri/src/toolpath/operations/zlevel_roughing.rs` | Z-Level Roughing algorithm (OCCT section at each Z level + concentric offset per level; stock-boundary fallback) |
+| `src-tauri/src/toolpath/operations/zlevel_finishing.rs` | Z-Level Finishing algorithm (single offset contour per Z level with finishing allowance; optional spring pass; rest machining via `RoughingData`) |
+| `src-tauri/src/toolpath/rest.rs` | Rest region computation: `compute_rest_region()` — polygon boolean difference of target boundary minus roughing coverage |
 | `src-tauri/src/toolpath/arc_fitting.rs` | `fit_arcs(cuts, tolerance)` — replaces qualifying linear Feed sequences with Arc moves; 3-point circle fitting, direction consistency, constant-Z constraint |
 | `src-tauri/src/toolpath/cache.rs` | `compute_cache_key()` — deterministic SHA-256 cache key for toolpath operations |
 | `src-tauri/src/geometry/clipper.rs` | Safe Rust wrappers: `poly_offset`, `poly_boolean`, `BoolOp` |
@@ -1410,12 +1499,14 @@ arc fitting produces G02/G03 commands in the output.
 | `tests/integration/golden_gcode/linuxcnc/drill_cycle.nc` | Golden G-code for LinuxCNC canned cycle drill (G83/Q/G80, 5 holes, peck=3 mm) |
 | `tests/integration/golden_gcode/grbl/drill_expansion.nc` | Golden G-code for GRBL drill expansion (G0/G1 peck sequences, no cycle codes) |
 | `tests/fixtures/zlevel_roughing_golden.json` | Golden Z-Level Roughing output (box.step, depth=5/stepdown=2/stepover=0.4) |
+| `tests/fixtures/zlevel_finishing_golden.json` | Golden Z-Level Finishing output (box.step, depth=5/stepdown=1/finishingAllowance=0.1, no spring pass) |
+| `tests/fixtures/zlevel_finishing_spring_pass_golden.json` | Golden Z-Level Finishing output with spring pass (2× passes: Cutting + SpringPass per Z level) |
 | `tests/fixtures/plate_with_holes.step` | 100×100×20 mm plate with 4 holes (2 through, 1 blind, 1 tilted) for hole detection tests |
 
 ### TypeScript frontend
 | File | Purpose |
 |---|---|
-| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `HoleDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`); operation union types include `'z_level_roughing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`) |
+| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `HoleDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`, `ZLevelFinishingParams`); operation union types include `'z_level_roughing'` and `'z_level_finishing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`); `ZLevelFinishingParams` adds `finishingAllowance`, `springPass`, `restMachining`, `restMachiningReferenceId` |
 | `src/api/file.ts` | File operation IPC wrappers |
 | `src/api/tools.ts` | Tool CRUD IPC wrappers |
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
@@ -1429,8 +1520,8 @@ arc fitting produces G02/G03 commands in the output.
 | `src/viewport/modelMesh.ts` | `buildModelMesh(meshData)` → `ModelMeshResult { mesh: THREE.Mesh, boundingSphere }` |
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
-| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, and z_level_roughing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms; Detect Holes button (drill only) |
+| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing and Z-Level Finishing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, z_level_roughing, and z_level_finishing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms; Detect Holes button (drill only); rest machining section with reference operation dropdown (z_level_finishing only) |
 | `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
 | `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
 | `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
