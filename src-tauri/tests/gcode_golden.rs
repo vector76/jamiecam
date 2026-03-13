@@ -8,7 +8,11 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 #[cfg(cam_geometry_bindings)]
-use jamiecam_lib::models::operation::{CacheState, OperationParams, PocketParams};
+use jamiecam_lib::geometry::OcctShape;
+#[cfg(cam_geometry_bindings)]
+use jamiecam_lib::models::operation::{
+    CacheState, OperationParams, PocketParams, ZLevelFinishingParams,
+};
 #[cfg(cam_geometry_bindings)]
 use jamiecam_lib::models::tool::ToolType;
 #[cfg(cam_geometry_bindings)]
@@ -443,4 +447,132 @@ fn fanuc_0i_drill_cycle_golden_matches() {
 #[cfg(cam_geometry_bindings)]
 fn linuxcnc_golden_matches() {
     simple_pocket_golden("linuxcnc");
+}
+
+#[cfg(cam_geometry_bindings)]
+fn finishing_toolpath() -> Toolpath {
+    let step_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/box.step");
+    let shape = OcctShape::load_step(&step_path).expect("load box.step");
+    let (xmin, ymin, zmin, xmax, ymax, zmax) = shape.bounding_box();
+
+    let stock = StockDefinition::Box(BoxDimensions {
+        origin: Vec3 {
+            x: xmin,
+            y: ymin,
+            z: zmin,
+        },
+        width: xmax - xmin,
+        depth: ymax - ymin,
+        height: zmax - zmin,
+    });
+    let tool = Tool {
+        id: Uuid::nil(),
+        name: "6mm Flat Endmill".to_string(),
+        tool_type: ToolType::FlatEndmill,
+        material: "carbide".to_string(),
+        diameter: 6.0,
+        flute_count: 4,
+        default_spindle_speed: Some(10000),
+        default_feed_rate: Some(400.0),
+    };
+    let arc_lead_in_radius = Some(3.0);
+    let arc_lead_out_radius = Some(3.0);
+    let operation = Operation {
+        id: Uuid::nil(),
+        name: "Finishing Op".to_string(),
+        enabled: true,
+        tool_id: Uuid::nil(),
+        spindle_speed_override: None,
+        feed_rate_override: None,
+        params: OperationParams::ZLevelFinishing(ZLevelFinishingParams {
+            depth: 5.0,
+            stepdown: 1.0,
+            finishing_allowance: 0.1,
+            spring_pass: false,
+            geometry: None,
+            arc_lead_in_radius,
+            arc_lead_out_radius,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+            rest_machining: false,
+            rest_machining_reference_id: None,
+        }),
+        cache: CacheState::default(),
+    };
+    let (raw_passes, _stats) =
+        planner::plan(&operation, &tool, &stock, Some(&shape), None).expect("plan should succeed");
+
+    let stock_top_z = zmax;
+    let linked_passes = linking::link_passes(
+        raw_passes,
+        &LinkingParams {
+            tool_diameter: tool.diameter,
+            clearance_z: stock_top_z + DEFAULT_CLEARANCE_OFFSET,
+            lead_ratio: linking::DEFAULT_LEAD_RATIO,
+            arc_lead_in_radius,
+            arc_lead_out_radius,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        },
+    );
+    let passes: Vec<_> = linked_passes
+        .into_iter()
+        .map(|mut pass| {
+            pass.cuts = arc_fitting::fit_arcs(pass.cuts, 0.01);
+            pass
+        })
+        .collect();
+
+    Toolpath {
+        operation_id: Uuid::nil(),
+        tool_number: 1,
+        spindle_speed: 10000.0,
+        feed_rate: 400.0,
+        passes,
+    }
+}
+
+#[test]
+#[cfg(cam_geometry_bindings)]
+fn fanuc_0i_zlevel_finishing_golden_matches() {
+    let toolpath = finishing_toolpath();
+    let dir = golden_dir("fanuc-0i");
+    std::fs::create_dir_all(&dir).expect("create golden dir");
+
+    let nc_fixture = dir.join("zlevel_finishing.nc");
+
+    let pp = PostProcessor::builtin("fanuc-0i").expect("load postprocessor");
+    let tool_info = ToolInfo {
+        number: 1,
+        diameter: 6.0,
+        description: "6mm Flat Endmill".to_string(),
+    };
+    let output = pp
+        .generate(
+            &[toolpath],
+            &[tool_info],
+            GenerateOptions {
+                program_number: Some(1000),
+                include_comments: false,
+            },
+        )
+        .expect("generate");
+
+    if !nc_fixture.exists() {
+        std::fs::write(&nc_fixture, &output).expect("write nc fixture");
+        panic!(
+            "Fixture written. Inspect {:?} — verify finishing G-code. Re-run to lock.",
+            nc_fixture
+        );
+    }
+
+    let golden = std::fs::read_to_string(&nc_fixture)
+        .unwrap_or_else(|e| panic!("read golden {nc_fixture:?}: {e}"));
+    assert_eq!(
+        output, golden,
+        "fanuc-0i zlevel_finishing golden file mismatch"
+    );
 }
