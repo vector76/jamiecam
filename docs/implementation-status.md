@@ -47,7 +47,7 @@ milestones during `calculate_toolpath` via a Tauri `AppHandle`, a
 `OperationListPanel` that subscribes to events filtered to the active
 calculation row.
 
-Phase 2 (2.5D Operations) is **partially complete**. The following Phase 2
+Phase 2 (2.5D Operations) is **complete**. The following Phase 2
 deliverables have been implemented: the OCCT Z-section primitive
 (`cg_shape_section_at_z`), Z-Level Roughing operation (data model, algorithm,
 IPC, UI, golden test), viewport standard view snap shortcuts (T/F/R/I keys with
@@ -90,7 +90,14 @@ boolean difference clips finishing paths to un-machined regions only; validated
 with golden tests showing rest machining produces ≤ passes compared to
 unconstrained finishing).
 
-Full test suite: 493 Rust tests (472 lib + 21 integration), 332 frontend tests — all passing.
+The final Phase 2 deliverable is now complete: **adaptive (trochoidal) clearing**
+(constant engagement angle high-speed machining with multi-Z stepdown iteration,
+trochoidal loop insertions where radial engagement exceeds the optimal load,
+per-point feed rate scaling based on local engagement, data model, algorithm,
+planner dispatch, IPC, operation editor UI, golden tests for both toolpath JSON
+and G-code output).
+
+Full test suite: 547 Rust tests (520 lib + 27 integration), 343 frontend tests — all passing.
 
 ---
 
@@ -732,7 +739,7 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
 
 ---
 
-## Phase 2: 2.5D Operations — Partial
+## Phase 2: 2.5D Operations — Complete
 
 ### OCCT Z-section primitive (`ca53015`, `0924ca7`)
 
@@ -1356,15 +1363,53 @@ backend, IPC bridge, frontend store, viewport, and operation editor form.
 - `open_model_inner` and `detect_holes_inner` promoted to `pub` for
   integration test access
 
-### Phase 2 remaining items
+### Adaptive (trochoidal) clearing — complete end-to-end
 
-The following Phase 2 deliverable from `development-roadmap.md` is **not yet
-implemented**:
+**Data model** (`edaa18c`)
+- `AdaptiveClearingParams` struct: `depth`, `stepdown`, `optimal_load` (fraction
+  0–1), `stepover_percent` (0–100), plus standard entry motion fields and
+  geometry selection
+- `OperationParams::AdaptiveClearing` variant; TypeScript mirror in `types.ts`
 
-- **Adaptive (trochoidal) clearing** — constant engagement angle, high-speed
-  machining (operation + algorithm)
+**Algorithm** (`ac8fe8a`)
+- `src-tauri/src/toolpath/operations/adaptive_clearing.rs`:
+  `adaptive_clearing_passes(stock, params, tool_diameter, shape, base_feed)`
+- Multi-Z stepdown iteration from stock top to `stock_top_z - depth`
+- Per-Z: concentric offset pocket pattern with engagement-aware trochoidal loop
+  insertions where radial engagement exceeds `optimal_load`
+- Per-point `feed_rate_override` computed via `clamp_feed()`: scales feed
+  inversely with engagement, clamped to `[0.2×, 1.5×]` of base feed
+- Remaining-material tracking via polygon boolean difference (Clipper2)
+- 26 unit tests: parameter validation (10), feed rate clamping (4), algorithm
+  tests gated on `cam_geometry_bindings` (12: trochoidal at corners, linear in
+  open area, collapsed region, narrow slot, Z value consistency, feed rate
+  range/variation, multi-Z stepdown levels/floor, pass count bounds, cutting
+  length bounds)
 
-All other Phase 2 items (17 of 18) are complete.
+**Planner dispatch** (`e978a6f`)
+- `planner::plan()` dispatches `OperationParams::AdaptiveClearing` to
+  `adaptive_clearing_passes` with `base_feed` derived from operation/tool
+  defaults
+
+**IPC + UI** (`b101e19`, `e978a6f`)
+- Operation editor form: depth, stepdown, optimal load, stepover percent fields
+- Add operation button in OperationListPanel
+- Calculate button enabled for adaptive clearing operations
+- Frontend tests for UI controls
+
+**Golden tests** (this task)
+- `src-tauri/tests/adaptive_clearing_golden.rs` (OCCT-gated): 6 tests
+  - Golden JSON snapshot (`adaptive_clearing_golden.json`)
+  - Structural: trochoidal geometry (arc-like Feed point runs)
+  - Structural: per-point `feed_rate_override` values vary
+  - Structural: multiple Z levels represented
+  - Structural: pass count within expected bounds
+  - G-code golden: full pipeline (linking + arc fitting + Fanuc 0i
+    postprocessor), verifies varying F-words and G02/G03 arc moves
+- Golden fixtures: `tests/fixtures/adaptive_clearing_golden.json`,
+  `tests/fixtures/adaptive_clearing_golden.nc`
+
+All 18 of 18 Phase 2 items are complete.
 
 ---
 
