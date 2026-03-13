@@ -115,6 +115,7 @@ fn rapid(x: f64, y: f64, z: f64) -> CutPoint {
         position: Vec3 { x, y, z },
         move_kind: MoveKind::Rapid,
         tool_orientation: None,
+        feed_rate_override: None,
     }
 }
 
@@ -123,6 +124,7 @@ fn feed(x: f64, y: f64, z: f64) -> CutPoint {
         position: Vec3 { x, y, z },
         move_kind: MoveKind::Feed,
         tool_orientation: None,
+        feed_rate_override: None,
     }
 }
 

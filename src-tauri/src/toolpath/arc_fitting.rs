@@ -188,6 +188,7 @@ fn fit_arcs_in_run(run: &[CutPoint], tolerance: f64) -> Vec<CutPoint> {
                 clockwise,
             },
             tool_orientation: run[arc_end].tool_orientation.clone(),
+            feed_rate_override: run[arc_end].feed_rate_override,
         });
 
         i = arc_end + 1;
@@ -244,6 +245,7 @@ mod tests {
             position: Vec3 { x, y, z },
             move_kind: MoveKind::Feed,
             tool_orientation: None,
+            feed_rate_override: None,
         }
     }
 
@@ -252,6 +254,7 @@ mod tests {
             position: Vec3 { x, y, z },
             move_kind: MoveKind::Rapid,
             tool_orientation: None,
+            feed_rate_override: None,
         }
     }
 
@@ -288,6 +291,7 @@ mod tests {
                 clockwise: cw,
             },
             tool_orientation: None,
+            feed_rate_override: None,
         }
     }
 
@@ -579,6 +583,7 @@ mod tests {
                 },
                 move_kind: MoveKind::Dwell { seconds: 1.0 },
                 tool_orientation: None,
+                feed_rate_override: None,
             },
             feed_point(10.0, 0.0, 0.0),
         ];
@@ -678,6 +683,7 @@ mod tests {
                 },
                 move_kind: MoveKind::Dwell { seconds: 0.5 },
                 tool_orientation: None,
+                feed_rate_override: None,
             },
         ];
         // After dwell, add arc-forming points. Dwell position (1,0) is the

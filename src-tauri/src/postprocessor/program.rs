@@ -301,7 +301,8 @@ fn emit_cut(
             let emit_x = modal.should_emit_coord('X', pos.x);
             let emit_y = modal.should_emit_coord('Y', pos.y);
             let emit_z = modal.should_emit_coord('Z', pos.z);
-            let emit_f = modal.should_emit_feed(toolpath.feed_rate);
+            let effective_feed = cut.feed_rate_override.unwrap_or(toolpath.feed_rate);
+            let emit_f = modal.should_emit_feed(effective_feed);
             let mut bb = BlockBuilder::new();
             if emit_m {
                 bb = bb.motion(code);
@@ -316,7 +317,7 @@ fn emit_cut(
                 bb = bb.axis('Z', pos.z);
             }
             if emit_f {
-                bb = bb.feed(toolpath.feed_rate);
+                bb = bb.feed(effective_feed);
             }
             let ln = next_line_num(line_num, config);
             out.push_str(&bb.build().render(ln, config));
@@ -336,7 +337,8 @@ fn emit_cut(
             let emit_x = modal.should_emit_coord('X', end.x);
             let emit_y = modal.should_emit_coord('Y', end.y);
             let emit_z = modal.should_emit_coord('Z', end.z);
-            let emit_f = modal.should_emit_feed(toolpath.feed_rate);
+            let effective_feed = cut.feed_rate_override.unwrap_or(toolpath.feed_rate);
+            let emit_f = modal.should_emit_feed(effective_feed);
             let mut bb = BlockBuilder::new();
             if emit_m {
                 bb = bb.motion(code);
@@ -361,7 +363,7 @@ fn emit_cut(
                 }
             }
             if emit_f {
-                bb = bb.feed(toolpath.feed_rate);
+                bb = bb.feed(effective_feed);
             }
             let ln = next_line_num(line_num, config);
             out.push_str(&bb.build().render(ln, config));
@@ -507,6 +509,7 @@ program_stop = "M00"
                         },
                         move_kind: MoveKind::Rapid,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                     CutPoint {
                         position: Vec3 {
@@ -516,6 +519,7 @@ program_stop = "M00"
                         },
                         move_kind: MoveKind::Feed,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                 ],
             }],
@@ -641,6 +645,7 @@ program_stop = "M00"
                             z: 1.0,
                         },
                     }),
+                    feed_rate_override: None,
                 }],
             }],
         };
@@ -671,6 +676,7 @@ program_stop = "M00"
                         },
                         move_kind: MoveKind::Feed,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                     CutPoint {
                         position: Vec3 {
@@ -680,6 +686,7 @@ program_stop = "M00"
                         },
                         move_kind: MoveKind::Feed,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                 ],
             }],
@@ -694,6 +701,122 @@ program_stop = "M00"
         assert_eq!(
             count, 1,
             "G01 should appear exactly once (modal), got:\n{}",
+            result
+        );
+    }
+
+    #[test]
+    fn per_point_feed_rate_override_emits_distinct_f_words() {
+        let cfg = default_config();
+        let toolpath = Toolpath {
+            operation_id: Uuid::nil(),
+            tool_number: 1,
+            spindle_speed: 8000.0,
+            feed_rate: 500.0,
+            passes: vec![Pass {
+                kind: PassKind::Cutting,
+                cuts: vec![
+                    CutPoint {
+                        position: Vec3 {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                        feed_rate_override: Some(300.0),
+                    },
+                    CutPoint {
+                        position: Vec3 {
+                            x: 10.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                        feed_rate_override: Some(700.0),
+                    },
+                    CutPoint {
+                        position: Vec3 {
+                            x: 20.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                        feed_rate_override: Some(300.0),
+                    },
+                ],
+            }],
+        };
+        let opts = GenerateOptions {
+            program_number: None,
+            include_comments: false,
+        };
+        let result = assemble(&[toolpath], &[], &cfg, &opts).unwrap();
+        assert!(
+            result.contains("F300"),
+            "expected F300 in output, got:\n{}",
+            result
+        );
+        assert!(
+            result.contains("F700"),
+            "expected F700 in output, got:\n{}",
+            result
+        );
+        // F300 should appear twice (first point and third point re-emit after F700)
+        let f300_count = result.matches("F300").count();
+        assert_eq!(
+            f300_count, 2,
+            "F300 should appear twice (re-emitted after F700 change), got:\n{}",
+            result
+        );
+    }
+
+    #[test]
+    fn none_feed_rate_override_falls_back_to_toolpath_feed() {
+        let cfg = default_config();
+        let toolpath = Toolpath {
+            operation_id: Uuid::nil(),
+            tool_number: 1,
+            spindle_speed: 8000.0,
+            feed_rate: 500.0,
+            passes: vec![Pass {
+                kind: PassKind::Cutting,
+                cuts: vec![
+                    CutPoint {
+                        position: Vec3 {
+                            x: 0.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                        feed_rate_override: None,
+                    },
+                    CutPoint {
+                        position: Vec3 {
+                            x: 10.0,
+                            y: 0.0,
+                            z: 0.0,
+                        },
+                        move_kind: MoveKind::Feed,
+                        tool_orientation: None,
+                        feed_rate_override: None,
+                    },
+                ],
+            }],
+        };
+        let opts = GenerateOptions {
+            program_number: None,
+            include_comments: false,
+        };
+        let result = assemble(&[toolpath], &[], &cfg, &opts).unwrap();
+        // Should emit F500 (toolpath-level feed rate) exactly once (modal suppresses repeats)
+        let f500_count = result.matches("F500").count();
+        assert_eq!(
+            f500_count, 1,
+            "F500 should appear exactly once (modal suppressed), got:\n{}",
             result
         );
     }

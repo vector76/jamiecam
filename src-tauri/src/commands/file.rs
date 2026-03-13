@@ -536,6 +536,7 @@ mod tests {
                         },
                         move_kind: MoveKind::Rapid,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                     CutPoint {
                         position: Vec3 {
@@ -545,6 +546,7 @@ mod tests {
                         },
                         move_kind: MoveKind::Feed,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                 ],
             }],

@@ -195,6 +195,7 @@ mod tests {
             position: Vec3 { x, y, z },
             move_kind,
             tool_orientation: None,
+            feed_rate_override: None,
         }
     }
 

@@ -90,6 +90,7 @@ fn trochoidal_loop(
                 position: Vec3 { x, y, z },
                 move_kind: MoveKind::Feed,
                 tool_orientation: None,
+                feed_rate_override: None,
             }
         })
         .collect()
@@ -220,6 +221,7 @@ pub fn adaptive_clear_at_z(
                     },
                     move_kind: MoveKind::Feed,
                     tool_orientation: None,
+                    feed_rate_override: None,
                 });
             } else {
                 // High engagement — insert trochoidal loop.

@@ -55,6 +55,11 @@ pub struct CutPoint {
     pub move_kind: MoveKind,
     /// Optional tool orientation (required for 5-axis moves).
     pub tool_orientation: Option<ToolOrientation>,
+    /// Optional per-point feed rate override (mm/min or in/min).
+    /// When `Some`, the postprocessor emits this value instead of the
+    /// toolpath-level `feed_rate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed_rate_override: Option<f64>,
 }
 
 /// The machine move type used to reach a [`CutPoint`].
@@ -158,6 +163,7 @@ mod tests {
                         },
                         move_kind: MoveKind::Rapid,
                         tool_orientation: None,
+                        feed_rate_override: None,
                     },
                     CutPoint {
                         position: Vec3 {
@@ -167,6 +173,7 @@ mod tests {
                         },
                         move_kind: MoveKind::Feed,
                         tool_orientation: Some(ToolOrientation::ThreeAxis),
+                        feed_rate_override: None,
                     },
                 ],
             }],
@@ -207,6 +214,7 @@ mod tests {
                             z: 1.0,
                         },
                     }),
+                    feed_rate_override: None,
                 }],
             }],
         }
@@ -320,5 +328,51 @@ mod tests {
             value.get("totalPathLengthMm").is_some(),
             "missing totalPathLengthMm"
         );
+    }
+
+    #[test]
+    fn cutpoint_with_feed_rate_override_serializes_and_round_trips() {
+        let cp = CutPoint {
+            position: Vec3 {
+                x: 1.0,
+                y: 2.0,
+                z: -3.0,
+            },
+            move_kind: MoveKind::Feed,
+            tool_orientation: None,
+            feed_rate_override: Some(500.0),
+        };
+        let json = serde_json::to_string(&cp).expect("serialize CutPoint");
+        assert!(
+            json.contains("feedRateOverride"),
+            "JSON should contain feedRateOverride field when Some, got: {}",
+            json
+        );
+        let recovered: CutPoint = serde_json::from_str(&json).expect("deserialize CutPoint");
+        assert_eq!(cp, recovered);
+        assert_eq!(recovered.feed_rate_override, Some(500.0));
+    }
+
+    #[test]
+    fn cutpoint_without_feed_rate_override_omits_field() {
+        let cp = CutPoint {
+            position: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            move_kind: MoveKind::Rapid,
+            tool_orientation: None,
+            feed_rate_override: None,
+        };
+        let json = serde_json::to_string(&cp).expect("serialize CutPoint");
+        assert!(
+            !json.contains("feedRateOverride"),
+            "JSON should not contain feedRateOverride when None, got: {}",
+            json
+        );
+        // Round-trip: deserializing JSON without the field should yield None
+        let recovered: CutPoint = serde_json::from_str(&json).expect("deserialize CutPoint");
+        assert_eq!(recovered.feed_rate_override, None);
     }
 }

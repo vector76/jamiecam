@@ -350,6 +350,7 @@ fn rapid_point(position: Vec3) -> CutPoint {
         position,
         move_kind: MoveKind::Rapid,
         tool_orientation: None,
+        feed_rate_override: None,
     }
 }
 
@@ -358,6 +359,7 @@ fn feed_point(position: Vec3) -> CutPoint {
         position,
         move_kind: MoveKind::Feed,
         tool_orientation: None,
+        feed_rate_override: None,
     }
 }
 
@@ -717,6 +719,7 @@ mod tests {
                     position: Vec3 { x, y, z },
                     move_kind: MoveKind::Feed,
                     tool_orientation: None,
+                    feed_rate_override: None,
                 })
                 .collect(),
         }

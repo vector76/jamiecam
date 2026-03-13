@@ -66,6 +66,7 @@ fn contour_pass(contour: &[(f64, f64)], z: f64) -> Pass {
                 position: Vec3 { x, y, z },
                 move_kind: MoveKind::Feed,
                 tool_orientation: None,
+                feed_rate_override: None,
             })
             .collect(),
     }
