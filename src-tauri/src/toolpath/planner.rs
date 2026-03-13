@@ -67,7 +67,19 @@ pub fn plan(
                 roughing_data,
             )?
         }
-        OperationParams::AdaptiveClearing(_) => todo!("adaptive clearing: bead-6"),
+        OperationParams::AdaptiveClearing(params) => {
+            let base_feed = operation
+                .feed_rate_override
+                .or(tool.default_feed_rate)
+                .unwrap_or(500.0);
+            operations::adaptive_clearing::adaptive_clearing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+                base_feed,
+            )?
+        }
     };
 
     // Step 3: Compute stats over the returned passes.
@@ -149,8 +161,8 @@ fn resolve_geometry_boundary(
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CacheState, CompensationSide, DrillParams, DrillPoint, OperationParams, PocketParams,
-        ProfileParams, ZLevelRoughingParams,
+        AdaptiveClearingParams, CacheState, CompensationSide, DrillParams, DrillPoint,
+        OperationParams, PocketParams, ProfileParams, ZLevelRoughingParams,
     };
     use crate::models::stock::BoxDimensions;
     use crate::models::tool::ToolType;
@@ -454,6 +466,47 @@ mod tests {
         assert!(
             matches!(result, Err(AppError::GeometryImport(_))),
             "expected GeometryImport error, got: {result:?}"
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn plan_adaptive_clearing_produces_passes_and_stats() {
+        let operation = Operation {
+            id: Uuid::nil(),
+            name: "Adaptive Clearing Op".to_string(),
+            enabled: true,
+            tool_id: Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: Some(600.0),
+            params: OperationParams::AdaptiveClearing(AdaptiveClearingParams {
+                depth: 5.0,
+                stepdown: 2.5,
+                optimal_load: 0.25,
+                stepover_percent: 40.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let tool = make_tool_10mm();
+        let stock = make_stock_50x50x10();
+        let (passes, stats) = plan(&operation, &tool, &stock, None, None)
+            .expect("adaptive clearing plan should succeed");
+        assert!(!passes.is_empty(), "should produce at least one pass");
+        assert!(
+            stats.total_pass_count > 1,
+            "expected multiple passes, got {}",
+            stats.total_pass_count
+        );
+        assert!(stats.total_point_count > 0, "expected non-zero point count");
+        assert!(
+            stats.total_path_length_mm > 0.0,
+            "expected non-zero path length"
         );
     }
 }

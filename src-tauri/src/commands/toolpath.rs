@@ -261,7 +261,13 @@ pub fn calculate_toolpath_inner(
             p.ramp_entry_angle_deg,
         ),
         OperationParams::Drill(_) => (None, None, None, None, None),
-        OperationParams::AdaptiveClearing(_) => (None, None, None, None, None),
+        OperationParams::AdaptiveClearing(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
     };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
