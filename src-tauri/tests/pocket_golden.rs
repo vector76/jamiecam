@@ -54,7 +54,7 @@ fn pocket_algorithm_golden_matches() {
     };
 
     let (toolpath, _stats) =
-        planner::plan(&operation, &tool, &stock, None).expect("plan should succeed");
+        planner::plan(&operation, &tool, &stock, None, None).expect("plan should succeed");
     let json = serde_json::to_string_pretty(&toolpath).expect("serialize toolpath");
 
     let fixture = fixture_path();

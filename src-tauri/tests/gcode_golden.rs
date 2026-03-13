@@ -69,7 +69,7 @@ fn pocket_toolpath() -> Toolpath {
         cache: CacheState::default(),
     };
     let (raw_passes, _stats) =
-        planner::plan(&operation, &tool, &stock, None).expect("plan should succeed");
+        planner::plan(&operation, &tool, &stock, None, None).expect("plan should succeed");
 
     // Apply linking (adds lead-in/lead-out with arc moves) + arc fitting,
     // matching the full calculate_toolpath pipeline.

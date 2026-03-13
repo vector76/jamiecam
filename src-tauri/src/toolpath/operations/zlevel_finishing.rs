@@ -11,6 +11,14 @@ use crate::models::operation::ZLevelFinishingParams;
 use crate::models::{StockDefinition, Vec3};
 use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
 
+/// Data from a prior roughing operation, used for rest machining.
+pub struct RoughingData {
+    /// Cutting-only passes from the roughing operation.
+    pub passes: Vec<Pass>,
+    /// Roughing tool diameter.
+    pub tool_diameter: f64,
+}
+
 /// Generate finishing passes for a Z-level finishing operation.
 ///
 /// At each Z level, the boundary is derived from `shape` (if provided) or the
@@ -26,6 +34,7 @@ pub fn zlevel_finishing_passes(
     params: &ZLevelFinishingParams,
     tool_diameter: f64,
     shape: Option<&OcctShape>,
+    roughing_data: Option<&RoughingData>,
 ) -> Result<Vec<Pass>, AppError> {
     if params.depth <= 0.0 {
         return Err(AppError::InvalidInput(
@@ -76,6 +85,58 @@ pub fn zlevel_finishing_passes(
         } else {
             stock_boundary.clone()
         };
+
+        // Rest machining: skip Z levels fully covered by roughing
+        if let Some(rd) = roughing_data {
+            // Compute target boundary (shape offset inward by finishing tool radius)
+            let target_delta = -(tool_diameter / 2.0);
+            let target_boundary = match poly_offset(&boundary, target_delta, 0.01) {
+                Ok(tb) => tb,
+                Err(_) => {
+                    // Target boundary collapsed — skip this Z level
+                    if z <= floor_z {
+                        break;
+                    }
+                    n += 1;
+                    continue;
+                }
+            };
+
+            // Collect roughing contours at this Z level
+            const Z_TOL: f64 = 1e-6;
+            let roughing_contours_at_z: Vec<Vec<(f64, f64)>> = rd
+                .passes
+                .iter()
+                .filter(|pass| {
+                    pass.cuts
+                        .first()
+                        .map(|c| (c.position.z - z).abs() < Z_TOL)
+                        .unwrap_or(false)
+                })
+                .map(|pass| {
+                    pass.cuts
+                        .iter()
+                        .map(|c| (c.position.x, c.position.y))
+                        .collect()
+                })
+                .collect();
+
+            let rest = crate::toolpath::rest::compute_rest_region(
+                &target_boundary,
+                &roughing_contours_at_z,
+                rd.tool_diameter / 2.0,
+            )
+            .map_err(AppError::from)?;
+
+            if rest.is_empty() {
+                // Roughing fully covers this Z level — no finishing needed
+                if z <= floor_z {
+                    break;
+                }
+                n += 1;
+                continue;
+            }
+        }
 
         // Finishing contour: offset inward by tool radius + finishing allowance
         let finishing_delta = -(tool_diameter / 2.0 + params.finishing_allowance);
@@ -173,12 +234,12 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(0.0, 1.0, 0.1, false);
         assert!(matches!(
-            zlevel_finishing_passes(&stock, &params, 5.0, None),
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None),
             Err(AppError::InvalidInput(_))
         ));
         let params_neg = make_params(-1.0, 1.0, 0.1, false);
         assert!(matches!(
-            zlevel_finishing_passes(&stock, &params_neg, 5.0, None),
+            zlevel_finishing_passes(&stock, &params_neg, 5.0, None, None),
             Err(AppError::InvalidInput(_))
         ));
     }
@@ -188,12 +249,12 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(5.0, 0.0, 0.1, false);
         assert!(matches!(
-            zlevel_finishing_passes(&stock, &params, 5.0, None),
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None),
             Err(AppError::InvalidInput(_))
         ));
         let params_neg = make_params(5.0, -1.0, 0.1, false);
         assert!(matches!(
-            zlevel_finishing_passes(&stock, &params_neg, 5.0, None),
+            zlevel_finishing_passes(&stock, &params_neg, 5.0, None, None),
             Err(AppError::InvalidInput(_))
         ));
     }
@@ -203,7 +264,7 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(5.0, 1.0, -0.1, false);
         assert!(matches!(
-            zlevel_finishing_passes(&stock, &params, 5.0, None),
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None),
             Err(AppError::InvalidInput(_))
         ));
     }
@@ -215,7 +276,8 @@ mod tests {
     fn single_z_level_produces_one_pass() {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(2.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 5.0, None).expect("should succeed");
+        let passes =
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None).expect("should succeed");
         assert_eq!(
             passes.len(),
             1,
@@ -231,7 +293,8 @@ mod tests {
         // depth=6, stepdown=2, stock_top=10, floor=4
         // Finishing starts at n=1: z=8 (n=1), z=6 (n=2), z=4 (n=3, floor) → 3 passes
         let params = make_params(6.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 5.0, None).expect("should succeed");
+        let passes =
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None).expect("should succeed");
         assert_eq!(passes.len(), 3, "expected 3 Cutting passes");
         for pass in &passes {
             assert_eq!(pass.kind, PassKind::Cutting);
@@ -251,7 +314,8 @@ mod tests {
     fn spring_pass_doubles_count() {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(2.0, 2.0, 0.1, true);
-        let passes = zlevel_finishing_passes(&stock, &params, 5.0, None).expect("should succeed");
+        let passes =
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None).expect("should succeed");
         // 1 Z level, spring_pass=true → 2 passes (Cutting + SpringPass)
         assert_eq!(passes.len(), 2);
         assert_eq!(passes[0].kind, PassKind::Cutting);
@@ -264,8 +328,8 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         let params = make_params(2.0, 2.0, 0.0, false);
         let tool_diameter = 6.0;
-        let passes =
-            zlevel_finishing_passes(&stock, &params, tool_diameter, None).expect("should succeed");
+        let passes = zlevel_finishing_passes(&stock, &params, tool_diameter, None, None)
+            .expect("should succeed");
         assert_eq!(passes.len(), 1);
         // With finishing_allowance=0, offset = tool_diameter/2 = 3.0
         // Stock boundary is (0,0)-(50,0)-(50,50)-(0,50)
@@ -291,7 +355,8 @@ mod tests {
         let stock = make_box_stock(50.0, 50.0, 10.0);
         // depth=5, stepdown=2: floor=5. z=8,6,5 → floor is machined
         let params = make_params(5.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 5.0, None).expect("should succeed");
+        let passes =
+            zlevel_finishing_passes(&stock, &params, 5.0, None, None).expect("should succeed");
         let floor_z_millis = ((10.0_f64 - 5.0) * 1000.0) as i64; // 5000
         let z_set: std::collections::HashSet<i64> = passes
             .iter()
@@ -310,7 +375,8 @@ mod tests {
         let stock = make_box_stock(10.0, 10.0, 5.0);
         // tool_diameter=50 → offset of 25+0.1 > stock size → collapses
         let params = make_params(5.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 50.0, None).expect("should succeed");
+        let passes =
+            zlevel_finishing_passes(&stock, &params, 50.0, None, None).expect("should succeed");
         assert!(
             passes.is_empty(),
             "expected empty passes when offset collapses"
@@ -340,7 +406,7 @@ mod tests {
             height: zmax - zmin,
         });
         let params = make_params(5.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 6.0, Some(&shape)).unwrap();
+        let passes = zlevel_finishing_passes(&stock, &params, 6.0, Some(&shape), None).unwrap();
         assert!(!passes.is_empty());
         for pass in &passes {
             for cut in &pass.cuts {
@@ -374,10 +440,107 @@ mod tests {
         });
         // Tool diameter much larger than shape → should collapse gracefully
         let params = make_params(5.0, 2.0, 0.1, false);
-        let passes = zlevel_finishing_passes(&stock, &params, 500.0, Some(&shape)).unwrap();
+        let passes = zlevel_finishing_passes(&stock, &params, 500.0, Some(&shape), None).unwrap();
         assert!(
             passes.is_empty(),
             "expected no passes when tool is too large for shape"
+        );
+    }
+
+    // --- Rest machining tests ---
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn rest_machining_full_coverage_no_passes() {
+        // Roughing covers all Z levels → no finishing passes needed.
+        let stock = make_box_stock(50.0, 50.0, 10.0);
+        let params = make_params(4.0, 2.0, 0.1, false);
+        let finishing_tool_diameter = 6.0;
+        let roughing_tool_diameter = 10.0;
+
+        // stock_top=10, floor=6, Z levels: 8, 6
+        // Create roughing passes that fully cover each Z level.
+        // Roughing contour covers the entire stock boundary at each Z.
+        let roughing_passes = vec![
+            contour_pass(
+                &[(0.0, 0.0), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)],
+                8.0,
+                PassKind::Cutting,
+            ),
+            contour_pass(
+                &[(0.0, 0.0), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)],
+                6.0,
+                PassKind::Cutting,
+            ),
+        ];
+        let rd = RoughingData {
+            passes: roughing_passes,
+            tool_diameter: roughing_tool_diameter,
+        };
+
+        let passes =
+            zlevel_finishing_passes(&stock, &params, finishing_tool_diameter, None, Some(&rd))
+                .expect("should succeed");
+        assert!(
+            passes.is_empty(),
+            "expected no passes when roughing fully covers all Z levels, got {}",
+            passes.len()
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn rest_machining_partial_coverage() {
+        // Roughing covers only one Z level → passes emitted at uncovered levels.
+        let stock = make_box_stock(50.0, 50.0, 10.0);
+        let params = make_params(4.0, 2.0, 0.1, false);
+        let finishing_tool_diameter = 6.0;
+        let roughing_tool_diameter = 10.0;
+
+        // stock_top=10, floor=6, Z levels: 8, 6
+        // Only provide roughing at Z=8, not at Z=6.
+        let roughing_passes = vec![contour_pass(
+            &[(0.0, 0.0), (50.0, 0.0), (50.0, 50.0), (0.0, 50.0)],
+            8.0,
+            PassKind::Cutting,
+        )];
+        let rd = RoughingData {
+            passes: roughing_passes,
+            tool_diameter: roughing_tool_diameter,
+        };
+
+        let passes =
+            zlevel_finishing_passes(&stock, &params, finishing_tool_diameter, None, Some(&rd))
+                .expect("should succeed");
+        // Z=8 is fully covered by roughing → skipped.
+        // Z=6 has no roughing → finishing pass emitted.
+        assert_eq!(
+            passes.len(),
+            1,
+            "expected 1 pass at uncovered Z level, got {}",
+            passes.len()
+        );
+        let z = passes[0].cuts[0].position.z;
+        assert!((z - 6.0).abs() < 1e-6, "expected pass at z=6.0, got z={z}");
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn rest_machining_no_reference_acts_as_full() {
+        // roughing_data: None → all Z levels get passes (same as without rest machining).
+        let stock = make_box_stock(50.0, 50.0, 10.0);
+        let params = make_params(4.0, 2.0, 0.1, false);
+        let finishing_tool_diameter = 6.0;
+
+        let passes_none =
+            zlevel_finishing_passes(&stock, &params, finishing_tool_diameter, None, None)
+                .expect("should succeed");
+        // stock_top=10, floor=6, Z levels: 8, 6 → 2 passes
+        assert_eq!(
+            passes_none.len(),
+            2,
+            "expected 2 passes with no roughing data, got {}",
+            passes_none.len()
         );
     }
 }

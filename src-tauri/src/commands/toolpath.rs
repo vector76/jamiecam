@@ -116,7 +116,7 @@ pub fn calculate_toolpath_inner(
         }
     };
 
-    let (raw_passes, stats, model_sha, operation, tool, stock, _roughing_data) = {
+    let (raw_passes, stats, model_sha, operation, tool, stock) = {
         let project = read_project(project_lock)?;
 
         let operation = project
@@ -191,31 +191,33 @@ pub fn calculate_toolpath_inner(
                         ))
                     })?;
 
-                Some((cutting_passes, ref_tool.diameter))
+                Some(
+                    crate::toolpath::operations::zlevel_finishing::RoughingData {
+                        passes: cutting_passes,
+                        tool_diameter: ref_tool.diameter,
+                    },
+                )
             } else {
                 None
             }
         } else {
             None
         };
-        // TODO: pass to finishing algorithm
 
         let model_sha = project.source_model.as_ref().map(|m| m.checksum.clone());
         let shape = project.source_model.as_ref().and_then(|m| m.shape.as_ref());
 
         progress(0, "Starting toolpath calculation");
-        let (raw_passes, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock, shape)?;
+        let (raw_passes, stats) = crate::toolpath::planner::plan(
+            &operation,
+            &tool,
+            &stock,
+            shape,
+            roughing_data.as_ref(),
+        )?;
         progress(50, "Passes generated");
 
-        (
-            raw_passes,
-            stats,
-            model_sha,
-            operation,
-            tool,
-            stock,
-            roughing_data,
-        )
+        (raw_passes, stats, model_sha, operation, tool, stock)
         // read lock releases here at end of block
     };
 

@@ -4,6 +4,7 @@ use crate::error::AppError;
 use crate::geometry::OcctShape;
 use crate::models::operation::OperationParams;
 use crate::models::{Operation, StockDefinition, Tool};
+use crate::toolpath::operations::zlevel_finishing::RoughingData;
 use crate::toolpath::{operations, types, types::ToolpathStats};
 
 /// Generate unlinked cutting passes and [`ToolpathStats`] for the given operation.
@@ -17,6 +18,7 @@ pub fn plan(
     tool: &Tool,
     stock: &StockDefinition,
     shape: Option<&OcctShape>,
+    roughing_data: Option<&RoughingData>,
 ) -> Result<(Vec<types::Pass>, ToolpathStats), AppError> {
     // Step 1: Compute clearance height and stock boundary.
     let StockDefinition::Box(b) = stock;
@@ -62,6 +64,7 @@ pub fn plan(
                 params,
                 tool.diameter,
                 shape,
+                roughing_data,
             )?
         }
     };
@@ -201,7 +204,7 @@ mod tests {
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
         let (passes, stats) =
-            plan(&operation, &tool, &stock, None).expect("pocket plan should succeed");
+            plan(&operation, &tool, &stock, None, None).expect("pocket plan should succeed");
         assert!(!passes.is_empty());
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
@@ -233,7 +236,7 @@ mod tests {
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
         let (passes, stats) =
-            plan(&operation, &tool, &stock, None).expect("profile plan should succeed");
+            plan(&operation, &tool, &stock, None, None).expect("profile plan should succeed");
         assert!(!passes.is_empty());
         assert!(stats.total_pass_count > 0);
         assert!(stats.total_path_length_mm > 0.0);
@@ -264,7 +267,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        assert!(plan(&operation, &tool, &stock, None).is_err());
+        assert!(plan(&operation, &tool, &stock, None, None).is_err());
     }
 
     fn make_drill_operation(
@@ -295,7 +298,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -307,7 +311,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -316,7 +321,8 @@ mod tests {
         let operation = make_drill_operation(None, None);
         let tool = make_tool_10mm(); // default_spindle_speed: None
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -328,7 +334,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -340,7 +347,8 @@ mod tests {
             ..make_tool_10mm()
         };
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -349,7 +357,8 @@ mod tests {
         let operation = make_drill_operation(None, None);
         let tool = make_tool_10mm(); // default_feed_rate: None
         let stock = make_stock_50x50x10();
-        let (passes, _) = plan(&operation, &tool, &stock, None).expect("drill plan should succeed");
+        let (passes, _) =
+            plan(&operation, &tool, &stock, None, None).expect("drill plan should succeed");
         assert!(!passes.is_empty());
     }
 
@@ -378,7 +387,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        let (passes, stats) = plan(&operation, &tool, &stock, None)
+        let (passes, stats) = plan(&operation, &tool, &stock, None, None)
             .expect("pocket with no geometry should use stock boundary");
         assert!(!passes.is_empty());
         assert!(stats.total_pass_count > 0);
@@ -409,7 +418,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        let result = plan(&operation, &tool, &stock, None);
+        let result = plan(&operation, &tool, &stock, None, None);
         assert!(
             matches!(result, Err(AppError::InvalidInput(_))),
             "expected InvalidInput error, got: {result:?}"
@@ -440,7 +449,7 @@ mod tests {
         };
         let tool = make_tool_10mm();
         let stock = make_stock_50x50x10();
-        let result = plan(&operation, &tool, &stock, None);
+        let result = plan(&operation, &tool, &stock, None, None);
         assert!(
             matches!(result, Err(AppError::GeometryImport(_))),
             "expected GeometryImport error, got: {result:?}"
