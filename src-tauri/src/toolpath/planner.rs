@@ -9,8 +9,8 @@ use crate::toolpath::{operations, types, types::ToolpathStats};
 /// Generate unlinked cutting passes and [`ToolpathStats`] for the given operation.
 ///
 /// Returns raw passes without linking moves applied. For Drill operations,
-/// `drill_passes` handles its own linking internally. For Pocket, Profile, and
-/// ZLevelRoughing operations, the caller is responsible for calling
+/// `drill_passes` handles its own linking internally. For Pocket, Profile,
+/// ZLevelRoughing, and ZLevelFinishing operations, the caller is responsible for calling
 /// [`linking::link_passes`] and assembling the final [`Toolpath`].
 pub fn plan(
     operation: &Operation,
@@ -39,7 +39,7 @@ pub fn plan(
     };
 
     // Step 2: Generate cutting passes based on operation type.
-    // Pocket, Profile, and ZLevelRoughing return unlinked cutting passes; Drill handles its own linking.
+    // Pocket, Profile, ZLevelRoughing, and ZLevelFinishing return unlinked cutting passes; Drill handles its own linking.
     let passes = match &operation.params {
         OperationParams::Pocket(params) => {
             operations::pocket::pocket_passes(stock, params, tool.diameter, &boundary)?
@@ -50,6 +50,14 @@ pub fn plan(
         OperationParams::Drill(params) => operations::drill::drill_passes(stock, params)?,
         OperationParams::ZLevelRoughing(params) => {
             operations::zlevel_roughing::zlevel_roughing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+            )?
+        }
+        OperationParams::ZLevelFinishing(params) => {
+            operations::zlevel_finishing::zlevel_finishing_passes(
                 stock,
                 params,
                 tool.diameter,

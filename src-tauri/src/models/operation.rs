@@ -165,6 +165,7 @@ pub enum OperationParams {
     Pocket(PocketParams),
     Drill(DrillParams),
     ZLevelRoughing(ZLevelRoughingParams),
+    ZLevelFinishing(ZLevelFinishingParams),
 }
 
 /// A machining operation in the project operation list.
