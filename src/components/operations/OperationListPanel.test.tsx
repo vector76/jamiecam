@@ -137,6 +137,7 @@ describe('OperationListPanel — rendering', () => {
     expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /\+ drill/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).toBeInTheDocument()
   })
 
   it('renders nothing when operation list is empty', () => {
@@ -156,6 +157,7 @@ describe('OperationListPanel — add buttons', () => {
     expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ drill/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).toBeDisabled()
   })
 
   it('enables add buttons when tools exist', () => {
@@ -165,6 +167,7 @@ describe('OperationListPanel — add buttons', () => {
     expect(screen.getByRole('button', { name: /\+ pocket/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ drill/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).not.toBeDisabled()
   })
 
   it('add profile calls addOperation with type profile and first tool ID', async () => {
@@ -227,6 +230,24 @@ describe('OperationListPanel — add buttons', () => {
         type: 'z_level_roughing',
         toolId: TOOL_ID,
         params: expect.objectContaining({ depth: 5.0, stepdown: 1.0, stepover: 0.5 }),
+      })
+    ))
+  })
+
+  it('add adaptive clearing calls addOperation with correct default params', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    const acOp: Operation = { id: 'new-id', name: 'Adaptive Clearing', enabled: true, toolId: TOOL_ID, type: 'adaptive_clearing', params: { depth: 5.0, stepdown: 1.0, optimalLoad: 0.25, stepoverPercent: 50 } }
+    vi.mocked(opsApi.addOperation).mockResolvedValue(acOp)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: /\+ adaptive clearing/i }))
+
+    await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'adaptive_clearing',
+        toolId: TOOL_ID,
+        params: expect.objectContaining({ depth: 5.0, stepdown: 1.0, optimalLoad: 0.25, stepoverPercent: 50 }),
       })
     ))
   })
@@ -461,6 +482,14 @@ describe('OperationListPanel — Calculate button', () => {
 
     await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
     expect(useProjectStore.getState().snapshot?.projectName).toBe('Updated')
+  })
+
+  it('Calculate is enabled for adaptive clearing operations when stock is defined', () => {
+    const AC_OP_ID = 'cccc-0001'
+    const acOp = { id: AC_OP_ID, name: 'Adaptive Clearing', operationType: 'adaptive_clearing' as const, enabled: true, needsRecalculate: true }
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [acOp] } })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Adaptive Clearing' })).not.toBeDisabled()
   })
 
   it('Calculate button click does not also select the row via row click', async () => {

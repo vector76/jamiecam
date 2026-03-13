@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing') {
     const tool = tools[0]
     if (!tool) return
 
@@ -149,6 +149,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'z_level_finishing',
         params: { depth: 5.0, stepdown: 1.0, finishingAllowance: 0.1, springPass: false, restMachining: false } as ZLevelFinishingParams,
+      }
+    } else if (type === 'adaptive_clearing') {
+      input = {
+        name: 'Adaptive Clearing',
+        toolId: tool.id,
+        type: 'adaptive_clearing',
+        params: { depth: 5.0, stepdown: 1.0, optimalLoad: 0.25, stepoverPercent: 50 } as AdaptiveClearingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -250,6 +257,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Z-Level Finishing
+        </button>
+        <button
+          onClick={() => void handleAdd('adaptive_clearing')}
+          disabled={noTools}
+        >
+          + Adaptive Clearing
         </button>
       </div>
     </div>

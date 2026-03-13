@@ -836,6 +836,125 @@ describe('OperationEditorForm — detect holes', () => {
   })
 })
 
+// ── Adaptive Clearing form ─────────────────────────────────────────────────
+
+const ADAPTIVE_CLEARING_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000005'
+
+const ADAPTIVE_CLEARING_OP: Operation = {
+  id: ADAPTIVE_CLEARING_OP_ID,
+  name: 'Adaptive Clearing',
+  enabled: true,
+  toolId: TOOL_ID_A,
+  type: 'adaptive_clearing',
+  params: { depth: 5.0, stepdown: 1.0, optimalLoad: 0.25, stepoverPercent: 50 },
+}
+
+describe('OperationEditorForm — adaptive_clearing branch', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([ADAPTIVE_CLEARING_OP])
+    vi.mocked(opsApi.editOperation).mockResolvedValue(ADAPTIVE_CLEARING_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('renders tool selector, Depth, Stepdown, Optimal load, Stepover, and entry motion fields', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Stepdown (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Optimal load (%)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Stepover (%)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+  })
+
+  it('optimal load input displays value as percentage (0.25 → 25)', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Optimal load (%)')).toHaveValue(25))
+  })
+
+  it('optimal load input blur with 30 saves params.optimalLoad as 0.3', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Optimal load (%)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Optimal load (%)'), { target: { value: '30' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ADAPTIVE_CLEARING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ optimalLoad: 0.3 }) }),
+    ))
+  })
+
+  it('depth input blur calls editOperation with correct params.depth', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Depth (mm)'), { target: { value: '10' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ADAPTIVE_CLEARING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ depth: 10 }) }),
+    ))
+  })
+
+  it('stepover input blur saves stepoverPercent directly (no division)', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Stepover (%)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Stepover (%)'), { target: { value: '40' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ADAPTIVE_CLEARING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepoverPercent: 40 }) }),
+    ))
+  })
+
+  it('Select Faces button appears and enters selection mode', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(true))
+  })
+
+  it('Done Selecting saves geometry fingerprints', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(screen.getByText('Done Selecting')).toBeInTheDocument())
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
+    fireEvent.click(screen.getByText('Done Selecting'))
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      ADAPTIVE_CLEARING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: ['fp-1', 'fp-2'] }) }),
+    ))
+  })
+
+  it('Calculate button is disabled when stock is null', async () => {
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).toBeDisabled())
+  })
+
+  it('Calculate button is enabled when stock is defined', async () => {
+    useProjectStore.setState({
+      snapshot: {
+        ...SNAPSHOT_BASE,
+        stock: { type: 'box', origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 100, height: 50 },
+      },
+    })
+    render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).not.toBeDisabled())
+  })
+})
+
 // ── Error handling ────────────────────────────────────────────────────────────
 
 describe('OperationEditorForm — error handling', () => {
