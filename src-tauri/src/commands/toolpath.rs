@@ -116,7 +116,7 @@ pub fn calculate_toolpath_inner(
         }
     };
 
-    let (raw_passes, stats, model_sha, operation, tool, stock) = {
+    let (raw_passes, stats, model_sha, operation, tool, stock, _roughing_data) = {
         let project = read_project(project_lock)?;
 
         let operation = project
@@ -138,6 +138,68 @@ pub fn calculate_toolpath_inner(
             .ok_or_else(|| AppError::NotFound(format!("tool {} not found", operation.tool_id)))?
             .clone();
 
+        // ── Rest machining: look up and validate roughing data ────────────
+        let roughing_data = if let OperationParams::ZLevelFinishing(ref p) = operation.params {
+            if p.rest_machining {
+                let ref_id_str = p.rest_machining_reference_id.as_deref().ok_or_else(|| {
+                    AppError::InvalidInput(
+                        "Rest machining is enabled but no reference operation ID was provided"
+                            .to_string(),
+                    )
+                })?;
+                let ref_op_uuid = parse_entity_id(ref_id_str, "rest machining reference")?;
+
+                let ref_op = project
+                    .operations
+                    .iter()
+                    .find(|op| op.id == ref_op_uuid)
+                    .ok_or_else(|| {
+                        AppError::NotFound(format!(
+                            "referenced roughing operation {ref_op_uuid} not found"
+                        ))
+                    })?;
+
+                if !matches!(ref_op.params, OperationParams::ZLevelRoughing(_)) {
+                    return Err(AppError::InvalidInput(format!(
+                        "referenced operation {ref_op_uuid} is not a ZLevelRoughing operation"
+                    )));
+                }
+
+                let ref_toolpath =
+                    project.toolpaths.get(&ref_op_uuid).ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "Referenced roughing operation has not been calculated yet. Calculate it first."
+                                .to_string(),
+                        )
+                    })?;
+
+                let cutting_passes: Vec<_> = ref_toolpath
+                    .passes
+                    .iter()
+                    .filter(|pass| pass.kind == PassKind::Cutting)
+                    .cloned()
+                    .collect();
+
+                let ref_tool = project
+                    .tools
+                    .iter()
+                    .find(|t| t.id == ref_op.tool_id)
+                    .ok_or_else(|| {
+                        AppError::NotFound(format!(
+                            "tool {} for referenced roughing operation not found",
+                            ref_op.tool_id
+                        ))
+                    })?;
+
+                Some((cutting_passes, ref_tool.diameter))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        // TODO: pass to finishing algorithm
+
         let model_sha = project.source_model.as_ref().map(|m| m.checksum.clone());
         let shape = project.source_model.as_ref().and_then(|m| m.shape.as_ref());
 
@@ -145,7 +207,15 @@ pub fn calculate_toolpath_inner(
         let (raw_passes, stats) = crate::toolpath::planner::plan(&operation, &tool, &stock, shape)?;
         progress(50, "Passes generated");
 
-        (raw_passes, stats, model_sha, operation, tool, stock)
+        (
+            raw_passes,
+            stats,
+            model_sha,
+            operation,
+            tool,
+            stock,
+            roughing_data,
+        )
         // read lock releases here at end of block
     };
 
@@ -401,9 +471,12 @@ mod tests {
     use uuid::Uuid;
 
     use crate::models::{
-        operation::{CacheState, OperationParams, PocketParams},
+        operation::{
+            CacheState, OperationParams, PocketParams, ZLevelFinishingParams, ZLevelRoughingParams,
+        },
+        stock::BoxDimensions,
         tool::ToolType,
-        Operation, Tool, Vec3,
+        Operation, StockDefinition, Tool, Vec3,
     };
     use crate::state::AppState;
     use crate::toolpath::types::{CutPoint, MoveKind, Pass, PassKind};
@@ -957,6 +1030,218 @@ mod tests {
                 "percentages must be non-decreasing: {} > {}",
                 pair[0].percent,
                 pair[1].percent
+            );
+        }
+    }
+
+    // ── Helper: build a finishing operation with rest machining fields ────
+
+    fn make_finishing_op(
+        op_id: Uuid,
+        tool_id: Uuid,
+        rest_machining: bool,
+        rest_machining_reference_id: Option<String>,
+    ) -> Operation {
+        Operation {
+            id: op_id,
+            name: "Z-Level Finish".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ZLevelFinishing(ZLevelFinishingParams {
+                depth: 10.0,
+                stepdown: 0.5,
+                finishing_allowance: 0.1,
+                spring_pass: false,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+                rest_machining,
+                rest_machining_reference_id,
+            }),
+            cache: CacheState::default(),
+        }
+    }
+
+    fn make_stock() -> StockDefinition {
+        StockDefinition::Box(BoxDimensions {
+            origin: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            width: 50.0,
+            depth: 50.0,
+            height: 10.0,
+        })
+    }
+
+    fn make_tool(tool_id: Uuid) -> Tool {
+        Tool {
+            id: tool_id,
+            name: "10mm Flat Endmill".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+        }
+    }
+
+    #[test]
+    fn rest_machining_enabled_no_reference_id() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(make_tool(tool_id));
+            project
+                .operations
+                .push(make_finishing_op(op_id, tool_id, true, None));
+            project.stock = Some(make_stock());
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput when rest_machining=true but no reference ID, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn rest_machining_reference_not_found() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+        let bogus_ref_id = Uuid::new_v4();
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(make_tool(tool_id));
+            project.operations.push(make_finishing_op(
+                op_id,
+                tool_id,
+                true,
+                Some(bogus_ref_id.to_string()),
+            ));
+            project.stock = Some(make_stock());
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "expected NotFound when reference operation doesn't exist, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn rest_machining_reference_wrong_type() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+        let ref_op_id = Uuid::new_v4();
+
+        // Reference operation is a Pocket, not ZLevelRoughing.
+        let ref_op = Operation {
+            id: ref_op_id,
+            name: "Pocket".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::Pocket(PocketParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover_percent: 50.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(make_tool(tool_id));
+            project.operations.push(ref_op);
+            project.operations.push(make_finishing_op(
+                op_id,
+                tool_id,
+                true,
+                Some(ref_op_id.to_string()),
+            ));
+            project.stock = Some(make_stock());
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput when reference is not ZLevelRoughing, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn rest_machining_reference_not_calculated() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let op_id = Uuid::new_v4();
+        let ref_op_id = Uuid::new_v4();
+
+        // Reference operation is ZLevelRoughing but has no toolpath stored.
+        let ref_op = Operation {
+            id: ref_op_id,
+            name: "Z-Level Rough".to_string(),
+            enabled: true,
+            tool_id,
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ZLevelRoughing(ZLevelRoughingParams {
+                depth: 10.0,
+                stepdown: 2.0,
+                stepover: 0.5,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+
+        {
+            let mut project = state.project.write().expect("write lock");
+            project.tools.push(make_tool(tool_id));
+            project.operations.push(ref_op);
+            project.operations.push(make_finishing_op(
+                op_id,
+                tool_id,
+                true,
+                Some(ref_op_id.to_string()),
+            ));
+            project.stock = Some(make_stock());
+            // No toolpath inserted for ref_op_id.
+        }
+
+        let result = calculate_toolpath_inner(&op_id.to_string(), &state.project, None);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput when roughing toolpath not calculated, got: {result:?}"
+        );
+        if let Err(AppError::InvalidInput(msg)) = &result {
+            assert!(
+                msg.contains("not been calculated yet"),
+                "error message should mention 'not been calculated yet', got: {msg}"
             );
         }
     }
