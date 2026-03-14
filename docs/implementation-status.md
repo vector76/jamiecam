@@ -97,8 +97,11 @@ per-point feed rate scaling based on local engagement, data model, algorithm,
 planner dispatch, IPC, operation editor UI, golden tests for both toolpath JSON
 and G-code output).
 
-Phase 3 (OCCT Surface Evaluation + Parallel Finishing) is **complete**. The
-following Phase 3 deliverables have been implemented: C++ surface evaluation
+Phase 3 is **in progress**. The initial scope (OCCT surface evaluation +
+parallel finishing) is complete; remaining Phase 3 operations (scallop,
+flowline, pencil) and infrastructure (gouge detection, viewport simulation,
+etc.) are not yet started. The following Phase 3 deliverables have been
+implemented: C++ surface evaluation
 functions (`cg_shape_faces`, `cg_face_free`, `cg_face_surface_type`,
 `cg_face_uv_bounds`, `cg_face_eval_point`, `cg_face_eval_normal`,
 `cg_face_project_point`), the `CgSurfaceType` enum (9 variants), Rust FFI
@@ -196,8 +199,8 @@ frontend types are in `src/api/types.ts`.
 - `Operation` struct (common fields: `id`, `name`, `enabled`, `tool_id`,
   `spindle_speed_override`, `feed_rate_override`, `cache: CacheState`) +
   `OperationParams` enum (`Profile`, `Pocket`, `Drill`; extended with
-  `ZLevelRoughing`, `ZLevelFinishing`, and `AdaptiveClearing` in Phase 2)
-  flattened alongside it
+  `ZLevelRoughing`, `ZLevelFinishing`, and `AdaptiveClearing` in Phase 2;
+  extended with `ParallelFinishing` in Phase 3) flattened alongside it
 - `PocketParams` and `ProfileParams` both carry `geometry: Option<Vec<String>>`
   — the face fingerprints that define the machining boundary; serialized with
   `#[serde(default, skip_serializing_if = "Option::is_none")]` for backward
@@ -472,12 +475,14 @@ immediately once algorithms are written.
 - Delete button per row: calls `deleteOperation`, refreshes snapshot
 - Add operation buttons at the bottom (+ Profile, + Pocket, + Drill; extended
   with + Z-Level Roughing, + Z-Level Finishing, and + Adaptive Clearing in
-  Phase 2): disabled when no tools exist; uses first available tool; calls
-  `addOperation` with sensible defaults, refreshes snapshot
+  Phase 2; + Parallel Finishing added in Phase 3): disabled when no tools
+  exist; uses first available tool; calls `addOperation` with sensible
+  defaults, refreshes snapshot
 - Reorder buttons (▲/▼) per row: call `reorderOperations` to move the operation
   up or down in the list; ▲ disabled for the first row, ▼ disabled for the last
 - Calculate button per row: enabled for pocket, profile, Z-Level Roughing,
-  Z-Level Finishing, and Adaptive Clearing operations when stock is defined;
+  Z-Level Finishing, Adaptive Clearing, and Parallel Finishing operations when
+  stock is defined;
   enabled for drill operations when stock is defined AND the operation has
   ≥ 1 drill point; calls `calculateToolpath` →
   `getToolpathGeometry` → `setToolpathGeometry` → `getProjectSnapshot` →
@@ -1467,7 +1472,7 @@ All 18 of 18 Phase 2 items are complete.
 
 ---
 
-## Phase 3: OCCT Surface Evaluation + Parallel Finishing — Complete
+## Phase 3: 3D Surface Machining — In Progress
 
 ### Phase 3.1: C++ surface evaluation (`cam_geometry.h`, `cam_geometry.cpp`)
 
@@ -1498,7 +1503,8 @@ All 18 of 18 Phase 2 items are complete.
 
 Also added to `cam_geometry.h` for completeness (used by future 5-axis work):
 `cg_face_eval_du`, `cg_face_eval_dv` (partial derivatives), `cg_face_plane`,
-`cg_face_cylinder` — declared but not yet called by the Rust layer.
+`cg_face_cylinder` — declared in the header and stubbed in C++
+(`set_last_error("not implemented")`); no Rust wrappers yet.
 
 ### Phase 3.2: Parallel finishing algorithm (`src-tauri/src/toolpath/operations/parallel_finishing.rs`)
 
@@ -1587,6 +1593,17 @@ Also added to `cam_geometry.h` for completeness (used by future 5-axis work):
 - 1 new planner test: `plan_parallel_finishing_returns_error_without_shape`
   (ungated) — passes `shape = None`, asserts `AppError::GeometryImport`
 
+**Known inconsistency — operation type naming:** The `OperationParams` enum uses
+`#[serde(rename_all = "snake_case")]`, which would naturally produce
+`"parallel_finishing"`. However, the `ParallelFinishing` variant carries an
+explicit `#[serde(rename = "parallelFinishing")]` override, making it camelCase.
+All other multi-word operation types use snake_case: `"z_level_roughing"`,
+`"z_level_finishing"`, `"adaptive_clearing"`. The same camelCase string
+`"parallelFinishing"` propagates through `get_project_snapshot`, the TypeScript
+type unions, the frontend editor dispatch, and the add-operation handler. Future
+Phase 3 operations should either follow the snake_case convention (consistent
+with Phase 1–2 operations) or the entire set should be normalized to one style.
+
 ### Phase 3.5: Frontend
 
 **TypeScript types** (`src/api/types.ts`)
@@ -1595,7 +1612,7 @@ Also added to `cam_geometry.h` for completeness (used by future 5-axis work):
   `geometry?: string[] | null`, plus five optional entry motion fields
   (`arcLeadInRadius?`, `arcLeadOutRadius?`, `helicalEntryRadius?`,
   `helicalEntryPitch?`, `rampEntryAngleDeg?` — all `number | null`)
-- `'parallel_finishing'` added to the `Operation`, `OperationInput`, and
+- `'parallelFinishing'` added to the `Operation`, `OperationInput`, and
   `OperationSummary` discriminant unions
 
 **`ParallelFinishingEditor.tsx`** (`src/components/operations/ParallelFinishingEditor.tsx`)
@@ -1657,15 +1674,36 @@ All 3 tests gated on `#[cfg(cam_geometry_bindings)]`:
 Golden fixtures: `tests/fixtures/parallel_finishing_golden.json`,
 `tests/fixtures/parallel_finishing_golden.nc`
 
-All 5 of 5 Phase 3 sub-phases are complete.
+All 5 of 5 sub-phases for the initial Phase 3 scope (OCCT surface evaluation +
+parallel finishing) are complete.
+
+### Remaining Phase 3 roadmap items (not yet implemented)
+
+The `development-roadmap.md` Phase 3 section lists additional operations and
+infrastructure that were not part of the initial scope:
+
+**Operations:**
+- Scallop finishing (variable stepover for constant scallop height)
+- Flowline finishing (follows UV parameter lines of NURBS surfaces)
+- Pencil milling (traces concave corners and fillets)
+
+**Infrastructure:**
+- 3-axis gouge detection and auto-lift
+- Material / feed library (lookup table by material + tool + operation type)
+- Planar face detection (`cg_shape_find_planar_faces`)
+- Tessellation LOD (multiple resolution levels; switch on viewport zoom)
+- 5-axis tool orientation indicators (infrastructure for Phase 4)
+- Viewport: simulation mode (tool mesh moving along path, play/pause/scrub)
+- Viewport: measurement overlays (CSS2DRenderer distance and angle labels)
+- Viewport: toolpath LOD (decimated display path at low zoom)
 
 ---
 
 ## Phases 4–5
 
-Nothing from Phases 4–5 is implemented. `src-tauri/src/simulation/` does not
-yet exist. The post-processor engine returns `PostProcessorError::NotSupported`
-when a 5-axis path is encountered.
+Nothing from Phases 4–5 or the Simulation track is implemented.
+`src-tauri/src/simulation/` does not yet exist. The post-processor engine
+returns `PostProcessorError::NotSupported` when a 5-axis path is encountered.
 
 ---
 
@@ -1682,7 +1720,7 @@ when a 5-axis path is encountered.
 | `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (incl. ZLF, Adaptive Clearing, and Parallel Finishing: disabled/enabled per type, calls addOperation with correct defaults, snapshot refresh), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (14, incl. adaptive clearing and parallel finishing enabled when stock is set), calculate loading state (4), reorder (7), progress bar (2) — 51 tests across 10 describe blocks |
-| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), z_level_finishing form (tool select/depth/stepdown/finishing allowance/spring pass/rest machining/geometry/overrides), adaptive_clearing form (tool select/depth/stepdown/optimal load/stepover percent/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), parallelFinishing form (renders required + entry motion fields + overrides + face selection, blur saves, Calculate gate), error handling — 76 tests across 12 describe blocks |
+| `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), adaptive_clearing form (tool select/depth/stepdown/optimal load/stepover percent/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), parallelFinishing form (renders required + entry motion fields + overrides + face selection, blur saves, Calculate gate), error handling — 76 tests across 12 describe blocks. Note: the `z_level_finishing` branch of the editor has no dedicated test describe block. |
 | `src/components/operations/ParallelFinishingEditor.test.tsx` | ParallelFinishingEditor: rendering (required fields, entry motion fields, default values, optional fields empty, Select Faces button, stock boundary text, face count display, Clear button present/absent), required field blur saves (stepover/direction/allowance), entry motion blur saves (arc lead-in value+blank, arc lead-out value+blank, helical radius, helical pitch, ramp angle), face selection (Select Faces calls API, Done Selecting text, saves fingerprints, null when empty, pre-populates saved geometry, Clear → null, count display during mode) — 26 tests across 4 describe blocks |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
@@ -1818,7 +1856,7 @@ test verifies that arc fitting produces G02/G03 commands in the output.
 ### TypeScript frontend
 | File | Purpose |
 |---|---|
-| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `HoleDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`, `ZLevelFinishingParams`, `AdaptiveClearingParams`); operation union types include `'z_level_roughing'`, `'z_level_finishing'`, and `'adaptive_clearing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`); `ZLevelFinishingParams` adds `finishingAllowance`, `springPass`, `restMachining`, `restMachiningReferenceId`, plus five entry motion fields; `AdaptiveClearingParams` adds `optimalLoad`, `stepoverPercent`, plus five entry motion fields |
+| `src/api/types.ts` | TypeScript mirrors of Rust types (incl. `PostProcessorMeta`, `ExportParams`, `FaceDescriptor`, `HoleDescriptor`, `ToolpathProgressEvent`, `ZLevelRoughingParams`, `ZLevelFinishingParams`, `AdaptiveClearingParams`, `ParallelFinishingParams`); operation union types include `'z_level_roughing'`, `'z_level_finishing'`, `'adaptive_clearing'`, and `'parallelFinishing'`; `ProfileParams.stepdown` is `number | null`; `ProfileParams`, `PocketParams`, `ZLevelRoughingParams` include five optional entry motion fields (`arcLeadInRadius`, `arcLeadOutRadius`, `helicalEntryRadius`, `helicalEntryPitch`, `rampEntryAngleDeg`); `ZLevelFinishingParams` adds `finishingAllowance`, `springPass`, `restMachining`, `restMachiningReferenceId`, plus five entry motion fields; `AdaptiveClearingParams` adds `optimalLoad`, `stepoverPercent`, plus five entry motion fields; `ParallelFinishingParams` adds `stepover`, `directionAngleDeg`, `allowance`, `geometry`, plus five entry motion fields |
 | `src/api/file.ts` | File operation IPC wrappers |
 | `src/api/tools.ts` | Tool CRUD IPC wrappers |
 | `src/api/stock.ts` | Stock/WCS IPC wrappers |
@@ -1832,8 +1870,9 @@ test verifies that arc fitting produces G02/G03 commands in the output.
 | `src/viewport/modelMesh.ts` | `buildModelMesh(meshData)` → `ModelMeshResult { mesh: THREE.Mesh, boundingSphere }` |
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
-| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing, Z-Level Finishing, and Adaptive Clearing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
-| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, z_level_roughing, z_level_finishing, and adaptive_clearing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms; Detect Holes button (drill only); rest machining section with reference operation dropdown (z_level_finishing only); adaptive clearing optimal load and stepover controls |
+| `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing, Z-Level Finishing, Adaptive Clearing, and Parallel Finishing), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
+| `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, z_level_roughing, z_level_finishing, adaptive_clearing, and parallelFinishing parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Profile and Pocket forms; Detect Holes button (drill only); rest machining section with reference operation dropdown (z_level_finishing only); adaptive clearing optimal load and stepover controls; parallelFinishing renders `ParallelFinishingEditor` |
+| `src/components/operations/ParallelFinishingEditor.tsx` | Parallel finishing operation editor: stepover, direction angle, allowance, five entry motion inputs, face selection (Select Faces / Done Selecting / Clear); 26 tests |
 | `src/components/stock/StockPanel.tsx` | Stock definition form: origin, dimensions, Set/Clear Stock buttons |
 | `src/components/wcs/WCSPanel.tsx` | WCS panel: origin X/Y/Z editing, Set WCS and Clear WCS buttons |
 | `src/components/tools/ToolLibraryPanel.tsx` | Tool library: list, add form, edit form, delete; refreshes project snapshot after each mutation |
