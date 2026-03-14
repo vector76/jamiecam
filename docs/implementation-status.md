@@ -105,7 +105,7 @@ implemented: C++ surface evaluation
 functions (`cg_shape_faces`, `cg_face_free`, `cg_face_surface_type`,
 `cg_face_uv_bounds`, `cg_face_eval_point`, `cg_face_eval_normal`,
 `cg_face_project_point`), the `CgSurfaceType` enum (9 variants), Rust FFI
-wrappers (`OcctFace` RAII type and five safe wrapper functions in
+wrappers (`OcctFace` RAII type and six safe wrapper functions in
 `geometry/surface.rs`), the parallel finishing raster algorithm
 (`parallel_finishing_passes` — face selection, rotated scan frame, surface
 projection, allowance offset along normal, run splitting, boustrophedon
