@@ -70,6 +70,10 @@ path = "tests/adaptive_clearing_golden.rs"
 name = "parallel_finishing_golden"
 path = "tests/parallel_finishing_golden.rs"
 
+[[test]]
+name = "gouge_golden"
+path = "tests/gouge_golden.rs"
+
 [features]
 # this feature is used for production builds or when `devtools` feature is not
 # enabled, which is the case when cargo test is run
