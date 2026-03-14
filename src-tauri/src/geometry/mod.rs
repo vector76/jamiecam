@@ -31,8 +31,8 @@ pub use holes::{find_holes, HoleDescriptor};
 pub use importer::{import, import_with_shape};
 pub use safe::{shape_section_at_z, GeometryError, MeshData, OcctMesh, OcctShape};
 pub use surface::{
-    face_eval_normal, face_eval_point, face_project_point, face_surface_type, face_uv_bounds,
-    shape_faces, OcctFace,
+    face_eval_curvature, face_eval_normal, face_eval_point, face_project_point, face_surface_type,
+    face_uv_bounds, shape_faces, CurvatureResult, OcctFace,
 };
 
 #[cfg(test)]

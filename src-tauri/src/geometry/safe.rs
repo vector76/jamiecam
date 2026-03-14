@@ -22,7 +22,7 @@ fn path_to_cstring(path: &Path) -> Result<std::ffi::CString, GeometryError> {
 
 /// Copy the last C-layer error message into an owned [`String`].
 #[cfg(cam_geometry_bindings)]
-fn last_error_message() -> String {
+pub(super) fn last_error_message() -> String {
     // SAFETY: `cg_last_error_message` returns a thread-local pointer valid
     // until the next FFI call on this thread.  We copy it into an owned
     // String immediately.

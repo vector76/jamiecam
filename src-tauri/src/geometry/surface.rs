@@ -182,6 +182,52 @@ pub fn face_project_point(
     })
 }
 
+// ── CurvatureResult ──────────────────────────────────────────────────────────
+
+/// Principal curvature values and direction at a surface point.
+#[derive(Debug, Clone)]
+pub struct CurvatureResult {
+    pub k1: f64,
+    pub k2: f64,
+    pub dir1: [f64; 3],
+}
+
+// ── face_eval_curvature ──────────────────────────────────────────────────────
+
+/// Evaluate the principal curvatures of `face` at parametric coordinates `(u, v)`.
+///
+/// Returns a [`CurvatureResult`] with the maximum (`k1`) and minimum (`k2`)
+/// principal curvatures and the direction of maximum curvature (`dir1`).
+#[cfg(cam_geometry_bindings)]
+pub fn face_eval_curvature(
+    face: &OcctFace,
+    u: f64,
+    v: f64,
+) -> Result<CurvatureResult, GeometryError> {
+    let r = unsafe { super::ffi::cg_face_eval_curvature(face.raw_id(), u, v) };
+    if r.success as u32 != super::ffi::CgError::CG_OK as u32 {
+        return Err(GeometryError::ImportFailed {
+            message: super::safe::last_error_message(),
+        });
+    }
+    Ok(CurvatureResult {
+        k1: r.k1,
+        k2: r.k2,
+        dir1: [r.dir1.x, r.dir1.y, r.dir1.z],
+    })
+}
+
+#[cfg(not(cam_geometry_bindings))]
+pub fn face_eval_curvature(
+    _face: &OcctFace,
+    _u: f64,
+    _v: f64,
+) -> Result<CurvatureResult, GeometryError> {
+    Err(GeometryError::ImportFailed {
+        message: "OCCT not available".into(),
+    })
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -230,6 +276,13 @@ mod tests {
     fn face_project_point_stub_returns_error() {
         let face = OcctFace(0);
         assert!(face_project_point(&face, 0.0, 0.0, 0.0).is_err());
+    }
+
+    #[cfg(not(cam_geometry_bindings))]
+    #[test]
+    fn face_eval_curvature_stub_returns_error() {
+        let face = OcctFace(0);
+        assert!(face_eval_curvature(&face, 0.0, 0.0).is_err());
     }
 
     // OCCT integration tests — only run with real bindings.
@@ -311,6 +364,67 @@ mod tests {
         assert!(
             (z1 - z0).abs() < 1e-6,
             "z round-trip mismatch: {z0} vs {z1}"
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn face_eval_curvature_sphere_constant() {
+        // sphere.step has known constant curvature = 1/radius on every face.
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/sphere.step");
+        let shape = OcctShape::load_step(&path).expect("load sphere.step");
+        let faces = shape_faces(&shape).expect("shape_faces");
+        assert!(!faces.is_empty(), "sphere must have at least one face");
+
+        let (umin, umax, vmin, vmax) = face_uv_bounds(&faces[0]).expect("face_uv_bounds");
+        let u_mid = (umin + umax) / 2.0;
+        let v_mid = (vmin + vmax) / 2.0;
+
+        let curv = face_eval_curvature(&faces[0], u_mid, v_mid).expect("face_eval_curvature");
+
+        // For a sphere of radius R, both principal curvatures = 1/R.
+        // The fixture sphere has radius 10, so expected curvature = 0.1.
+        let expected = 0.1;
+        let tol = 1e-4;
+        assert!(
+            (curv.k1.abs() - expected).abs() < tol,
+            "k1 should be ~{expected}, got {}",
+            curv.k1
+        );
+        assert!(
+            (curv.k2.abs() - expected).abs() < tol,
+            "k2 should be ~{expected}, got {}",
+            curv.k2
+        );
+    }
+
+    #[cfg(cam_geometry_bindings)]
+    #[test]
+    fn face_eval_curvature_box_flat() {
+        // box.step faces are planar — curvature should be zero.
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/box.step");
+        let shape = OcctShape::load_step(&path).expect("load box.step");
+        let faces = shape_faces(&shape).expect("shape_faces");
+        assert!(!faces.is_empty(), "box must have at least one face");
+
+        let (umin, umax, vmin, vmax) = face_uv_bounds(&faces[0]).expect("face_uv_bounds");
+        let u_mid = (umin + umax) / 2.0;
+        let v_mid = (vmin + vmax) / 2.0;
+
+        let curv = face_eval_curvature(&faces[0], u_mid, v_mid).expect("face_eval_curvature");
+
+        let tol = 1e-6;
+        assert!(
+            curv.k1.abs() < tol,
+            "k1 should be ~0 on a flat face, got {}",
+            curv.k1
+        );
+        assert!(
+            curv.k2.abs() < tol,
+            "k2 should be ~0 on a flat face, got {}",
+            curv.k2
         );
     }
 }
