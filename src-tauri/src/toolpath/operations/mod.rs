@@ -4,5 +4,6 @@ pub mod engagement;
 pub mod parallel_finishing;
 pub mod pocket;
 pub mod profile;
+pub mod scallop_finishing;
 pub mod zlevel_finishing;
 pub mod zlevel_roughing;

@@ -212,6 +212,33 @@ fn default_pf_stepover() -> f64 {
     0.5
 }
 
+/// Parameters for a Scallop Finishing operation.
+///
+/// Uses adaptive stepover based on local surface curvature to maintain
+/// a constant scallop height across the workpiece.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScallopFinishingParams {
+    pub target_scallop_height: f64,
+    pub min_stepover: f64,
+    pub max_stepover: f64,
+    pub direction_angle_deg: f64,
+    pub allowance: f64,
+    pub tool_radius: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -228,6 +255,8 @@ pub enum OperationParams {
     AdaptiveClearing(AdaptiveClearingParams),
     #[serde(rename = "parallelFinishing")]
     ParallelFinishing(ParallelFinishingParams),
+    #[serde(rename = "scallopFinishing")]
+    ScallopFinishing(ScallopFinishingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -964,5 +993,90 @@ mod tests {
         let val = serde_json::to_value(&op).unwrap();
         assert_eq!(val["type"], "parallelFinishing");
         assert!(val["params"].get("directionAngleDeg").is_some());
+    }
+
+    #[test]
+    fn scallop_finishing_params_serde_round_trip() {
+        let params = ScallopFinishingParams {
+            target_scallop_height: 0.01,
+            min_stepover: 0.2,
+            max_stepover: 3.0,
+            direction_angle_deg: 45.0,
+            allowance: 0.05,
+            tool_radius: 3.0,
+            geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: Some(2.0),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(5.0),
+        };
+        let op = OperationParams::ScallopFinishing(params);
+        let val = serde_json::to_value(&op).unwrap();
+
+        // Type discriminant uses camelCase override.
+        assert_eq!(val["type"], "scallopFinishing");
+
+        // Fields are camelCase.
+        let p = &val["params"];
+        assert!(p.get("targetScallopHeight").is_some());
+        assert!(p.get("minStepover").is_some());
+        assert!(p.get("maxStepover").is_some());
+        assert!(p.get("directionAngleDeg").is_some());
+        assert!(p.get("toolRadius").is_some());
+
+        // Optional absent fields are omitted.
+        assert!(p.get("arcLeadOutRadius").is_none());
+        assert!(p.get("helicalEntryRadius").is_none());
+        assert!(p.get("helicalEntryPitch").is_none());
+
+        // Optional present fields are included.
+        assert!(p.get("arcLeadInRadius").is_some());
+        assert!(p.get("rampEntryAngleDeg").is_some());
+
+        // Round-trip.
+        let json = serde_json::to_string(&op).unwrap();
+        let back: OperationParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(op, back);
+    }
+
+    #[test]
+    fn scallop_finishing_geometry_absent_when_none() {
+        let params = ScallopFinishingParams {
+            target_scallop_height: 0.01,
+            min_stepover: 0.2,
+            max_stepover: 3.0,
+            direction_angle_deg: 0.0,
+            allowance: 0.0,
+            tool_radius: 3.0,
+            geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+    }
+
+    #[test]
+    fn scallop_finishing_geometry_defaults_absent_in_old_json() {
+        let json = r#"{
+            "targetScallopHeight": 0.01,
+            "minStepover": 0.2,
+            "maxStepover": 3.0,
+            "directionAngleDeg": 0.0,
+            "allowance": 0.0,
+            "toolRadius": 3.0
+        }"#;
+        let params: ScallopFinishingParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
     }
 }

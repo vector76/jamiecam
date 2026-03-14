@@ -88,6 +88,14 @@ pub fn plan(
                 shape,
             )?
         }
+        OperationParams::ScallopFinishing(params) => {
+            operations::scallop_finishing::scallop_finishing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+            )?
+        }
     };
 
     // Step 3: Compute stats over the returned passes.
