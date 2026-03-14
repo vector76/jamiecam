@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing') {
     const tool = tools[0]
     if (!tool) return
 
@@ -156,6 +156,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'adaptive_clearing',
         params: { depth: 5.0, stepdown: 1.0, optimalLoad: 0.25, stepoverPercent: 50 } as AdaptiveClearingParams,
+      }
+    } else if (type === 'parallelFinishing') {
+      input = {
+        name: 'Parallel Finishing',
+        toolId: tool.id,
+        type: 'parallelFinishing',
+        params: { stepover: 0.5, directionAngleDeg: 0, allowance: 0 } as ParallelFinishingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -263,6 +270,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Adaptive Clearing
+        </button>
+        <button
+          onClick={() => void handleAdd('parallelFinishing')}
+          disabled={noTools}
+        >
+          + Parallel Finishing
         </button>
       </div>
     </div>

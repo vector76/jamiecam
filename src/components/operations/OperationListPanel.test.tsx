@@ -252,6 +252,24 @@ describe('OperationListPanel — add buttons', () => {
     ))
   })
 
+  it('add parallel finishing calls addOperation with correct default params', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
+    const pfOp: Operation = { id: 'new-id', name: 'Parallel Finishing', enabled: true, toolId: TOOL_ID, type: 'parallelFinishing', params: { stepover: 0.5, directionAngleDeg: 0, allowance: 0 } }
+    vi.mocked(opsApi.addOperation).mockResolvedValue(pfOp)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
+
+    render(<OperationListPanel />)
+    fireEvent.click(screen.getByRole('button', { name: /\+ parallel finishing/i }))
+
+    await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'parallelFinishing',
+        toolId: TOOL_ID,
+        params: expect.objectContaining({ stepover: 0.5, directionAngleDeg: 0, allowance: 0 }),
+      })
+    ))
+  })
+
   it('add button refreshes snapshot after addOperation', async () => {
     const newSnapshot = { ...SNAPSHOT_WITH_OPS, projectName: 'Updated' }
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
@@ -490,6 +508,14 @@ describe('OperationListPanel — Calculate button', () => {
     useProjectStore.setState({ snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [acOp] } })
     render(<OperationListPanel />)
     expect(screen.getByRole('button', { name: 'Calculate Adaptive Clearing' })).not.toBeDisabled()
+  })
+
+  it('Calculate is enabled for parallel finishing operations when stock is defined', () => {
+    const PF_OP_ID = 'dddd-0001'
+    const pfOp = { id: PF_OP_ID, name: 'Parallel Finishing', operationType: 'parallelFinishing' as const, enabled: true, needsRecalculate: true }
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT_WITH_STOCK, operations: [pfOp] } })
+    render(<OperationListPanel />)
+    expect(screen.getByRole('button', { name: 'Calculate Parallel Finishing' })).not.toBeDisabled()
   })
 
   it('Calculate button click does not also select the row via row click', async () => {
