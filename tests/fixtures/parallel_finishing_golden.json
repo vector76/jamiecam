@@ -1,0 +1,2282 @@
+[
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": -5.581455721859477,
+          "y": -5.581455721859475,
+          "z": 6.139601294045423
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.384791912018792,
+          "y": -5.6682020126513555,
+          "z": 6.235022213916492
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.178918038835926,
+          "y": -5.7543533764843575,
+          "z": 6.329788714132796
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.963635881027161,
+          "y": -5.8395716247378395,
+          "z": 6.423528787211621
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.738791022072738,
+          "y": -5.923488777590925,
+          "z": 6.5158376553500155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.504281101536533,
+          "y": -6.005708135382043,
+          "z": 6.606278948920247
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.260064336151294,
+          "y": -6.085806194501844,
+          "z": 6.69438681395203
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.006168083848874,
+          "y": -6.163335513613657,
+          "z": 6.779669064975023
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.742697169310832,
+          "y": -6.237828615518052,
+          "z": 6.861611477069859
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.4698416383208133,
+          "y": -6.308802978765118,
+          "z": 6.939683276641629
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.1878835653166933,
+          "y": -6.375767130633383,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.8972025099084293,
+          "y": -6.438227799796503,
+          "z": 7.082050579776155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.598279209846525,
+          "y": -6.495698024616308,
+          "z": 7.14526782707794
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.291697115650784,
+          "y": -6.547706044716511,
+          "z": 7.202476649188162
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.97814142018736,
+          "y": -6.59380473395787,
+          "z": 7.253185207353657
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.6583953170166503,
+          "y": -6.633581268066594,
+          "z": 7.296939394873253
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.3333333333333326,
+          "y": -6.666666666666667,
+          "z": 7.333333333333333
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.0039117221153824,
+          "y": -6.6927448141025465,
+          "z": 7.3620192955128
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.6711560552140243,
+          "y": -6.711560552140242,
+          "z": 7.382716607354267
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.33614632272640665,
+          "y": -6.722926454528144,
+          "z": 7.395219099980958
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.2356798760616364e-15,
+          "y": -6.726727939963125,
+          "z": 7.399400733959437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.3361463227264042,
+          "y": -6.722926454528144,
+          "z": 7.395219099980958
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.6711560552140219,
+          "y": -6.711560552140242,
+          "z": 7.382716607354267
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.00391172211538,
+          "y": -6.692744814102547,
+          "z": 7.3620192955128
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.3333333333333302,
+          "y": -6.666666666666667,
+          "z": 7.333333333333333
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.6583953170166479,
+          "y": -6.633581268066594,
+          "z": 7.296939394873253
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.9781414201873577,
+          "y": -6.593804733957871,
+          "z": 7.253185207353657
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.291697115650776,
+          "y": -6.547706044716514,
+          "z": 7.202476649188162
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.598279209846522,
+          "y": -6.49569802461631,
+          "z": 7.14526782707794
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.8972025099084266,
+          "y": -6.438227799796504,
+          "z": 7.082050579776155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.187883565316691,
+          "y": -6.375767130633384,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.469841638320811,
+          "y": -6.30880297876512,
+          "z": 6.939683276641629
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.7426971693108295,
+          "y": -6.237828615518054,
+          "z": 6.861611477069859
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.0061680838488725,
+          "y": -6.163335513613659,
+          "z": 6.779669064975023
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.260064336151293,
+          "y": -6.085806194501846,
+          "z": 6.69438681395203
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.50428110153653,
+          "y": -6.0057081353820445,
+          "z": 6.606278948920247
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.738791022072737,
+          "y": -5.923488777590927,
+          "z": 6.5158376553500155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.963635881027159,
+          "y": -5.839571624737841,
+          "z": 6.423528787211621
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.178918038835924,
+          "y": -5.754353376484359,
+          "z": 6.329788714132796
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.38479191201879,
+          "y": -5.668202012651358,
+          "z": 6.235022213916492
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.5814557218594745,
+          "y": -5.581455721859477,
+          "z": 6.139601294045423
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 6.375767130633383,
+          "y": -3.1878835653166937,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.180700462007375,
+          "y": -3.2530002431617797,
+          "z": 7.15660053495591
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.973509804399748,
+          "y": -3.318616557999861,
+          "z": 7.300956427599691
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.753628269090509,
+          "y": -3.3844872171120635,
+          "z": 7.445871877646539
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.520524474738835,
+          "y": -3.45032779671177,
+          "z": 7.590721152765897
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.273719154509723,
+          "y": -3.515812769673153,
+          "z": 7.73478809328093
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.01280411827603,
+          "y": -3.5805743701971653,
+          "z": 7.877263614433762
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.737463361013522,
+          "y": -3.6442025853950213,
+          "z": 8.017245687869039
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.447495899966607,
+          "y": -3.706246583305506,
+          "z": 8.153742483272113
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.142839674350902,
+          "y": -3.7662178857735458,
+          "z": 8.285679348701805
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.8235955645093616,
+          "y": -3.8235955645093633,
+          "z": 8.411910241920598
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.4900503044826654,
+          "y": -3.8778336716474056,
+          "z": 8.531234077624294
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.142696805273543,
+          "y": -3.9283710065919317,
+          "z": 8.642416214502248
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.782250217310075,
+          "y": -3.9746431675858203,
+          "z": 8.744214968688807
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.409657986707495,
+          "y": -4.016096644512494,
+          "z": 8.835412617927487
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.0261022461827696,
+          "y": -4.05220449236554,
+          "z": 8.914849883204186
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.6329931618554512,
+          "y": -4.08248290463863,
+          "z": 8.981462390204985
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.2319523435297708,
+          "y": -4.10650781176591,
+          "z": 9.034317185885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.8247860988423205,
+          "y": -4.123930494211613,
+          "z": 9.072647087265548
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.41344911529736,
+          "y": -4.134491152973615,
+          "z": 9.095880536541953
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -7.601436768242932e-16,
+          "y": -4.13802944301184,
+          "z": 9.103664774626047
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.4134491152973615,
+          "y": -4.134491152973615,
+          "z": 9.095880536541953
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.824786098842322,
+          "y": -4.123930494211613,
+          "z": 9.072647087265548
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.2319523435297721,
+          "y": -4.106507811765909,
+          "z": 9.034317185885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.6329931618554525,
+          "y": -4.0824829046386295,
+          "z": 8.981462390204985
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.026102246182771,
+          "y": -4.052204492365539,
+          "z": 8.914849883204186
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.4096579867074968,
+          "y": -4.016096644512493,
+          "z": 8.835412617927487
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.7822502173100765,
+          "y": -3.9746431675858194,
+          "z": 8.744214968688807
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.142696805273544,
+          "y": -3.928371006591931,
+          "z": 8.642416214502248
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.4900503044826667,
+          "y": -3.8778336716474042,
+          "z": 8.531234077624294
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.8235955645093633,
+          "y": -3.823595564509362,
+          "z": 8.411910241920598
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.142839674350902,
+          "y": -3.7662178857735467,
+          "z": 8.285679348701805
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.447495899966609,
+          "y": -3.7062465833055045,
+          "z": 8.153742483272113
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.737463361013525,
+          "y": -3.6442025853950173,
+          "z": 8.017245687869039
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.012804118276031,
+          "y": -3.580574370197163,
+          "z": 7.877263614433762
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.273719154509726,
+          "y": -3.5158127696731487,
+          "z": 7.73478809328093
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.520524474738834,
+          "y": -3.4503277967117705,
+          "z": 7.590721152765897
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.75362826909051,
+          "y": -3.3844872171120612,
+          "z": 7.445871877646539
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.973509804399749,
+          "y": -3.3186165579998588,
+          "z": 7.300956427599691
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.180700462007378,
+          "y": -3.253000243161775,
+          "z": 7.15660053495591
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.375767130633384,
+          "y": -3.1878835653166915,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": -6.726727939963125,
+          "y": 8.23786584041091e-16,
+          "z": 7.399400733959437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.536198703460924,
+          "y": 8.004534820784501e-16,
+          "z": 7.568230077691597
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.332377902572627,
+          "y": 7.754926329376997e-16,
+          "z": 7.73957299203321
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.114475010757654,
+          "y": 7.488072250390839e-16,
+          "z": 7.912850013921671
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.881716976750463,
+          "y": 7.203025869068101e-16,
+          "z": 8.087360843031885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.633368246415098,
+          "y": 6.898886391390588e-16,
+          "z": 8.262273428075476
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.368754921931593,
+          "y": 6.574828530550124e-16,
+          "z": 8.436614877321075
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.087293121266409,
+          "y": 6.230137237283256e-16,
+          "z": 8.609265282143156
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.788521306805732,
+          "y": 5.86424729102854e-16,
+          "z": 8.778955729143844
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.4721359549995805,
+          "y": 5.476786982642028e-16,
+          "z": 8.94427190999916
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.13802944301184,
+          "y": 5.067624512161955e-16,
+          "z": 9.103664774626047
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.786328457205041,
+          "y": 4.636915025636689e-16,
+          "z": 9.255469562056767
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.417430630867044,
+          "y": 4.185145483399445e-16,
+          "z": 9.39793423488437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.0320365727694694,
+          "y": 3.7131738837398414e-16,
+          "z": 9.52925780013262
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.631174057921087,
+          "y": 3.222258888032612e-16,
+          "z": 9.647638212377322
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.21621103588968,
+          "y": 2.7140757513373367e-16,
+          "z": 9.751328557914597
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.7888543819998306,
+          "y": 2.1907147930568093e-16,
+          "z": 9.838699100999074
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.351132047333135,
+          "y": 1.6546595369919338e-16,
+          "z": 9.908301680442989
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.9053574604251862,
+          "y": 1.1087431159938808e-16,
+          "z": 9.958932064677038
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.45407660918650006,
+          "y": 5.560834660079309e-17,
+          "z": 9.989685402102996
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.123233995736766e-16,
+          "y": 0.0,
+          "z": 10.0
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.45407660918650006,
+          "y": 0.0,
+          "z": 9.989685402102996
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.9053574604251862,
+          "y": 0.0,
+          "z": 9.958932064677038
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.351132047333135,
+          "y": 0.0,
+          "z": 9.908301680442989
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.7888543819998306,
+          "y": 0.0,
+          "z": 9.838699100999074
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.21621103588968,
+          "y": 0.0,
+          "z": 9.751328557914597
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.631174057921087,
+          "y": 0.0,
+          "z": 9.647638212377322
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.0320365727694694,
+          "y": 0.0,
+          "z": 9.52925780013262
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.417430630867044,
+          "y": 0.0,
+          "z": 9.39793423488437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.786328457205041,
+          "y": 0.0,
+          "z": 9.255469562056767
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.13802944301184,
+          "y": 0.0,
+          "z": 9.103664774626047
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.4721359549995805,
+          "y": 0.0,
+          "z": 8.94427190999916
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.788521306805732,
+          "y": 0.0,
+          "z": 8.778955729143844
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.087293121266409,
+          "y": 0.0,
+          "z": 8.609265282143156
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.368754921931593,
+          "y": 0.0,
+          "z": 8.436614877321075
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.633368246415098,
+          "y": 0.0,
+          "z": 8.262273428075476
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.881716976750463,
+          "y": 0.0,
+          "z": 8.087360843031885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.114475010757654,
+          "y": 0.0,
+          "z": 7.912850013921671
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.332377902572627,
+          "y": 0.0,
+          "z": 7.73957299203321
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.536198703460924,
+          "y": 0.0,
+          "z": 7.568230077691597
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.726727939963125,
+          "y": 0.0,
+          "z": 7.399400733959437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": 6.375767130633384,
+          "y": 3.187883565316692,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 6.180700462007376,
+          "y": 3.253000243161777,
+          "z": 7.15660053495591
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.9735098043997485,
+          "y": 3.31861655799986,
+          "z": 7.300956427599691
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.753628269090508,
+          "y": 3.3844872171120635,
+          "z": 7.445871877646539
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.520524474738834,
+          "y": 3.4503277967117714,
+          "z": 7.590721152765897
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.273719154509726,
+          "y": 3.5158127696731496,
+          "z": 7.73478809328093
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.01280411827603,
+          "y": 3.580574370197165,
+          "z": 7.877263614433762
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.737463361013524,
+          "y": 3.6442025853950186,
+          "z": 8.017245687869039
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.447495899966607,
+          "y": 3.706246583305506,
+          "z": 8.153742483272113
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.142839674350902,
+          "y": 3.766217885773547,
+          "z": 8.285679348701805
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.8235955645093624,
+          "y": 3.823595564509362,
+          "z": 8.411910241920598
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.4900503044826654,
+          "y": 3.8778336716474056,
+          "z": 8.531234077624294
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.1426968052735447,
+          "y": 3.9283710065919304,
+          "z": 8.642416214502248
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.7822502173100747,
+          "y": 3.974643167585821,
+          "z": 8.744214968688807
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.409657986707496,
+          "y": 4.016096644512494,
+          "z": 8.835412617927487
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.0261022461827705,
+          "y": 4.05220449236554,
+          "z": 8.914849883204186
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.632993161855452,
+          "y": 4.0824829046386295,
+          "z": 8.981462390204985
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.2319523435297728,
+          "y": 4.106507811765909,
+          "z": 9.034317185885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.8247860988423223,
+          "y": 4.123930494211613,
+          "z": 9.072647087265548
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.413449115297361,
+          "y": 4.134491152973615,
+          "z": 9.095880536541953
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.5338122560809773e-16,
+          "y": 4.13802944301184,
+          "z": 9.103664774626047
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.4134491152973614,
+          "y": 4.134491152973615,
+          "z": 9.095880536541953
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.8247860988423228,
+          "y": 4.123930494211613,
+          "z": 9.072647087265548
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.2319523435297732,
+          "y": 4.106507811765909,
+          "z": 9.034317185885
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.6329931618554516,
+          "y": 4.0824829046386295,
+          "z": 8.981462390204985
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.02610224618277,
+          "y": 4.05220449236554,
+          "z": 8.914849883204186
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.4096579867074954,
+          "y": 4.016096644512494,
+          "z": 8.835412617927487
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.7822502173100756,
+          "y": 3.9746431675858203,
+          "z": 8.744214968688807
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.142696805273545,
+          "y": 3.9283710065919304,
+          "z": 8.642416214502248
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.4900503044826654,
+          "y": 3.8778336716474056,
+          "z": 8.531234077624294
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.823595564509362,
+          "y": 3.8235955645093624,
+          "z": 8.411910241920598
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.142839674350901,
+          "y": 3.766217885773547,
+          "z": 8.285679348701805
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.447495899966608,
+          "y": 3.706246583305505,
+          "z": 8.153742483272113
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.737463361013524,
+          "y": 3.6442025853950186,
+          "z": 8.017245687869039
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.01280411827603,
+          "y": 3.580574370197165,
+          "z": 7.877263614433762
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.273719154509726,
+          "y": 3.5158127696731505,
+          "z": 7.73478809328093
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.520524474738833,
+          "y": 3.4503277967117723,
+          "z": 7.590721152765897
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.753628269090509,
+          "y": 3.3844872171120626,
+          "z": 7.445871877646539
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.973509804399748,
+          "y": 3.31861655799986,
+          "z": 7.300956427599691
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.180700462007377,
+          "y": 3.253000243161776,
+          "z": 7.15660053495591
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -6.375767130633384,
+          "y": 3.187883565316693,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      }
+    ]
+  },
+  {
+    "kind": "cutting",
+    "cuts": [
+      {
+        "position": {
+          "x": -5.581455721859475,
+          "y": 5.581455721859476,
+          "z": 6.139601294045423
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.384791912018791,
+          "y": 5.668202012651357,
+          "z": 6.235022213916492
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -5.178918038835924,
+          "y": 5.754353376484359,
+          "z": 6.329788714132796
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.9636358810271615,
+          "y": 5.839571624737838,
+          "z": 6.423528787211621
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.73879102207274,
+          "y": 5.923488777590924,
+          "z": 6.5158376553500155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.504281101536531,
+          "y": 6.0057081353820445,
+          "z": 6.606278948920247
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.260064336151294,
+          "y": 6.085806194501846,
+          "z": 6.69438681395203
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -4.006168083848876,
+          "y": 6.1633355136136565,
+          "z": 6.779669064975023
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.7426971693108304,
+          "y": 6.237828615518054,
+          "z": 6.861611477069859
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.4698416383208146,
+          "y": 6.308802978765117,
+          "z": 6.939683276641629
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -3.187883565316692,
+          "y": 6.375767130633384,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.897202509908426,
+          "y": 6.438227799796504,
+          "z": 7.082050579776155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.598279209846523,
+          "y": 6.495698024616309,
+          "z": 7.14526782707794
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -2.2916971156507797,
+          "y": 6.547706044716513,
+          "z": 7.202476649188162
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.9781414201873615,
+          "y": 6.59380473395787,
+          "z": 7.253185207353657
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.6583953170166488,
+          "y": 6.633581268066594,
+          "z": 7.296939394873253
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.333333333333334,
+          "y": 6.666666666666666,
+          "z": 7.333333333333333
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -1.0039117221153824,
+          "y": 6.6927448141025465,
+          "z": 7.3620192955128
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.6711560552140241,
+          "y": 6.711560552140242,
+          "z": 7.382716607354267
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": -0.33614632272640654,
+          "y": 6.722926454528144,
+          "z": 7.395219099980958
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.118932920205455e-16,
+          "y": 6.726727939963125,
+          "z": 7.399400733959437
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.3361463227264074,
+          "y": 6.722926454528144,
+          "z": 7.395219099980958
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 0.6711560552140236,
+          "y": 6.711560552140242,
+          "z": 7.382716607354267
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.0039117221153817,
+          "y": 6.6927448141025465,
+          "z": 7.3620192955128
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.333333333333333,
+          "y": 6.666666666666666,
+          "z": 7.333333333333333
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.6583953170166479,
+          "y": 6.633581268066594,
+          "z": 7.296939394873253
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 1.9781414201873608,
+          "y": 6.59380473395787,
+          "z": 7.253185207353657
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.2916971156507793,
+          "y": 6.547706044716513,
+          "z": 7.202476649188162
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.598279209846524,
+          "y": 6.495698024616309,
+          "z": 7.14526782707794
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 2.897202509908427,
+          "y": 6.438227799796504,
+          "z": 7.082050579776155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.1878835653166924,
+          "y": 6.375767130633384,
+          "z": 7.013343843696721
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.4698416383208137,
+          "y": 6.308802978765118,
+          "z": 6.939683276641629
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 3.7426971693108313,
+          "y": 6.237828615518053,
+          "z": 6.861611477069859
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.006168083848877,
+          "y": 6.1633355136136565,
+          "z": 6.779669064975023
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.260064336151292,
+          "y": 6.0858061945018465,
+          "z": 6.69438681395203
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.504281101536533,
+          "y": 6.005708135382043,
+          "z": 6.606278948920247
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.738791022072739,
+          "y": 5.923488777590924,
+          "z": 6.5158376553500155
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 4.9636358810271615,
+          "y": 5.839571624737838,
+          "z": 6.423528787211621
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.178918038835924,
+          "y": 5.754353376484359,
+          "z": 6.329788714132796
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.384791912018789,
+          "y": 5.668202012651358,
+          "z": 6.235022213916492
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      },
+      {
+        "position": {
+          "x": 5.581455721859476,
+          "y": 5.581455721859475,
+          "z": 6.139601294045423
+        },
+        "moveKind": {
+          "type": "feed"
+        },
+        "toolOrientation": null
+      }
+    ]
+  }
+]

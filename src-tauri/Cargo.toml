@@ -62,6 +62,14 @@ path = "tests/drill_golden.rs"
 name = "toolpath_cache"
 path = "tests/toolpath_cache.rs"
 
+[[test]]
+name = "adaptive_clearing_golden"
+path = "tests/adaptive_clearing_golden.rs"
+
+[[test]]
+name = "parallel_finishing_golden"
+path = "tests/parallel_finishing_golden.rs"
+
 [features]
 # this feature is used for production builds or when `devtools` feature is not
 # enabled, which is the case when cargo test is run
