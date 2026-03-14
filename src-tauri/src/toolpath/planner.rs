@@ -80,10 +80,13 @@ pub fn plan(
                 base_feed,
             )?
         }
-        OperationParams::ParallelFinishing(_) => {
-            return Err(crate::error::AppError::InvalidInput(
-                "parallel finishing is not yet implemented".to_string(),
-            ))
+        OperationParams::ParallelFinishing(params) => {
+            operations::parallel_finishing::parallel_finishing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+            )?
         }
     };
 
@@ -471,6 +474,42 @@ mod tests {
         assert!(
             matches!(result, Err(AppError::GeometryImport(_))),
             "expected GeometryImport error, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn plan_parallel_finishing_returns_error_without_shape() {
+        use crate::models::operation::{CacheState, ParallelFinishingParams};
+        let operation = Operation {
+            id: uuid::Uuid::nil(),
+            name: "PF Op".to_string(),
+            enabled: true,
+            tool_id: uuid::Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ParallelFinishing(ParallelFinishingParams {
+                stepover: 0.5,
+                direction_angle_deg: 0.0,
+                allowance: 0.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let result = plan(
+            &operation,
+            &make_tool_10mm(),
+            &make_stock_50x50x10(),
+            None,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "expected error when no shape provided, got: {result:?}"
         );
     }
 
