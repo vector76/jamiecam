@@ -955,6 +955,126 @@ describe('OperationEditorForm — adaptive_clearing branch', () => {
   })
 })
 
+// ── Parallel Finishing form ───────────────────────────────────────────────────
+
+const PARALLEL_FINISHING_OP_ID = 'bbbbbbbb-0000-0000-0000-000000000006'
+
+const PARALLEL_FINISHING_OP: Operation = {
+  id: PARALLEL_FINISHING_OP_ID,
+  name: 'Parallel Finishing',
+  enabled: true,
+  toolId: TOOL_ID_A,
+  type: 'parallelFinishing',
+  params: { stepover: 1.0, directionAngleDeg: 0, allowance: 0.1 },
+}
+
+describe('OperationEditorForm — parallelFinishing branch', () => {
+  beforeEach(() => {
+    vi.mocked(opsApi.listOperations).mockResolvedValue([PARALLEL_FINISHING_OP])
+    vi.mocked(opsApi.editOperation).mockResolvedValue(PARALLEL_FINISHING_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('renders tool selector, Stepover, Direction, Allowance, and entry motion fields', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    expect(screen.getByLabelText('Stepover (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Allowance (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByText('Select Faces')).toBeInTheDocument()
+  })
+
+  it('renders spindle speed and feed rate override inputs', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Spindle speed override (RPM)')).toBeInTheDocument())
+    expect(screen.getByLabelText('Feed rate override (mm/min)')).toBeInTheDocument()
+  })
+
+  it('stepover blur calls editOperation with updated stepover', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Stepover (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Stepover (mm)'), { target: { value: '0.5' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PARALLEL_FINISHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ stepover: 0.5 }) }),
+    ))
+  })
+
+  it('direction blur calls editOperation with updated directionAngleDeg', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Direction (°)'), { target: { value: '90' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PARALLEL_FINISHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ directionAngleDeg: 90 }) }),
+    ))
+  })
+
+  it('allowance blur calls editOperation with updated allowance', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Allowance (mm)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Allowance (mm)'), { target: { value: '0.05' } })
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PARALLEL_FINISHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ allowance: 0.05 }) }),
+    ))
+  })
+
+  it('Select Faces button enters selection mode', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(useViewportStore.getState().selectionMode).toBe(true))
+  })
+
+  it('Done Selecting saves geometry fingerprints', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByText('Select Faces')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Select Faces'))
+    await waitFor(() => expect(screen.getByText('Done Selecting')).toBeInTheDocument())
+    useViewportStore.setState({ selectedFaceFingerprints: ['fp-1', 'fp-2'] })
+    fireEvent.click(screen.getByText('Done Selecting'))
+
+    await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
+      PARALLEL_FINISHING_OP_ID,
+      expect.objectContaining({ params: expect.objectContaining({ geometry: ['fp-1', 'fp-2'] }) }),
+    ))
+  })
+
+  it('Calculate button is disabled when stock is null', async () => {
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).toBeDisabled())
+  })
+
+  it('Calculate button is enabled when stock is defined', async () => {
+    useProjectStore.setState({
+      snapshot: {
+        ...SNAPSHOT_BASE,
+        stock: { type: 'box', origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 100, height: 50 },
+      },
+    })
+    render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate' })).not.toBeDisabled())
+  })
+})
+
 // ── Error handling ────────────────────────────────────────────────────────────
 
 describe('OperationEditorForm — error handling', () => {

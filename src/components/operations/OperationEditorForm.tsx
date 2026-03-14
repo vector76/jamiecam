@@ -15,7 +15,8 @@ import { useTools, useProjectStore, useStock, useOperations } from '../../store/
 import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
-import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams } from '../../api/types'
+import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams } from '../../api/types'
+import ParallelFinishingEditor from './ParallelFinishingEditor'
 import { useViewportStore } from '../../store/viewportStore'
 import { getModelFaces, detectHoles } from '../../api/geometry'
 
@@ -56,7 +57,7 @@ export function OperationEditorForm({ operationId }: Props) {
   async function handleSelectFaces() {
     const faces = await getModelFaces()
     setFaceDescriptors(faces)
-    const savedGeo = (operation!.params as PocketParams | ProfileParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams).geometry
+    const savedGeo = (operation!.params as PocketParams | ProfileParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams).geometry
     if (savedGeo?.length) {
       useViewportStore.getState().clearFaceSelection()
       savedGeo.forEach(fp => useViewportStore.getState().toggleFaceSelection(fp))
@@ -598,6 +599,37 @@ export function OperationEditorForm({ operationId }: Props) {
           {!selectionMode && (operation.params as AdaptiveClearingParams).geometry?.length ? (
             <button onClick={() => void handleClearGeometry()}>Clear</button>
           ) : null}
+        </div>
+        <div style={{ marginTop: '0.5rem' }}>
+          <button disabled={stock === null}>Calculate</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (operation.type === 'parallelFinishing') {
+    const params = operation.params as ParallelFinishingParams
+    return (
+      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-tool">Tool</label>
+          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+            {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <ParallelFinishingEditor
+          params={params}
+          onSave={(partial) => void save({ params: { ...params, ...partial } })}
+        />
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
+          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+            onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
+        </div>
+        <div style={{ marginBottom: '0.25rem' }}>
+          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
+          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+            onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
         </div>
         <div style={{ marginTop: '0.5rem' }}>
           <button disabled={stock === null}>Calculate</button>
