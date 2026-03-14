@@ -183,6 +183,17 @@ CgVec3 cg_face_eval_du(CgFaceId id, double u, double v);
 // Evaluate the first partial derivative with respect to v at (u, v).
 CgVec3 cg_face_eval_dv(CgFaceId id, double u, double v);
 
+// Result of principal curvature evaluation at a UV point.
+typedef struct {
+    double  k1;      // max principal curvature
+    double  k2;      // min principal curvature
+    CgVec3  dir1;    // direction of max curvature
+    CgError success; // CG_OK on success, error code on failure
+} CgCurvatureResult;
+
+// Evaluate principal curvatures at parameter (u, v) on the face surface.
+CgCurvatureResult cg_face_eval_curvature(CgFaceId id, double u, double v);
+
 // Project point onto the face; returns the nearest UV parameters.
 // out_dist: distance from point to surface (may be NULL).
 CgPoint2 cg_face_project_point(CgFaceId id, CgPoint3 point, double* out_dist);

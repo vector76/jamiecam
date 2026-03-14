@@ -16,11 +16,13 @@
 
 // ── OCCT includes ────────────────────────────────────────────────────────────
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepGProp.hxx>
 #include <BRepGProp_Face.hxx>
+#include <BRepLProp_SLProps.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRepTools_WireExplorer.hxx>
@@ -668,6 +670,46 @@ CgVec3 cg_face_eval_du(CgFaceId /*id*/, double /*u*/, double /*v*/) {
 CgVec3 cg_face_eval_dv(CgFaceId /*id*/, double /*u*/, double /*v*/) {
     set_last_error("not implemented");
     return CgVec3{0, 0, 0};
+}
+
+CgCurvatureResult cg_face_eval_curvature(CgFaceId id, double u, double v) {
+    CgCurvatureResult result{0, 0, {0, 0, 0}, CG_ERR_NO_RESULT};
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_eval_curvature: null handle");
+        return result;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        BRepAdaptor_Surface surf(face);
+        // 2 = number of derivatives required for curvature computation
+        BRepLProp_SLProps props(surf, u, v, 2, Precision::Confusion());
+        if (!props.IsCurvatureDefined()) {
+            set_last_error("cg_face_eval_curvature: curvature not defined at this point");
+            return result;
+        }
+        result.k1 = props.MaxCurvature();
+        result.k2 = props.MinCurvature();
+        // At umbilic points (k1 ≈ k2, including planar faces where both are 0),
+        // CurvatureDirections() throws LProp_NotDefined. Leave dir1 as zero.
+        if (!props.IsUmbilic()) {
+            gp_Dir d1, d2;
+            props.CurvatureDirections(d1, d2);
+            result.dir1.x = d1.X();
+            result.dir1.y = d1.Y();
+            result.dir1.z = d1.Z();
+        }
+        result.success = CG_OK;
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_eval_curvature: invalid face ID");
+        return result;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_eval_curvature: ") + ex.GetMessageString());
+        return result;
+    } catch (...) {
+        set_last_error("cg_face_eval_curvature: unknown exception");
+        return result;
+    }
 }
 
 CgPoint2 cg_face_project_point(CgFaceId id, CgPoint3 point, double* out_dist) {
