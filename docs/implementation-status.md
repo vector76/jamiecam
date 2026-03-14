@@ -403,10 +403,11 @@ immediately once algorithms are written.
   reached; uses `.max(drill_z)` to avoid overshooting the target depth
 - Returns `AppError::GeometryImport` if `params.points` is empty or if
   `peck_depth` is ≤ 0
-- 6 unit tests: empty-points error, zero peck depth error, negative peck
+- 8 unit tests: empty-points error, zero peck depth error, negative peck
   depth error, single non-peck hole geometry (Z values and move kinds),
   peck hole Z-levels (7-point sequence for 3 pecks), two-hole pass ordering
-  and linking structure
+  and linking structure, `test_sort_single` (single hole unchanged by sort),
+  `test_sort_grid` (4 collinear holes sorted into visitation order)
 
 **Drill algorithm golden file test** (`7e436df`)
 - `src-tauri/tests/drill_golden.rs`: `drill_algorithm_golden_matches`
