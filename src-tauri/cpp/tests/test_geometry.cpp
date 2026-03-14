@@ -23,6 +23,7 @@
 // OCCT headers for fixture generation
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeSphere.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <STEPControl_Writer.hxx>
@@ -46,8 +47,9 @@
 #  error "FIXTURES_DIR must be defined via -DFIXTURES_DIR=... at compile time"
 #endif
 
-static const char* STEP_PATH = FIXTURES_DIR "/box.step";
-static const char* STL_PATH  = FIXTURES_DIR "/box.stl";
+static const char* STEP_PATH   = FIXTURES_DIR "/box.step";
+static const char* STL_PATH    = FIXTURES_DIR "/box.stl";
+static const char* SPHERE_PATH = FIXTURES_DIR "/sphere.step";
 
 static std::string last_error() {
     return std::string(cg_last_error_message());
@@ -636,3 +638,160 @@ TEST_CASE("model with no cylindrical faces returns 0 holes") {
 }
 
 } // TEST_SUITE hole_detection
+
+// ---------------------------------------------------------------------------
+// Helper: generate sphere.step if it doesn't already exist
+// ---------------------------------------------------------------------------
+
+static void ensure_sphere_fixture() {
+    // Try to load it first; if it succeeds, we're done.
+    CgShapeId probe = cg_load_step(SPHERE_PATH);
+    if (probe != CG_NULL_ID) {
+        cg_shape_free(probe);
+        return;
+    }
+
+    TopoDS_Shape sphere = BRepPrimAPI_MakeSphere(10.0).Shape();
+    STEPControl_Writer writer;
+    IFSelect_ReturnStatus ws = writer.Transfer(sphere, STEPControl_AsIs);
+    REQUIRE(ws == IFSelect_RetDone);
+    IFSelect_ReturnStatus stat = writer.Write(SPHERE_PATH);
+    REQUIRE(stat == IFSelect_RetDone);
+}
+
+// ---------------------------------------------------------------------------
+// Test suite: surface evaluation
+// ---------------------------------------------------------------------------
+
+TEST_SUITE("surface_evaluation") {
+
+TEST_CASE("setup sphere fixture") {
+    ensure_sphere_fixture();
+}
+
+TEST_CASE("cg_face_eval_point on box face returns finite coordinates") {
+    CgShapeId shape = cg_load_step(STEP_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgUVBounds uv = cg_face_uv_bounds(faces[0]);
+    double u_mid = 0.5 * (uv.umin + uv.umax);
+    double v_mid = 0.5 * (uv.vmin + uv.vmax);
+
+    CgPoint3 pt = cg_face_eval_point(faces[0], u_mid, v_mid);
+    INFO("last error: " << last_error());
+    CHECK(std::isfinite(pt.x));
+    CHECK(std::isfinite(pt.y));
+    CHECK(std::isfinite(pt.z));
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+TEST_CASE("cg_face_eval_normal returns unit vector on box face") {
+    CgShapeId shape = cg_load_step(STEP_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgUVBounds uv = cg_face_uv_bounds(faces[0]);
+    double u_mid = 0.5 * (uv.umin + uv.umax);
+    double v_mid = 0.5 * (uv.vmin + uv.vmax);
+
+    CgVec3 n = cg_face_eval_normal(faces[0], u_mid, v_mid);
+    INFO("last error: " << last_error());
+    double len = std::sqrt(n.x*n.x + n.y*n.y + n.z*n.z);
+    CHECK(len == doctest::Approx(1.0).epsilon(1e-6));
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+TEST_CASE("cg_face_project_point round-trips on sphere face") {
+    CgShapeId shape = cg_load_step(SPHERE_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgUVBounds uv = cg_face_uv_bounds(faces[0]);
+    double u = uv.umin + 0.1 * (uv.umax - uv.umin);
+    double v = uv.vmin + 0.1 * (uv.vmax - uv.vmin);
+
+    CgPoint3 orig = cg_face_eval_point(faces[0], u, v);
+
+    double dist = 0.0;
+    CgPoint2 uv_proj = cg_face_project_point(faces[0], orig, &dist);
+    INFO("last error: " << last_error());
+
+    CgPoint3 re_eval = cg_face_eval_point(faces[0], uv_proj.u, uv_proj.v);
+    CHECK(re_eval.x == doctest::Approx(orig.x).epsilon(1e-6));
+    CHECK(re_eval.y == doctest::Approx(orig.y).epsilon(1e-6));
+    CHECK(re_eval.z == doctest::Approx(orig.z).epsilon(1e-6));
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+TEST_CASE("cg_face_surface_type on box face is CG_SURF_PLANE") {
+    CgShapeId shape = cg_load_step(STEP_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgSurfaceType t = cg_face_surface_type(faces[0]);
+    INFO("last error: " << last_error());
+    CHECK(t == CG_SURF_PLANE);
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+TEST_CASE("cg_face_surface_type on sphere face is CG_SURF_SPHERE") {
+    CgShapeId shape = cg_load_step(SPHERE_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgSurfaceType t = cg_face_surface_type(faces[0]);
+    INFO("last error: " << last_error());
+    CHECK(t == CG_SURF_SPHERE);
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+TEST_CASE("cg_face_uv_bounds gives sensible range on box face") {
+    CgShapeId shape = cg_load_step(STEP_PATH);
+    REQUIRE(shape != CG_NULL_ID);
+
+    const size_t kCap = 64;
+    CgFaceId faces[kCap];
+    size_t nfaces = cg_shape_faces(shape, faces, kCap);
+    REQUIRE(nfaces > 0);
+
+    CgUVBounds uv = cg_face_uv_bounds(faces[0]);
+    INFO("last error: " << last_error());
+    CHECK(uv.umin < uv.umax);
+    CHECK(uv.vmin < uv.vmax);
+
+    for (size_t i = 0; i < nfaces; ++i) cg_face_free(faces[i]);
+    cg_shape_free(shape);
+}
+
+} // TEST_SUITE surface_evaluation
