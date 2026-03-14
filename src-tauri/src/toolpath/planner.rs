@@ -521,6 +521,45 @@ mod tests {
         );
     }
 
+    #[test]
+    fn plan_scallop_finishing_returns_error_without_shape() {
+        use crate::models::operation::{CacheState, ScallopFinishingParams};
+        let operation = Operation {
+            id: uuid::Uuid::nil(),
+            name: "SF Op".to_string(),
+            enabled: true,
+            tool_id: uuid::Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::ScallopFinishing(ScallopFinishingParams {
+                target_scallop_height: 0.01,
+                min_stepover: 0.1,
+                max_stepover: 2.0,
+                direction_angle_deg: 0.0,
+                allowance: 0.0,
+                tool_radius: 5.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let result = plan(
+            &operation,
+            &make_tool_10mm(),
+            &make_stock_50x50x10(),
+            None,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "expected error when no shape provided, got: {result:?}"
+        );
+    }
+
     #[cfg(cam_geometry_bindings)]
     #[test]
     fn plan_adaptive_clearing_produces_passes_and_stats() {
