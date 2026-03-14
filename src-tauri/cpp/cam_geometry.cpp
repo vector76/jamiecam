@@ -20,6 +20,7 @@
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepGProp.hxx>
+#include <BRepGProp_Face.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <BRepTools_WireExplorer.hxx>
@@ -28,11 +29,13 @@
 #include <GCPnts_TangentialDeflection.hxx>
 #include <GProp_GProps.hxx>
 #include <Geom_Curve.hxx>
+#include <Geom_Surface.hxx>
 #include <GeomAdaptor_Surface.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <RWStl.hxx>
 #include <STEPControl_Reader.hxx>
+#include <ShapeAnalysis_Surface.hxx>
 #include <ShapeFix_Shape.hxx>
 #include <Standard_Failure.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -45,6 +48,7 @@
 #include <gp_Dir.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Pnt2d.hxx>
 #include <gp_Vec.hxx>
 
 // ── Standard library includes ────────────────────────────────────────────────
@@ -507,26 +511,131 @@ CgError cg_mesh_copy_face_groups(CgMeshId id, CgFaceGroup* out_groups) {
     return CG_OK;
 }
 
-/* ── Surface evaluation (stubs) ──────────────────────────────────────────── */
+/* ── Surface evaluation ──────────────────────────────────────────────────── */
 
-CgSurfaceType cg_face_surface_type(CgFaceId /*id*/) {
-    set_last_error("not implemented");
-    return CG_SURF_OTHER;
+CgSurfaceType cg_face_surface_type(CgFaceId id) {
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_surface_type: null handle");
+        return CG_SURF_OTHER;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+        if (surf.IsNull()) {
+            set_last_error("cg_face_surface_type: no surface");
+            return CG_SURF_OTHER;
+        }
+        GeomAdaptor_Surface adaptor(surf);
+        switch (adaptor.GetType()) {
+            case GeomAbs_Plane:          return CG_SURF_PLANE;
+            case GeomAbs_Cylinder:       return CG_SURF_CYLINDER;
+            case GeomAbs_Cone:           return CG_SURF_CONE;
+            case GeomAbs_Sphere:         return CG_SURF_SPHERE;
+            case GeomAbs_Torus:          return CG_SURF_TORUS;
+            case GeomAbs_BSplineSurface: return CG_SURF_BSPLINE;
+            case GeomAbs_BezierSurface:  return CG_SURF_BEZIER;
+            case GeomAbs_OffsetSurface:  return CG_SURF_OFFSET;
+            default:                     return CG_SURF_OTHER;
+        }
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_surface_type: invalid face ID");
+        return CG_SURF_OTHER;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_surface_type: ") + ex.GetMessageString());
+        return CG_SURF_OTHER;
+    } catch (...) {
+        set_last_error("cg_face_surface_type: unknown exception");
+        return CG_SURF_OTHER;
+    }
 }
 
-CgUVBounds cg_face_uv_bounds(CgFaceId /*id*/) {
-    set_last_error("not implemented");
-    return CgUVBounds{0, 0, 0, 0};
+CgUVBounds cg_face_uv_bounds(CgFaceId id) {
+    CgUVBounds result{0, 0, 0, 0};
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_uv_bounds: null handle");
+        return result;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        double umin, umax, vmin, vmax;
+        BRepTools::UVBounds(face, umin, umax, vmin, vmax);
+        result.umin = umin;
+        result.umax = umax;
+        result.vmin = vmin;
+        result.vmax = vmax;
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_uv_bounds: invalid face ID");
+        return result;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_uv_bounds: ") + ex.GetMessageString());
+        return result;
+    } catch (...) {
+        set_last_error("cg_face_uv_bounds: unknown exception");
+        return result;
+    }
 }
 
-CgPoint3 cg_face_eval_point(CgFaceId /*id*/, double /*u*/, double /*v*/) {
-    set_last_error("not implemented");
-    return CgPoint3{0, 0, 0};
+CgPoint3 cg_face_eval_point(CgFaceId id, double u, double v) {
+    CgPoint3 result{0, 0, 0};
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_eval_point: null handle");
+        return result;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+        if (surf.IsNull()) {
+            set_last_error("cg_face_eval_point: no surface");
+            return result;
+        }
+        gp_Pnt p = surf->Value(u, v);
+        result.x = p.X();
+        result.y = p.Y();
+        result.z = p.Z();
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_eval_point: invalid face ID");
+        return result;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_eval_point: ") + ex.GetMessageString());
+        return result;
+    } catch (...) {
+        set_last_error("cg_face_eval_point: unknown exception");
+        return result;
+    }
 }
 
-CgVec3 cg_face_eval_normal(CgFaceId /*id*/, double /*u*/, double /*v*/) {
-    set_last_error("not implemented");
-    return CgVec3{0, 0, 0};
+CgVec3 cg_face_eval_normal(CgFaceId id, double u, double v) {
+    CgVec3 result{0, 0, 0};
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_eval_normal: null handle");
+        return result;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        BRepGProp_Face props(face);
+        gp_Pnt p;
+        gp_Vec n;
+        props.Normal(u, v, p, n);
+        double len = n.Magnitude();
+        if (len > 1e-12) {
+            n /= len;
+        }
+        result.x = n.X();
+        result.y = n.Y();
+        result.z = n.Z();
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_eval_normal: invalid face ID");
+        return result;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_eval_normal: ") + ex.GetMessageString());
+        return result;
+    } catch (...) {
+        set_last_error("cg_face_eval_normal: unknown exception");
+        return result;
+    }
 }
 
 CgVec3 cg_face_eval_du(CgFaceId /*id*/, double /*u*/, double /*v*/) {
@@ -539,9 +648,39 @@ CgVec3 cg_face_eval_dv(CgFaceId /*id*/, double /*u*/, double /*v*/) {
     return CgVec3{0, 0, 0};
 }
 
-CgPoint2 cg_face_project_point(CgFaceId /*id*/, CgPoint3 /*point*/, double* /*out_dist*/) {
-    set_last_error("not implemented");
-    return CgPoint2{0, 0};
+CgPoint2 cg_face_project_point(CgFaceId id, CgPoint3 point, double* out_dist) {
+    CgPoint2 result{0, 0};
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_face_project_point: null handle");
+        return result;
+    }
+    try {
+        const TopoDS_Face& face = TopoDS::Face(registry_get_shape(id));
+        Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
+        if (surf.IsNull()) {
+            set_last_error("cg_face_project_point: no surface");
+            return result;
+        }
+        static const double kTolerance = 1e-7;
+        ShapeAnalysis_Surface sas(surf);
+        gp_Pnt2d uv = sas.ValueOfUV(gp_Pnt(point.x, point.y, point.z), kTolerance);
+        result.u = uv.X();
+        result.v = uv.Y();
+        if (out_dist) {
+            gp_Pnt proj = surf->Value(uv.X(), uv.Y());
+            *out_dist = proj.Distance(gp_Pnt(point.x, point.y, point.z));
+        }
+        return result;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_face_project_point: invalid face ID");
+        return result;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_face_project_point: ") + ex.GetMessageString());
+        return result;
+    } catch (...) {
+        set_last_error("cg_face_project_point: unknown exception");
+        return result;
+    }
 }
 
 CgError cg_face_plane(CgFaceId /*id*/, CgVec3* /*out_normal*/, CgPoint3* /*out_origin*/) {
