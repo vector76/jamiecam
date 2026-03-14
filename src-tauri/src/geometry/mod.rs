@@ -23,12 +23,17 @@ pub mod faces;
 pub mod holes;
 pub mod importer;
 pub mod safe;
+pub mod surface;
 
 pub use clipper::{poly_boolean, poly_offset, BoolOp};
 pub use faces::{enumerate_faces, face_boundary, face_fingerprint, FaceDescriptor, FaceInfo};
 pub use holes::{find_holes, HoleDescriptor};
 pub use importer::{import, import_with_shape};
 pub use safe::{shape_section_at_z, GeometryError, MeshData, OcctMesh, OcctShape};
+pub use surface::{
+    face_eval_normal, face_eval_point, face_project_point, face_surface_type, face_uv_bounds,
+    shape_faces, OcctFace,
+};
 
 #[cfg(test)]
 #[cfg(cam_geometry_bindings)]

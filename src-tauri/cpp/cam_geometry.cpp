@@ -344,9 +344,31 @@ CgBbox cg_shape_bounding_box(CgShapeId id) {
     }
 }
 
-size_t cg_shape_faces(CgShapeId /*id*/, CgFaceId* /*out_faces*/, size_t /*capacity*/) {
-    set_last_error("not implemented");
-    return 0;
+size_t cg_shape_faces(CgShapeId id, CgFaceId* out_faces, size_t capacity) {
+    if (id == CG_NULL_ID) {
+        set_last_error("cg_shape_faces: null handle");
+        return 0;
+    }
+    try {
+        const TopoDS_Shape& shape = registry_get_shape(id);
+        size_t count = 0;
+        for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
+            if (out_faces != nullptr && count < capacity) {
+                out_faces[count] = registry_store_shape(ex.Current());
+            }
+            ++count;
+        }
+        return count;
+    } catch (const std::out_of_range&) {
+        set_last_error("cg_shape_faces: invalid shape ID");
+        return 0;
+    } catch (const Standard_Failure& ex) {
+        set_last_error(std::string("cg_shape_faces: ") + ex.GetMessageString());
+        return 0;
+    } catch (...) {
+        set_last_error("cg_shape_faces: unknown exception");
+        return 0;
+    }
 }
 
 size_t cg_shape_edges(CgShapeId /*id*/, CgEdgeId* /*out_edges*/, size_t /*capacity*/) {
