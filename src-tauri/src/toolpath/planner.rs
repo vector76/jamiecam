@@ -80,6 +80,11 @@ pub fn plan(
                 base_feed,
             )?
         }
+        OperationParams::ParallelFinishing(_) => {
+            return Err(crate::error::AppError::InvalidInput(
+                "parallel finishing is not yet implemented".to_string(),
+            ))
+        }
     };
 
     // Step 3: Compute stats over the returned passes.

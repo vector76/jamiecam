@@ -180,6 +180,38 @@ pub struct AdaptiveClearingParams {
     pub ramp_entry_angle_deg: Option<f64>,
 }
 
+/// Parameters for a Parallel Finishing operation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParallelFinishingParams {
+    /// Raster stepover distance in mm.
+    #[serde(default = "default_pf_stepover")]
+    pub stepover: f64,
+    /// Raster direction angle in degrees (0 = X-axis).
+    #[serde(default)]
+    pub direction_angle_deg: f64,
+    /// Stock allowance in mm (offset along surface normal).
+    #[serde(default)]
+    pub allowance: f64,
+    /// Face fingerprints that define the surface selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+}
+
+fn default_pf_stepover() -> f64 {
+    0.5
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -194,6 +226,8 @@ pub enum OperationParams {
     ZLevelRoughing(ZLevelRoughingParams),
     ZLevelFinishing(ZLevelFinishingParams),
     AdaptiveClearing(AdaptiveClearingParams),
+    #[serde(rename = "parallelFinishing")]
+    ParallelFinishing(ParallelFinishingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -912,5 +946,23 @@ mod tests {
         let json = serde_json::to_string(&op).expect("serialize");
         let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(op, recovered);
+    }
+
+    #[test]
+    fn parallel_finishing_params_serialize_as_camel_case_type() {
+        let op = OperationParams::ParallelFinishing(ParallelFinishingParams {
+            stepover: 0.5,
+            direction_angle_deg: 0.0,
+            allowance: 0.0,
+            geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        });
+        let val = serde_json::to_value(&op).unwrap();
+        assert_eq!(val["type"], "parallelFinishing");
+        assert!(val["params"].get("directionAngleDeg").is_some());
     }
 }

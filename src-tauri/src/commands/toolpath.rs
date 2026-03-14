@@ -268,13 +268,21 @@ pub fn calculate_toolpath_inner(
             p.helical_entry_pitch,
             p.ramp_entry_angle_deg,
         ),
+        OperationParams::ParallelFinishing(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
     };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
         | OperationParams::Profile(_)
         | OperationParams::ZLevelRoughing(_)
         | OperationParams::ZLevelFinishing(_)
-        | OperationParams::AdaptiveClearing(_) => linking::link_passes(
+        | OperationParams::AdaptiveClearing(_)
+        | OperationParams::ParallelFinishing(_) => linking::link_passes(
             raw_passes,
             &LinkingParams {
                 tool_diameter: tool.diameter,
