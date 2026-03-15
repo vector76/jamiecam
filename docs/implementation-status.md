@@ -167,7 +167,7 @@ face selection UI, 32 component tests), `OperationEditorForm.tsx` and
 `OperationListPanel.tsx` wiring (add button with default params),
 `GougeCheckPanel` integration, command handler entry-motion extraction, and
 planner dispatch (`OperationParams::FlowlineFinishing` match arm in
-`generate_passes`). Ten unit tests in `flowline_finishing.rs` (6 ungated:
+`plan`). Ten unit tests in `flowline_finishing.rs` (6 ungated:
 `split_runs` helpers, `boustrophedon_reorder`, error-without-shape; 4
 OCCT-gated: sphere curvature following, box straight lines, U-vs-V direction
 perpendicularity, boustrophedon ordering). Four serde tests in `operation.rs`.
@@ -189,7 +189,7 @@ entry motion controls, face selection UI, 36 component tests),
 `OperationEditorForm.tsx` and `OperationListPanel.tsx` wiring (add button with
 default params), `GougeCheckPanel` integration, command handler entry-motion
 extraction, and planner dispatch (`OperationParams::PencilMilling` match arm in
-`generate_passes`). Fourteen unit tests in `pencil_milling.rs` (10 ungated:
+`plan`). Fourteen unit tests in `pencil_milling.rs` (10 ungated:
 `trace_connected_components` helpers, `filter_short_passes` helpers,
 error-without-shape; 4 OCCT-gated: box produces zero passes, sphere produces
 passes, higher threshold reduces passes, min-pass-length filtering). Four serde
@@ -1983,7 +1983,7 @@ arm (passes through `link_passes`), and `extract_finishing_allowance` for gouge
 check support are all wired in `commands/toolpath.rs`.
 
 **Planner dispatch** (`f28f034`): `OperationParams::FlowlineFinishing` match
-arm added to `generate_passes` in `planner.rs`; algorithm is now called
+arm added to `plan` in `planner.rs`; algorithm is now called
 end-to-end through the IPC `calculate_toolpath` command.
 
 **Tests:** 10 unit tests in `flowline_finishing.rs` (6 ungated: `split_runs`
@@ -2038,7 +2038,7 @@ arm (passes through `link_passes`), and `extract_finishing_allowance` for gouge
 check support are all wired in `commands/toolpath.rs`.
 
 **Planner dispatch** (`52fccf6`): `OperationParams::PencilMilling` match arm
-added to `generate_passes` in `planner.rs`; algorithm is now called
+added to `plan` in `planner.rs`; algorithm is now called
 end-to-end through the IPC `calculate_toolpath` command.
 
 **Tests:** 14 unit tests in `pencil_milling.rs` (10 ungated:
