@@ -1,0 +1,220 @@
+# Feed/Speed Library
+# Array-of-tables layout; each entry covers one combination of
+# material × tool_material × operation_category.
+# Units: spindle_speed_rpm [RPM], feed_rate_mmpm [mm/min], doc_mm [mm]
+
+# ── aluminum-6061 ──────────────────────────────────────────────────────────────
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "carbide"
+operation_category = "roughing"
+spindle_speed_rpm  = 10000
+feed_rate_mmpm     = 1500.0
+doc_mm             = 3.0
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "carbide"
+operation_category = "finishing"
+spindle_speed_rpm  = 12000
+feed_rate_mmpm     = 800.0
+doc_mm             = 0.5
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "carbide"
+operation_category = "drilling"
+spindle_speed_rpm  = 8000
+feed_rate_mmpm     = 500.0
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "hss"
+operation_category = "roughing"
+spindle_speed_rpm  = 4000
+feed_rate_mmpm     = 600.0
+doc_mm             = 1.5
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "hss"
+operation_category = "finishing"
+spindle_speed_rpm  = 5000
+feed_rate_mmpm     = 300.0
+doc_mm             = 0.3
+
+[[entry]]
+material_id        = "aluminum-6061"
+display_name       = "Aluminum 6061"
+tool_material      = "hss"
+operation_category = "drilling"
+spindle_speed_rpm  = 3000
+feed_rate_mmpm     = 200.0
+
+# ── steel-mild ─────────────────────────────────────────────────────────────────
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "carbide"
+operation_category = "roughing"
+spindle_speed_rpm  = 3000
+feed_rate_mmpm     = 400.0
+doc_mm             = 2.0
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "carbide"
+operation_category = "finishing"
+spindle_speed_rpm  = 4000
+feed_rate_mmpm     = 200.0
+doc_mm             = 0.3
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "carbide"
+operation_category = "drilling"
+spindle_speed_rpm  = 2500
+feed_rate_mmpm     = 150.0
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "hss"
+operation_category = "roughing"
+spindle_speed_rpm  = 1200
+feed_rate_mmpm     = 150.0
+doc_mm             = 1.0
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "hss"
+operation_category = "finishing"
+spindle_speed_rpm  = 1800
+feed_rate_mmpm     = 80.0
+doc_mm             = 0.2
+
+[[entry]]
+material_id        = "steel-mild"
+display_name       = "Steel (Mild)"
+tool_material      = "hss"
+operation_category = "drilling"
+spindle_speed_rpm  = 1000
+feed_rate_mmpm     = 60.0
+
+# ── wood-mdf ───────────────────────────────────────────────────────────────────
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "carbide"
+operation_category = "roughing"
+spindle_speed_rpm  = 18000
+feed_rate_mmpm     = 3000.0
+doc_mm             = 6.0
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "carbide"
+operation_category = "finishing"
+spindle_speed_rpm  = 20000
+feed_rate_mmpm     = 2000.0
+doc_mm             = 1.0
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "carbide"
+operation_category = "drilling"
+spindle_speed_rpm  = 15000
+feed_rate_mmpm     = 1200.0
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "hss"
+operation_category = "roughing"
+spindle_speed_rpm  = 12000
+feed_rate_mmpm     = 2000.0
+doc_mm             = 4.0
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "hss"
+operation_category = "finishing"
+spindle_speed_rpm  = 14000
+feed_rate_mmpm     = 1200.0
+doc_mm             = 0.8
+
+[[entry]]
+material_id        = "wood-mdf"
+display_name       = "Wood (MDF)"
+tool_material      = "hss"
+operation_category = "drilling"
+spindle_speed_rpm  = 10000
+feed_rate_mmpm     = 800.0
+
+# ── plastic-abs ────────────────────────────────────────────────────────────────
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "carbide"
+operation_category = "roughing"
+spindle_speed_rpm  = 15000
+feed_rate_mmpm     = 2500.0
+doc_mm             = 4.0
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "carbide"
+operation_category = "finishing"
+spindle_speed_rpm  = 18000
+feed_rate_mmpm     = 1500.0
+doc_mm             = 0.5
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "carbide"
+operation_category = "drilling"
+spindle_speed_rpm  = 12000
+feed_rate_mmpm     = 800.0
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "hss"
+operation_category = "roughing"
+spindle_speed_rpm  = 8000
+feed_rate_mmpm     = 1200.0
+doc_mm             = 2.5
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "hss"
+operation_category = "finishing"
+spindle_speed_rpm  = 10000
+feed_rate_mmpm     = 700.0
+doc_mm             = 0.4
+
+[[entry]]
+material_id        = "plastic-abs"
+display_name       = "Plastic (ABS)"
+tool_material      = "hss"
+operation_category = "drilling"
+spindle_speed_rpm  = 6000
+feed_rate_mmpm     = 400.0
