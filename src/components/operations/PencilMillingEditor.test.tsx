@@ -21,7 +21,14 @@ const geoApi = await import('../../api/geometry')
 const BASE_PARAMS: PencilMillingParams = {
   allowance: 0,
   toolDiameter: 6.0,
+  curvatureThreshold: null,
   minPassLength: 1.0,
+  geometry: null,
+  arcLeadInRadius: null,
+  arcLeadOutRadius: null,
+  helicalEntryRadius: null,
+  helicalEntryPitch: null,
+  rampEntryAngleDeg: null,
 }
 
 // -- Setup --------------------------------------------------------------------
