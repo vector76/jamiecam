@@ -1,6 +1,6 @@
 # Implementation Status
 
-_Last updated: 2026-03-14. Based on git history (branch `main`)._
+_Last updated: 2026-03-15. Based on git history (branch `main`)._
 
 This document describes what is actually implemented in the codebase, as
 distinct from the planned architecture in `development-roadmap.md`. It is
@@ -97,14 +97,11 @@ per-point feed rate scaling based on local engagement, data model, algorithm,
 planner dispatch, IPC, operation editor UI, golden tests for both toolpath JSON
 and G-code output).
 
-Phase 3 is **in progress**. Four major deliverables are complete end-to-end:
-OCCT surface evaluation, parallel finishing, scallop finishing, and 3-axis gouge
-detection with auto-lift. Two more operations — flowline finishing and pencil
-milling — are partially complete: algorithms, data models, frontend editors,
-and command handler wiring are all implemented, but their planner dispatch is
-not yet wired (planner returns "not yet implemented" errors) and they lack
-golden tests. Remaining Phase 3 infrastructure (viewport simulation,
-measurement overlays, etc.) is not yet started.
+Phase 3 is **in progress**. Seven major deliverables are complete end-to-end:
+OCCT surface evaluation, parallel finishing, scallop finishing, 3-axis gouge
+detection with auto-lift, flowline finishing, pencil milling, and basic viewport
+simulation mode. Remaining Phase 3 infrastructure (measurement overlays, etc.)
+is not yet started.
 
 The following Phase 3 deliverables have been implemented:
 
@@ -159,7 +156,7 @@ Eleven unit tests in `gouge.rs`, three golden tests in `gouge_golden.rs`
 (clean-path golden snapshot, detection + auto-lift correction, auto-lift
 monotonicity), and frontend component tests in `GougeCheckPanel.test.tsx`.
 
-**Flowline finishing (partial):** the flowline finishing algorithm
+**Flowline finishing:** the flowline finishing algorithm
 (`flowline_finishing_passes` — UV iso-curve sampling along U or V parameter
 lines, surface evaluation and normal offset at each point, boustrophedon
 reordering, run splitting at discontinuities), `FlowlineFinishingParams` data
@@ -168,15 +165,18 @@ variant (`"flowlineFinishing"` serde rename), frontend `FlowlineFinishingEditor.
 (direction selector, stepover, allowance, tool diameter, entry motion controls,
 face selection UI, 32 component tests), `OperationEditorForm.tsx` and
 `OperationListPanel.tsx` wiring (add button with default params),
-`GougeCheckPanel` integration, and command handler entry-motion extraction.
-Ten unit tests in `flowline_finishing.rs` (6
-ungated: `split_runs` helpers, `boustrophedon_reorder`, error-without-shape; 4
+`GougeCheckPanel` integration, command handler entry-motion extraction, and
+planner dispatch (`OperationParams::FlowlineFinishing` match arm in
+`generate_passes`). Ten unit tests in `flowline_finishing.rs` (6 ungated:
+`split_runs` helpers, `boustrophedon_reorder`, error-without-shape; 4
 OCCT-gated: sphere curvature following, box straight lines, U-vs-V direction
-perpendicularity, boustrophedon ordering). Four serde tests in
-`operation.rs`. **Not yet wired:** planner dispatch (returns `InvalidInput`
-error stub); no golden tests.
+perpendicularity, boustrophedon ordering). Four serde tests in `operation.rs`.
+Three golden integration tests (toolpath JSON snapshot on sphere.step with
+`stepover=0.1, direction=U`; G-code golden through the full pipeline via Fanuc
+0i on box.step; structural perpendicularity check confirming U and V directions
+produce cross-pass centroid motion differing by ≥45°).
 
-**Pencil milling (partial):** the pencil milling algorithm
+**Pencil milling:** the pencil milling algorithm
 (`pencil_milling_passes` — UV grid sampling at 50×50 resolution, principal
 curvature evaluation, concave region identification via threshold, BFS
 connected-component tracing, greedy nearest-neighbor cell ordering, surface
@@ -187,15 +187,40 @@ defaulting to `2.0 / tool_diameter`), `OperationParams::PencilMilling` variant
 threshold with "Auto" placeholder, min pass length, allowance, tool diameter,
 entry motion controls, face selection UI, 36 component tests),
 `OperationEditorForm.tsx` and `OperationListPanel.tsx` wiring (add button with
-default params), `GougeCheckPanel` integration, and command handler entry-motion
-extraction. Fourteen unit tests in `pencil_milling.rs` (10 ungated:
+default params), `GougeCheckPanel` integration, command handler entry-motion
+extraction, and planner dispatch (`OperationParams::PencilMilling` match arm in
+`generate_passes`). Fourteen unit tests in `pencil_milling.rs` (10 ungated:
 `trace_connected_components` helpers, `filter_short_passes` helpers,
 error-without-shape; 4 OCCT-gated: box produces zero passes, sphere produces
 passes, higher threshold reduces passes, min-pass-length filtering). Four serde
-tests in `operation.rs`. **Not yet wired:** planner dispatch (returns
-`InvalidInput` error stub); no golden tests.
+tests in `operation.rs`. Three golden integration tests (toolpath JSON snapshot on
+plate_with_holes.step; G-code golden through the full pipeline via Fanuc 0i;
+structural test confirming that a higher curvature threshold reduces pass
+count).
 
-Full test suite: 606 unique Rust lib tests (587 with OCCT + 19 stub-only) + 36 integration tests, 493 frontend tests — all passing.
+**Basic viewport simulation mode:** tool mesh animates along the computed
+toolpath in the Three.js viewport. Five modules implement the feature:
+`simulationPoints.ts` (`extractSimPoints`, `buildCumulativeDistances`,
+`indexAtFraction` — flatten all toolpath segments into a point array and map a
+distance fraction to a point index); `toolMesh.ts` (flat-end mill geometry as a
+Three.js `Group` of flute + shank cylinders with `positionToolMesh` for
+per-frame placement); `simulationHighlight.ts` (glowing-sphere segment
+indicator with `positionHighlight`); `viewportStore` simulation slice
+(`simulationActive`, `simulationPaused`, `simulationPointIndex`,
+`simulationPlaybackSpeed`, `simulationPoints` state; `startSimulation`,
+`pauseSimulation`, `resumeSimulation`, `stopSimulation`,
+`setSimulationPointIndex`, `setSimulationPlaybackSpeed` actions);
+`useSimulationLoop` hook (RAF-driven playback at 50 mm/s ×
+`simulationPlaybackSpeed`, cumulative-distance interpolation, pause/resume,
+external scrub detection via `loopUpdatedIndexRef`, tool mesh and highlight
+lifecycle tied to `simulationActive`); `SimulationControls` HUD component
+(Play/Resume/Pause/Stop buttons, scrub slider, speed selector — all wired to
+`useViewportStore`). Unit and component tests: `simulationPoints.test.ts` (11
+tests), `simulationHighlight.test.ts` (2 tests), `toolMesh.test.ts` (2 tests),
+`viewportStore` simulation slice (21 tests), `useSimulationLoop.test.ts` (11
+tests), `SimulationControls.test.tsx` (8 tests).
+
+Full test suite: 608 unique Rust lib tests (589 with OCCT + 19 stub-only) + 42 integration tests, 548 frontend tests — all passing.
 
 ---
 
@@ -1914,7 +1939,7 @@ All 3 tests gated on `#[cfg(cam_geometry_bindings)]`:
 
 Golden fixture: `tests/fixtures/gouge_check_golden.json`
 
-### Phase 3.9: Flowline finishing — partial (algorithm + data model + frontend)
+### Phase 3.9: Flowline finishing
 
 Flowline finishing follows UV parameter lines of NURBS surfaces, producing
 toolpath rows that naturally curve with surface geometry rather than following
@@ -1957,15 +1982,21 @@ a fixed XY raster direction.
 arm (passes through `link_passes`), and `extract_finishing_allowance` for gouge
 check support are all wired in `commands/toolpath.rs`.
 
+**Planner dispatch** (`f28f034`): `OperationParams::FlowlineFinishing` match
+arm added to `generate_passes` in `planner.rs`; algorithm is now called
+end-to-end through the IPC `calculate_toolpath` command.
+
 **Tests:** 10 unit tests in `flowline_finishing.rs` (6 ungated: `split_runs`
 helpers, `boustrophedon_reorder`, error-without-shape; 4 OCCT-gated: sphere
 curvature following, box straight lines, U-vs-V direction perpendicularity,
 boustrophedon ordering). 4 serde tests in `operation.rs`. 32 frontend tests.
+Three golden integration tests in `flowline_finishing_golden.rs`
+(`#[cfg(cam_geometry_bindings)]`): JSON snapshot on sphere.step with
+`stepover=0.1, direction=U`; G-code golden through the full pipeline via Fanuc
+0i on box.step; structural perpendicularity check confirming U and V directions
+produce cross-pass centroid motion differing by ≥45°.
 
-**Not yet wired:** planner dispatch returns `InvalidInput` error stub
-(algorithm exists but `plan()` does not call it). No golden tests.
-
-### Phase 3.10: Pencil milling — partial (algorithm + data model + frontend)
+### Phase 3.10: Pencil milling
 
 Pencil milling traces concave corners and fillets — regions where two surfaces
 meet at a concavity that a ball-nose tool naturally follows. This targets areas
@@ -2006,14 +2037,58 @@ that roughing and raster passes miss.
 arm (passes through `link_passes`), and `extract_finishing_allowance` for gouge
 check support are all wired in `commands/toolpath.rs`.
 
+**Planner dispatch** (`52fccf6`): `OperationParams::PencilMilling` match arm
+added to `generate_passes` in `planner.rs`; algorithm is now called
+end-to-end through the IPC `calculate_toolpath` command.
+
 **Tests:** 14 unit tests in `pencil_milling.rs` (10 ungated:
 `trace_connected_components` helpers, `filter_short_passes` helpers,
 error-without-shape; 4 OCCT-gated: box produces zero passes, sphere produces
 passes, higher threshold reduces passes, min-pass-length filtering). 4 serde
-tests in `operation.rs`. 36 frontend tests.
+tests in `operation.rs`. 36 frontend tests. Three golden integration tests in
+`pencil_milling_golden.rs` (`#[cfg(cam_geometry_bindings)]`): JSON snapshot on
+plate_with_holes.step; G-code golden through the full pipeline via Fanuc 0i;
+structural test confirming that a higher curvature threshold reduces pass
+count.
 
-**Not yet wired:** planner dispatch returns `InvalidInput` error stub
-(algorithm exists but `plan()` does not call it). No golden tests.
+### Phase 3.11: Basic viewport simulation mode
+
+The Three.js viewport animates the tool mesh along the computed toolpath using
+a requestAnimationFrame loop.
+
+**`simulationPoints.ts`** (`1035e54`): `extractSimPoints` flattens all
+toolpath segments into a flat `[x,y,z]` point array; `buildCumulativeDistances`
+builds a cumulative chord-length table; `indexAtFraction` maps a 0–1 playback
+fraction to a point index. 11 unit tests in `simulationPoints.test.ts`.
+
+**`toolMesh.ts` / `simulationHighlight.ts`** (`69588d8`): `createToolMesh`
+builds a flat-end mill Three.js `Group` (flute + shank cylinders) with
+`positionToolMesh` for per-frame XYZ/orientation placement;
+`createHighlightIndicator` builds a glowing-sphere segment indicator with
+`positionHighlight`. Materials are module-level singletons matching the
+existing viewport pattern. 2 tests in `simulationHighlight.test.ts` and 2
+tests in `toolMesh.test.ts`.
+
+**`viewportStore` simulation slice** (`c991463`): extends `ViewportState` with
+`simulationActive`, `simulationPaused`, `simulationPointIndex`,
+`simulationPlaybackSpeed`, and `simulationPoints` fields; adds
+`startSimulation`, `pauseSimulation`, `resumeSimulation`, `stopSimulation`,
+`setSimulationPointIndex`, and `setSimulationPlaybackSpeed` actions. 21 new
+tests in `viewportStore.test.ts`.
+
+**`useSimulationLoop` hook** (`bee4589`): RAF-driven playback advancing at
+50 mm/s × `simulationPlaybackSpeed` per frame; builds cumulative distance table
+on start; handles pause (cancel RAF, preserve `accumulatedDist`) and resume
+(restart RAF); detects external scrub via `loopUpdatedIndexRef` and resyncs
+`accumulatedDist` to `cumDist[simulationPointIndex]`; manages tool mesh and
+highlight lifecycle (add to scene when `simulationActive` becomes true, remove
+on false or unmount); wired into `Viewport.tsx`. 11 unit tests in
+`useSimulationLoop.test.ts`.
+
+**`SimulationControls` HUD component** (`eb68211`): Play/Resume/Pause/Stop
+buttons, scrub slider, and speed selector, all wired to `useViewportStore`;
+mounted inside the `Viewport` HUD overlay. 8 component tests in
+`SimulationControls.test.tsx`.
 
 ### Remaining Phase 3 roadmap items (not yet implemented)
 
@@ -2025,7 +2100,6 @@ that was not part of the initial scope:
 - Planar face detection (`cg_shape_find_planar_faces`)
 - Tessellation LOD (multiple resolution levels; switch on viewport zoom)
 - 5-axis tool orientation indicators (infrastructure for Phase 4)
-- Viewport: simulation mode (tool mesh moving along path, play/pause/scrub)
 - Viewport: measurement overlays (CSS2DRenderer distance and angle labels)
 - Viewport: toolpath LOD (decimated display path at low zoom)
 
@@ -2049,7 +2123,7 @@ returns `PostProcessorError::NotSupported` when a 5-axis path is encountered.
 | `src/viewport/modelMesh.test.ts` | `buildModelMesh`: returns THREE.Mesh, vertex/index counts, position attribute data, normals, bounding sphere, MeshStandardMaterial, single-triangle edge case — 9 tests |
 | `src/viewport/toolpathLines.test.ts` | `buildToolpathLines`: null input, empty positions, LineSegments instance type, position attribute count, color attribute count, vertexColors on material — 6 tests |
 | `src/store/projectStore.test.ts` | Zustand store: state transitions (setSnapshot), `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock` selectors — 22 tests across 6 describe blocks. Note: `useWcs`, `useNotifications`, and `useSelectedOperationId` selectors are implemented but not directly tested here (covered implicitly via component tests). |
-| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
+| `src/store/viewportStore.test.ts` | Viewport store: initial state (`meshData`, `orbitTarget`, `zoom`, `displayMode`, `projectionMode`), setters, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `setSelectionMode`, `toggleFaceSelection`, `clearFaceSelection`, `setFaceDescriptors`, `setProjectionMode`, `setDisplayMode` — 32 tests; simulation slice: initial state and all 6 action behaviours (`startSimulation`, `pauseSimulation`, `resumeSimulation`, `stopSimulation`, `setSimulationPointIndex`, `setSimulationPlaybackSpeed`) — 21 tests; 53 tests total. Note: `toolpathGeometry` and `setToolpathGeometry` are covered implicitly via Viewport component tests. |
 | `src/components/toolbar/Toolbar.test.tsx` | Toolbar: Open Model (calls openModel, updates meshData+snapshot, cancellation, error+dismiss), New Project (clears meshData, updates snapshot, error), Save Project (calls saveProject, cancellation, error), Open Project (loadProject, model reload, meshData clear, error, getToolpathGeometry for non-stale, skip stale) — 22 tests across 4 describe blocks |
 | `src/components/operations/OperationListPanel.test.tsx` | Operation list: rendering (5), add buttons disabled/enabled/addOperation calls per type/snapshot refresh (profile, pocket, drill, ZLR, adaptive clearing, parallel finishing: disabled/enabled per type, calls addOperation with correct defaults, snapshot refresh; scallop finishing, flowline finishing, and pencil milling add buttons exist in production code but have no dedicated tests in this file), enable/disable toggle (2), delete (2), row selection and OperationEditorForm mount (3), stale indicator (2), Calculate button gates and behaviour (incl. adaptive clearing and parallel finishing enabled when stock is set), calculate loading state (4), reorder (7), progress bar (2) — 51 tests across 10 describe blocks |
 | `src/components/operations/OperationEditorForm.test.tsx` | OperationEditorForm: null state, profile form (depth/stepdown/compensation/entry motions/blank-sends-null), pocket form (entry motions), tool change saves, input blur saves, drill form, geometry section, z_level_roughing form (tool select/depth/stepdown/stepover/geometry/overrides), adaptive_clearing form (tool select/depth/stepdown/optimal load/stepover percent/geometry/overrides), detect holes (button renders/hidden per op type, API call + point population, confirmation dialog, cancel confirmation, empty-result notification, API-error notification), parallelFinishing form (renders required + entry motion fields + overrides + face selection, blur saves, Calculate gate), error handling — 76 tests across 12 describe blocks. Note: the `z_level_finishing`, `scallopFinishing`, `flowlineFinishing`, and `pencilMilling` branches of the editor have no dedicated test describe blocks in this file — they are tested through their individual editor component test files. |
@@ -2058,6 +2132,11 @@ returns `PostProcessorError::NotSupported` when a 5-axis path is encountered.
 | `src/components/operations/FlowlineFinishingEditor.test.tsx` | FlowlineFinishingEditor: rendering (required fields incl. direction selector, entry motion fields, default values, optional fields empty, Select Faces button, stock boundary text, face count display, Clear button present/absent), required field blur saves (stepover, allowance, tool diameter, direction change), entry motion blur saves (arc lead-in value+blank, arc lead-out value+blank, helical radius, helical pitch, ramp angle), face selection (Select Faces calls API, Done Selecting text, saves fingerprints, null when empty, pre-populates saved geometry, Clear → null, count display during mode), validation (stepover min, tool diameter min) — 32 tests across 5 describe blocks |
 | `src/components/operations/PencilMillingEditor.test.tsx` | PencilMillingEditor: rendering (required fields, curvature threshold empty when null + value when set, entry motion fields, default values, optional fields empty, Select Faces button, stock boundary text, face count display, Clear button present/absent), required field blur saves (curvature threshold value+blank→null, min pass length, allowance, tool diameter), entry motion blur saves (arc lead-in value+blank, arc lead-out value+blank, helical radius, helical pitch, ramp angle), face selection (Select Faces calls API, Done Selecting text, saves fingerprints, null when empty, pre-populates saved geometry, Clear → null, count display during mode), validation (curvature threshold min, min pass length min, tool diameter min) — 36 tests across 5 describe blocks |
 | `src/components/operations/GougeCheckPanel.test.tsx` | GougeCheckPanel: button rendering, initial state, check triggers API, pass/fail indicators (green/red), violation list with coordinates and depth, Auto-Lift button present/absent, Auto-Lift triggers re-check, button disabled during check, result cleared on toolpath version change — 11 tests |
+| `src/components/simulation/SimulationControls.test.tsx` | SimulationControls: Play button (idle state), Pause button (playing state), Resume button (paused state), Stop button (playing/paused), scrub slider (wired to setSimulationPointIndex), speed selector (wired to setSimulationPlaybackSpeed) — 8 tests |
+| `src/viewport/simulationPoints.test.ts` | `extractSimPoints` (empty toolpath, single pass, multiple passes, rapid moves excluded), `buildCumulativeDistances` (empty, single point, multiple points), `indexAtFraction` (fraction clamping, interpolation) — 11 tests |
+| `src/viewport/simulationHighlight.test.ts` | `createHighlightIndicator` returns Three.js Mesh, `positionHighlight` updates position — 2 tests |
+| `src/viewport/toolMesh.test.ts` | `createToolMesh` returns Three.js Group with flute and shank children, `positionToolMesh` updates position — 2 tests |
+| `src/viewport/useSimulationLoop.test.ts` | Hook lifecycle: tool mesh added on simulationActive, removed on false/unmount; RAF loop advances pointIndex; pause cancels RAF; resume restarts; scrub resyncs accumulatedDist; playback speed scales advance rate — 11 tests |
 | `src/components/common/Notifications.test.tsx` | Notifications: no toasts when empty, renders on add, renders multiple, click × dismisses, auto-dismisses after 5 s — 5 tests |
 | `src/components/stock/StockPanel.test.tsx` | StockPanel: null state/'No stock defined', stock defined shows values/Clear button, Set Stock submit calls correct payload, Clear Stock calls setStock(null), error notification on Set Stock reject — 5 tests |
 | `src/components/wcs/WCSPanel.test.tsx` | WCSPanel: display (empty / with WCS), Set WCS (update existing / create new), Clear WCS calls `setWcs([])`, error notification — 6 tests |
@@ -2077,30 +2156,32 @@ returns `PostProcessorError::NotSupported` when a 5-axis path is encountered.
 | `src-tauri/tests/parallel_finishing_golden.rs` | Golden-file integration: parallel finishing JSON snapshot (sphere.step, stepover=5, Z-span assertion), G-code golden (box.step, full pipeline → Fanuc 0i), structural assertions (≥2 passes, all Cutting, Z span > 1mm on sphere) (`#[cfg(cam_geometry_bindings)]`) — 3 tests |
 | `src-tauri/tests/scallop_finishing_golden.rs` | Golden-file integration: scallop finishing JSON snapshot (sphere.step, adaptive stepover with curvature variation), G-code golden (box.step, full pipeline → Fanuc 0i), structural properties (all Cutting, Z span > 1mm, variable stepovers) (`#[cfg(cam_geometry_bindings)]`) — 3 tests |
 | `src-tauri/tests/gouge_golden.rs` | Golden-file integration: clean-path golden snapshot (zero violations on parallel finishing passes), detection + auto-lift correction (lowered Z → gouges detected → auto-lift fixes), auto-lift monotonicity (Z values only increase) (`#[cfg(cam_geometry_bindings)]`) — 3 tests |
+| `src-tauri/tests/flowline_finishing_golden.rs` | Golden-file integration: flowline finishing JSON snapshot (sphere.step, stepover=0.1, direction=U), G-code golden (box.step, full pipeline → Fanuc 0i), structural perpendicularity check (U vs V cross-pass centroid motion ≥45° apart) (`#[cfg(cam_geometry_bindings)]`) — 3 tests |
+| `src-tauri/tests/pencil_milling_golden.rs` | Golden-file integration: pencil milling JSON snapshot (plate_with_holes.step), G-code golden (full pipeline → Fanuc 0i), structural test (higher curvature threshold reduces pass count) (`#[cfg(cam_geometry_bindings)]`) — 3 tests |
 | `src-tauri/tests/hole_detection_e2e.rs` | End-to-end hole detection: `detect_holes_returns_expected_geometry` (3 holes from plate fixture, tilted filtered), `detected_holes_produce_valid_drill_toolpath` (detected holes → drill op → toolpath XY match) — 2 OCCT-gated tests |
 | `src-tauri/src/postprocessor/` (inline) | Config parse (incl. `PeckRetractMode` — full/chip_break/absent/invalid), formatter, modal, arcs, block, public API; `program.rs` (9 tests): basic rapid/feed, tool change, program number, line number suppression, percent delimiters, 5-axis error, modal suppression, `per_point_feed_rate_override_emits_distinct_f_words`, `none_feed_rate_override_falls_back_to_toolpath_feed`; `cycles.rs` (10 tests) — `is_drill_cutting_pass` (simple/peck/mixed-XY/wrong-count), `format_cycle_header` (G81/G83), `format_cycle_cancel` (G80/err-when-absent), `cycles_not_supported`, `peck_retract_mode_selects_g83` |
 | `src-tauri/src/commands/` (inline) | All command handlers: file ops (save/load/new/export_gcode round-trip and error tests; 5 `#[tokio::test]` for `open_model` — 3 run with OCCT (file-not-found, full mesh load, shape stored) + 2 only run without OCCT (geometry-error, shape absent)), tool CRUD, stock/WCS, operations CRUD, project snapshot (snapshot fields, camelCase serialization, real `needs_recalculate` comparison), toolpath (calculate + cache populate + progress events, get_geometry, G-code preview), geometry (get_model_faces: camelCase, no-model, no-shape, OCCT integration; detect_holes: camelCase, no-model, no-shape, OCCT integration with plate fixture); plus three OCCT-gated tests in `commands/toolpath.rs`: pocket toolpath end-to-end, geometry-selection boundary clamping, and invalid-fingerprint error; plus four rest-machining error-path tests: no reference ID → InvalidInput, reference not found → NotFound, wrong operation type → InvalidInput, reference not yet calculated → InvalidInput |
 | `src-tauri/src/models/` (inline) | Tool, stock, WCS, operation — serde round-trips and field invariants (profile/pocket/drill/zlr/adaptive_clearing/parallel_finishing/flowline_finishing/pencil_milling op round-trips; `operation_type_field_at_top_level`; `operation_fields_are_camel_case`; `operation_enabled_defaults_to_true_when_absent`); `drill_peck_depth_absent_when_none`; `DrillPoint` round-trip/non-empty/default-empty; `Operation` feed/speed override absent-None/present-set/default-None; `CacheState` defaults-when-absent/round-trip; `ZLevelRoughingParams` round-trip + type-field assertion; `AdaptiveClearingParams` round-trip + type-field assertion; `ParallelFinishingParams` round-trip + camelCase type assertion; `ScallopFinishingParams` round-trip + camelCase type assertion; `FlowlineDirection` round-trip + `FlowlineFinishingParams` round-trip + geometry-absent-when-None + defaults-absent-in-old-JSON (4 tests); `PencilMillingParams` round-trip + optional-fields-absent-when-None + Operation round-trip + defaults-absent-in-minimal-JSON (4 tests); geometry field serde for Pocket/Profile/ZLevelRoughing (absent-when-None, present-when-set, round-trip with fingerprints, defaults-absent-in-old-JSON — 12 tests) |
-| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; CutPoint `feed_rate_override` serialization round-trip + omit-when-None; 10 tests), `cache.rs` key stability + sensitivity (4 tests), `arc_fitting.rs` 18 tests (known circle CW/CCW, mixed straight+curved, tolerance boundary inside/outside, min-segment count, Z-change breaks, full 360°, existing arc passthrough, collinear rejection, empty/single-point, rapid/dwell passthrough, center+end correctness, dwell interruption, two arcs different radii), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 15 total (14 with OCCT, 11 without): stats non-zero for Pocket/Profile (gated) + profile-error without bindings (not-gated, only runs without OCCT) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock (gated) + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput + adaptive-clearing-produces-passes-and-stats (gated) + `plan_parallel_finishing_returns_error_without_shape` (ungated) + `plan_scallop_finishing_returns_error_without_shape` (ungated), `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse), `operations/zlevel_finishing.rs` 3 ungated param validation tests + 8 OCCT-gated algorithm tests + 3 OCCT-gated rest machining tests (14 total), `rest.rs` 5 rest region computation tests (no roughing → full target, full coverage → empty, partial coverage → remainder, multiple roughing contours unioned, large tool misses corners), `operations/engagement.rs` 15 tests: 10 ungated (fast-path tool outside/inside, empty boundary, zero radius, circle polygon vertex count/on-circle, point-to-segment, point-in-polygon inside/outside, polygon area) + 5 OCCT-gated detailed-path tests (tool nearly inside, barely overlapping, straight wall, outside corner, half-in-half-out), `operations/adaptive_clearing.rs` 25 tests: parameter validation (10), feed rate clamping (4), algorithm tests gated on `cam_geometry_bindings` (11: trochoidal at corners, linear in open area, collapsed region, narrow slot, Z value consistency, feed rate range/variation, multi-Z stepdown levels/floor, pass count bounds, cutting length bounds), `operations/parallel_finishing.rs` 1 ungated test (returns_error_when_shape_is_none) + 6 OCCT-gated algorithm tests (flat_surface_basic, default_small_stepover_produces_passes, stepover_scaling, allowance_offset, curved_surface_sphere, direction_45_degrees), `operations/scallop_finishing.rs` 11 tests: 4 ungated compute_stepover tests (flat_surface_stepover, high_curvature_smaller_stepover, low_curvature_larger_stepover, zero_scallop_height_returns_zero) + 1 ungated error test (returns_error_when_shape_is_none, `cfg(not(cam_geometry_bindings))`) + 6 OCCT-gated algorithm tests (flat_surface_constant_stepover, sphere_surface_variable_stepover, stepover_bounds_enforcement, direction_angle_rotates_pattern, allowance_offset_shifts_z, degenerate_small_scallop_no_panic), `operations/flowline_finishing.rs` 10 tests: 6 ungated (split_runs_no_gap_single_run, split_runs_gap_in_middle, split_runs_all_gaps, split_runs_empty, boustrophedon_alternates_direction, returns_error_when_shape_is_none) + 4 OCCT-gated (sphere_passes_follow_curvature, box_straight_evenly_spaced_lines, u_vs_v_direction_perpendicular, boustrophedon_ordering_in_output), `operations/pencil_milling.rs` 14 tests: 10 ungated (trace_single_blob, trace_multiple_blobs, trace_diagonal_not_connected, trace_empty_grid, trace_all_true_grid, trace_empty_rows, filter_removes_short_keeps_long, filter_keeps_all_when_none_short, filter_removes_all_when_all_short, returns_error_when_shape_is_none) + 4 OCCT-gated (box_produces_zero_passes, sphere_produces_passes, higher_threshold_reduces_passes, min_pass_length_filters_short_passes), `gouge.rs` 11 tests: serde round-trips (2) + camelCase field naming (1) + passed-when-empty (1) + 2 stub error tests (ungated) + 5 OCCT-gated algorithm tests (clean_path_no_gouges, known_gouges_detected, auto_lift_fixes_gouges, ball_vs_flat_tool_type, allowance_respected) |
+| `src-tauri/src/toolpath/` (inline) | `types.rs` serde (Toolpath/MoveKind/PassKind/ToolpathStats/LineGeometryData round-trips and tag/camelCase assertions; CutPoint `feed_rate_override` serialization round-trip + omit-when-None; 10 tests), `cache.rs` key stability + sensitivity (4 tests), `arc_fitting.rs` 18 tests (known circle CW/CCW, mixed straight+curved, tolerance boundary inside/outside, min-segment count, Z-change breaks, full 360°, existing arc passthrough, collinear rejection, empty/single-point, rapid/dwell passthrough, center+end correctness, dwell interruption, two arcs different radii), `linking.rs` 34 tests total — 3 pass-wrapping (sequence, rapid moves, single-point skip) + 31 entry-motion: 8 helical (Z monotone, XY on circle, pitch, fallback, closed-contour integration, cleanup arc, radius-too-large fallback, degenerate-radius fallback) + 12 ramp (Z span, Z monotone, horizontal distance, fallback, short-segment clamp, angle≥90, inverted-Z produces no moves, zero-length, open-contour integration, non-clamped, invalid-angle plunge-fallback, ramp+arc-combination continuity) + 11 arc lead-in/out (None straight, Some arc, last-move lands at cut point, first-move outside, all Feed, departure None/Some/Feed, linking-descent-to-arc-start, lift-from-arc-end, closed-contour-no-ramp), `planner.rs` 17 total (16 with OCCT, 13 without): stats non-zero for Pocket/Profile (gated) + profile-error without bindings (not-gated, only runs without OCCT) + feed/speed override/fallback (6: spindle/feed × override/tool-default/unset) + geometry-none-uses-stock (gated) + geometry-some-no-shape-error + ZLR-invalid-params-returns-InvalidInput + adaptive-clearing-produces-passes-and-stats (gated) + `plan_parallel_finishing_returns_error_without_shape` (ungated) + `plan_scallop_finishing_returns_error_without_shape` (ungated) + `plan_flowline_finishing_returns_error_without_shape` (ungated) + `plan_pencil_milling_returns_error_without_shape` (ungated), `operations/pocket.rs` Z-levels/output/error, `operations/profile.rs` Z-levels/compensation/collapse/Left-vs-Center-differ (gated) + Center-uses-raw-boundary (ungated) + 8 stepdown tests (None→single-pass, Some(0)→single, Some(-1)→single, JSON-absent, backward-compat, None→1 Z-level, stepdown=2/depth=8→4 passes, stepdown=3/depth=8→3 passes floor-clamped), `operations/drill.rs` empty/bad-peck errors + non-peck geometry + peck Z-levels + multi-hole ordering + `test_sort_single` + `test_sort_grid`, `operations/zlevel_roughing.rs` 3 ungated param validation tests (zero stepdown/depth/out-of-range stepover) + 6 OCCT-gated tests (produces passes, Z-level span, floor depth guarantee, stock boundary Z-level count, geometry section boundary, tool-too-large collapse), `operations/zlevel_finishing.rs` 3 ungated param validation tests + 8 OCCT-gated algorithm tests + 3 OCCT-gated rest machining tests (14 total), `rest.rs` 5 rest region computation tests (no roughing → full target, full coverage → empty, partial coverage → remainder, multiple roughing contours unioned, large tool misses corners), `operations/engagement.rs` 15 tests: 10 ungated (fast-path tool outside/inside, empty boundary, zero radius, circle polygon vertex count/on-circle, point-to-segment, point-in-polygon inside/outside, polygon area) + 5 OCCT-gated detailed-path tests (tool nearly inside, barely overlapping, straight wall, outside corner, half-in-half-out), `operations/adaptive_clearing.rs` 25 tests: parameter validation (10), feed rate clamping (4), algorithm tests gated on `cam_geometry_bindings` (11: trochoidal at corners, linear in open area, collapsed region, narrow slot, Z value consistency, feed rate range/variation, multi-Z stepdown levels/floor, pass count bounds, cutting length bounds), `operations/parallel_finishing.rs` 1 ungated test (returns_error_when_shape_is_none) + 6 OCCT-gated algorithm tests (flat_surface_basic, default_small_stepover_produces_passes, stepover_scaling, allowance_offset, curved_surface_sphere, direction_45_degrees), `operations/scallop_finishing.rs` 11 tests: 4 ungated compute_stepover tests (flat_surface_stepover, high_curvature_smaller_stepover, low_curvature_larger_stepover, zero_scallop_height_returns_zero) + 1 ungated error test (returns_error_when_shape_is_none, `cfg(not(cam_geometry_bindings))`) + 6 OCCT-gated algorithm tests (flat_surface_constant_stepover, sphere_surface_variable_stepover, stepover_bounds_enforcement, direction_angle_rotates_pattern, allowance_offset_shifts_z, degenerate_small_scallop_no_panic), `operations/flowline_finishing.rs` 10 tests: 6 ungated (split_runs_no_gap_single_run, split_runs_gap_in_middle, split_runs_all_gaps, split_runs_empty, boustrophedon_alternates_direction, returns_error_when_shape_is_none) + 4 OCCT-gated (sphere_passes_follow_curvature, box_straight_evenly_spaced_lines, u_vs_v_direction_perpendicular, boustrophedon_ordering_in_output), `operations/pencil_milling.rs` 14 tests: 10 ungated (trace_single_blob, trace_multiple_blobs, trace_diagonal_not_connected, trace_empty_grid, trace_all_true_grid, trace_empty_rows, filter_removes_short_keeps_long, filter_keeps_all_when_none_short, filter_removes_all_when_all_short, returns_error_when_shape_is_none) + 4 OCCT-gated (box_produces_zero_passes, sphere_produces_passes, higher_threshold_reduces_passes, min_pass_length_filters_short_passes), `gouge.rs` 11 tests: serde round-trips (2) + camelCase field naming (1) + passed-when-empty (1) + 2 stub error tests (ungated) + 5 OCCT-gated algorithm tests (clean_path_no_gouges, known_gouges_detected, auto_lift_fixes_gouges, ball_vs_flat_tool_type, allowance_respected) |
 | `src-tauri/src/project/` (inline) | `serialization.rs` (13 tests): multiple round-trips (with/without model, with tool, with stock+WCS, with operations); schema version rejection (`load_rejects_unknown_schema_version`); graceful missing file (`load_fails_gracefully_on_missing_file`); ZIP structure validation (`save_creates_valid_zip`); backward-compat load without `tools` field (`load_phase0_schema_without_tools_field_succeeds`); toolpath ZIP entry write (positive + negative); round-trip with valid toolpath; graceful load with missing toolpath entry |
 | `src-tauri/src/geometry/` (inline) | `clipper.rs`: 4 OCCT-gated tests (offset shrinks square, offset collapse error, boolean difference subtracts overlap, boolean full-cover error) + 2 stub tests (only run without OCCT) — 6 unique tests (4 with OCCT, 2 without); `safe.rs`: GeometryError Display + externally-tagged serde serialization (8), MeshData accessibility + serialization + FaceGroup camelCase (3), OcctShape/Mesh Send + null-drop safety (4), loader stubs return correct error variants (3: STL/STEP/IGES), OCCT-gated fixture load + bounding-box + tessellate (3), `section_at_z` stub returns NotImplemented (only runs without OCCT) + box midheight returns single loop (gated) — 25 unique tests (22 with OCCT, 21 without); `importer.rs`: missing file + unknown/no/uppercase extension dispatch (7 ungated) + OCCT-gated fixture load and `import_with_shape` (2 gated) — 9 tests; `faces.rs`: fingerprint determinism + fingerprint sensitivity + stable known value (3 ungated) + two stub-path error tests (only run without OCCT) — 5 unique tests (3 with OCCT, 5 without); `holes.rs`: plate fixture 3-hole detection with centers/radii/depths/through-flags (OCCT-gated) + stub returns NotImplemented (only runs without OCCT) — 2 unique tests (1 with OCCT, 1 without); `surface.rs`: 7 stub tests (shape_faces, face_surface_type, face_uv_bounds, face_eval_point, face_eval_normal, face_project_point, face_eval_curvature — only run without OCCT) + 6 OCCT-gated integration tests (shape_faces_box_six_faces, face_uv_bounds_ordered, face_eval_normal_is_unit_length, face_project_point_round_trip, face_eval_curvature_sphere_constant, face_eval_curvature_box_flat) — 13 unique tests (6 with OCCT, 7 without); `mod.rs`: FFI constant sizes and enum discriminants incl. `cg_hole_info_size` (18 tests) |
 | `src-tauri/src/` (inline) | `error.rs`: all AppError variant serde format tests incl. `InvalidInput` + adjacently-tagged encoding + Display (11 tests); `state.rs`: Project/AppState defaults and `RwLock` write access (7 tests); `lib.rs`: 2 placeholder tests (sanity arithmetic + serde round-trip) |
 
-Golden-file tests cover the post-processor output stage (G-code) and eight of
-ten CAM algorithm output stages (pocket, profile, drill, Z-Level Roughing,
-Z-Level Finishing, adaptive clearing, parallel finishing, and scallop finishing
-toolpath JSON; flowline finishing and pencil milling do not yet have golden
-tests). Gouge detection also has a golden test. The pocket, profile,
-ZLR, ZLF, adaptive clearing, parallel finishing, scallop finishing, and gouge
+Golden-file tests cover the post-processor output stage (G-code) and all ten
+CAM algorithm output stages (pocket, profile, drill, Z-Level Roughing,
+Z-Level Finishing, adaptive clearing, parallel finishing, scallop finishing,
+flowline finishing, and pencil milling toolpath JSON). Gouge detection also has
+a golden test. The pocket, profile, ZLR, ZLF, adaptive clearing, parallel
+finishing, scallop finishing, flowline finishing, pencil milling, and gouge
 golden tests are gated on `cam_geometry_bindings`; the drill algorithm golden
 test is ungated since drilling requires no geometry bindings. The G-code golden
 tests for simple pocket (fanuc-0i and linuxcnc), Z-Level Finishing (fanuc-0i),
-adaptive clearing (fanuc-0i), parallel finishing (fanuc-0i), and scallop
-finishing (fanuc-0i) are gated on `cam_geometry_bindings` as they generate
-toolpaths through the full planner pipeline including arc fitting; the drill
-cycle golden tests (fanuc-0i, linuxcnc, grbl) remain ungated. The
-`fanuc_0i_pocket_contains_arcs` regression test verifies that arc fitting
-produces G02/G03 commands in the output.
+adaptive clearing (fanuc-0i), parallel finishing (fanuc-0i), scallop finishing
+(fanuc-0i), flowline finishing (fanuc-0i), and pencil milling (fanuc-0i) are
+gated on `cam_geometry_bindings` as they generate toolpaths through the full
+planner pipeline including arc fitting; the drill cycle golden tests (fanuc-0i,
+linuxcnc, grbl) remain ungated. The `fanuc_0i_pocket_contains_arcs` regression
+test verifies that arc fitting produces G02/G03 commands in the output.
 
 ---
 
@@ -2200,6 +2281,10 @@ produces G02/G03 commands in the output.
 | `tests/fixtures/scallop_finishing_golden.nc` | Golden G-code for Fanuc 0i scallop finishing (box.step, full pipeline with arc fitting; 12,913 lines) |
 | `tests/fixtures/gouge_check_golden.json` | Golden gouge check result fixture |
 | `tests/fixtures/plate_with_holes.step` | 100×100×20 mm plate with 4 holes (2 through, 1 blind, 1 tilted) for hole detection tests |
+| `tests/fixtures/flowline_finishing_golden.json` | Golden flowline finishing output (sphere.step, stepover=0.1, direction=U) |
+| `tests/fixtures/flowline_finishing_golden.nc` | Golden G-code for Fanuc 0i flowline finishing (box.step, full pipeline with arc fitting) |
+| `tests/fixtures/pencil_milling_golden.json` | Golden pencil milling output (plate_with_holes.step) |
+| `tests/fixtures/pencil_milling_golden.nc` | Golden G-code for Fanuc 0i pencil milling (full pipeline with arc fitting) |
 
 ### TypeScript frontend
 | File | Purpose |
@@ -2212,11 +2297,16 @@ produces G02/G03 commands in the output.
 | `src/api/geometry.ts` | `getModelFaces()` and `detectHoles()` IPC wrappers |
 | `src/api/toolpath.ts` | `listPostProcessors`, `getGcodePreview`, `exportGcode`, `calculateToolpath`, `getToolpathGeometry`, `listenToolpathProgress`, `checkGouge`, `autoLift` |
 | `src/store/projectStore.ts` | Project Zustand store; selector hooks: `useModelPath`, `useModelChecksum`, `useOperations`, `useTools`, `useStock`, `useWcs`, `useNotifications`, `useSelectedOperationId`, `usePushNotification` |
-| `src/store/viewportStore.ts` | Viewport Zustand store (incl. `meshData`, `orbitTarget`, `zoom`, `toolpathGeometry`, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `projectionMode`, `displayMode`) |
+| `src/store/viewportStore.ts` | Viewport Zustand store (incl. `meshData`, `orbitTarget`, `zoom`, `toolpathGeometry`, `selectionMode`, `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`, `projectionMode`, `displayMode`); simulation slice: `simulationActive`, `simulationPaused`, `simulationPointIndex`, `simulationPlaybackSpeed`, `simulationPoints` state and six action dispatchers |
 | `src/viewport/scene.ts` | Three.js renderer + scene + `toolpathGroup` + `setToolpathLines()` + `setOrbitEnabled()` + camera getter; projection toggle (`toggleProjection`, `getProjectionMode`); standard view snaps (`snapTop/Front/Right/Isometric`) with Tween animation; display mode (`setDisplayMode`, `setModelMesh`) |
 | `src/viewport/controls.ts` | `createAxisTriad()` — RGB ArrowHelper group (X=red, Y=green, Z=blue) added to the main scene |
 | `src/viewport/modelMesh.ts` | `buildModelMesh(meshData)` → `ModelMeshResult { mesh: THREE.Mesh, boundingSphere }` |
 | `src/viewport/toolpathLines.ts` | `buildToolpathLines()` → `THREE.LineSegments` from `LineGeometryData` |
+| `src/viewport/simulationPoints.ts` | `extractSimPoints`, `buildCumulativeDistances`, `indexAtFraction` — flatten toolpath segments into point array and map distance fraction to index |
+| `src/viewport/toolMesh.ts` | `createToolMesh` (flat-end mill Group), `positionToolMesh` — per-frame tool placement |
+| `src/viewport/simulationHighlight.ts` | `createHighlightIndicator` (glowing sphere), `positionHighlight` — active segment marker |
+| `src/viewport/useSimulationLoop.ts` | RAF-driven simulation playback hook; manages tool mesh and highlight lifecycle, cumulative-distance interpolation, pause/resume, external scrub detection |
+| `src/components/simulation/SimulationControls.tsx` | Play/Resume/Pause/Stop transport buttons, scrub slider, speed selector — wired to `useViewportStore`; mounted in Viewport HUD overlay |
 | `src/components/layout/AppShell.tsx` | Top-level layout |
 | `src/components/operations/OperationListPanel.tsx` | Operation list: add/delete/toggle/reorder operations (incl. Z-Level Roughing, Z-Level Finishing, Adaptive Clearing, Parallel Finishing, Scallop Finishing, Flowline Finishing, and Pencil Milling), row selection, stale indicator, Calculate button with loading state, `OperationEditorForm` mount |
 | `src/components/operations/OperationEditorForm.tsx` | Pocket, profile, drill, z_level_roughing, z_level_finishing, adaptive_clearing, parallelFinishing, scallopFinishing, flowlineFinishing, and pencilMilling parameter forms; feed/speed override inputs; dynamic drill-points table; geometry section; five optional entry motion inputs on Pocket, Profile, Z-Level Finishing, and Adaptive Clearing forms; Detect Holes button (drill only); rest machining section with reference operation dropdown (z_level_finishing only); adaptive clearing optimal load and stepover controls; parallelFinishing renders `ParallelFinishingEditor`; scallopFinishing renders `ScallopFinishingEditor`; flowlineFinishing renders `FlowlineFinishingEditor`; pencilMilling renders `PencilMillingEditor`; all four surface finishing editors have `GougeCheckPanel` below |
