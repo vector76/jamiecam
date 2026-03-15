@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, FlowlineFinishingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing') {
     const tool = tools[0]
     if (!tool) return
 
@@ -170,6 +170,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'scallopFinishing',
         params: { targetScallopHeight: 0.01, minStepover: 0.1, maxStepover: 1.0, directionAngleDeg: 0, allowance: 0, toolRadius: 3.0 } as ScallopFinishingParams,
+      }
+    } else if (type === 'flowlineFinishing') {
+      input = {
+        name: 'Flowline Finishing',
+        toolId: tool.id,
+        type: 'flowlineFinishing',
+        params: { stepover: 0.1, direction: 'u', allowance: 0, toolDiameter: 6.0 } as FlowlineFinishingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -289,6 +296,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Scallop Finishing
+        </button>
+        <button
+          onClick={() => void handleAdd('flowlineFinishing')}
+          disabled={noTools}
+        >
+          + Flowline Finishing
         </button>
       </div>
     </div>
