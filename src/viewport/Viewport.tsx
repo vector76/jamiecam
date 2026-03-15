@@ -14,6 +14,7 @@ import { buildToolpathLines } from './toolpathLines'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 import type { DisplayMode } from '../store/viewportStore'
+import { SimulationControls } from '../components/simulation/SimulationControls'
 
 interface ViewportProps {
   style?: React.CSSProperties
@@ -301,6 +302,7 @@ export function Viewport({ style }: ViewportProps) {
           {projectionMode === 'perspective' ? 'Perspective' : 'Orthographic'}
         </button>
         <select
+          aria-label="Display mode"
           value={displayMode}
           onChange={(e) => setDisplayMode(e.target.value as DisplayMode)}
           style={{ padding: '2px 4px', fontSize: 12, cursor: 'pointer' }}
@@ -311,6 +313,7 @@ export function Viewport({ style }: ViewportProps) {
           <option value="transparent">Transparent</option>
         </select>
       </div>
+      <SimulationControls />
     </div>
   )
 }

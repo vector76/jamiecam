@@ -343,13 +343,13 @@ describe('Viewport — projection mode sync', () => {
 describe('Viewport — display mode', () => {
   it('renders a select with default value shaded', () => {
     render(<Viewport />)
-    const select = screen.getByRole('combobox') as HTMLSelectElement
+    const select = screen.getByRole('combobox', { name: 'Display mode' }) as HTMLSelectElement
     expect(select.value).toBe('shaded')
   })
 
   it('renders all four display mode options', () => {
     render(<Viewport />)
-    const select = screen.getByRole('combobox')
+    const select = screen.getByRole('combobox', { name: 'Display mode' })
     expect(select).toContainElement(screen.getByRole('option', { name: 'Shaded' }))
     expect(select).toContainElement(screen.getByRole('option', { name: 'Shaded + Edges' }))
     expect(select).toContainElement(screen.getByRole('option', { name: 'Wireframe' }))
@@ -359,7 +359,7 @@ describe('Viewport — display mode', () => {
   it('changing the select updates displayMode in the store', async () => {
     render(<Viewport />)
     await act(async () => {
-      fireEvent.change(screen.getByRole('combobox'), { target: { value: 'wireframe' } })
+      fireEvent.change(screen.getByRole('combobox', { name: 'Display mode' }), { target: { value: 'wireframe' } })
     })
     expect(useViewportStore.getState().displayMode).toBe('wireframe')
   })
