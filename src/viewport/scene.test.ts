@@ -59,6 +59,19 @@ vi.mock('three/addons/controls/OrbitControls.js', () => ({
   },
 }))
 
+// Mock CSS2DRenderer to avoid DOM/layout requirements.
+vi.mock('three/examples/jsm/renderers/CSS2DRenderer.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('three/examples/jsm/renderers/CSS2DRenderer.js')>()
+
+  class MockCSS2DRenderer {
+    domElement = document.createElement('div')
+    setSize = vi.fn()
+    render = vi.fn()
+  }
+
+  return { ...actual, CSS2DRenderer: vi.fn(() => new MockCSS2DRenderer()) }
+})
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Create a canvas and a container whose client dimensions are 800 × 600. */
@@ -640,5 +653,55 @@ describe('SceneManager — setToolpathData', () => {
     mgr.setToolpathData(null)
     const group = priv<THREE.Group>(mgr, 'toolpathGroup')
     expect(group.children.length).toBe(0)
+  })
+})
+
+// ── measurement labels & markers ──────────────────────────────────────────────
+
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import type { Measurement } from '../store/viewportStore'
+
+describe('SceneManager — measurement overlay', () => {
+  let mgr: SceneManager
+
+  beforeEach(() => {
+    const { canvas, container } = makeElements()
+    mgr = new SceneManager(canvas, container)
+  })
+
+  afterEach(() => mgr.dispose())
+
+  it('updateMeasurementLabels([]) leaves only measurementMarkersGroup in measurementGroup', () => {
+    mgr.updateMeasurementLabels([])
+    const group = priv<THREE.Group>(mgr, 'measurementGroup')
+    const markersGroup = priv<THREE.Group>(mgr, 'measurementMarkersGroup')
+    expect(group.children.length).toBe(1)
+    expect(group.children[0]).toBe(markersGroup)
+  })
+
+  it('updateMeasurementLabels with one measurement adds one CSS2DObject to measurementGroup', () => {
+    const m: Measurement = {
+      points: [[0, 0, 0], [1, 0, 0]],
+      value: 1,
+      label: '1.0 mm',
+      anchor: [0.5, 0, 0],
+    }
+    mgr.updateMeasurementLabels([m])
+    const group = priv<THREE.Group>(mgr, 'measurementGroup')
+    const css2dChildren = group.children.filter((c) => c instanceof CSS2DObject)
+    expect(css2dChildren.length).toBe(1)
+  })
+
+  it('updateMeasurementPoints with two points adds two meshes to measurementMarkersGroup', () => {
+    mgr.updateMeasurementPoints([[0, 0, 0], [1, 1, 1]])
+    const markersGroup = priv<THREE.Group>(mgr, 'measurementMarkersGroup')
+    expect(markersGroup.children.length).toBe(2)
+  })
+
+  it('updateMeasurementPoints([]) clears measurementMarkersGroup', () => {
+    mgr.updateMeasurementPoints([[0, 0, 0], [1, 1, 1]])
+    mgr.updateMeasurementPoints([])
+    const markersGroup = priv<THREE.Group>(mgr, 'measurementMarkersGroup')
+    expect(markersGroup.children.length).toBe(0)
   })
 })

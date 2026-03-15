@@ -43,6 +43,8 @@ export function Viewport({ style }: ViewportProps) {
   const measurementMode = useViewportStore((state) => state.measurementMode)
   const setMeasurementMode = useViewportStore((state) => state.setMeasurementMode)
   const clearMeasurements = useViewportStore((state) => state.clearMeasurements)
+  const measurements = useViewportStore((state) => state.measurements)
+  const measurementPoints = useViewportStore((state) => state.measurementPoints)
 
   // Mutable refs to avoid stale closures in mount-registered event handlers.
   const selectionModeRef = useRef(selectionMode)
@@ -234,6 +236,16 @@ export function Viewport({ style }: ViewportProps) {
   useEffect(() => {
     mgrRef.current?.setDisplayMode(displayMode)
   }, [displayMode])
+
+  // ── Measurement labels sync ────────────────────────────────────────────────
+  useEffect(() => {
+    mgrRef.current?.updateMeasurementLabels(measurements)
+  }, [measurements])
+
+  // ── Measurement points sync ────────────────────────────────────────────────
+  useEffect(() => {
+    mgrRef.current?.updateMeasurementPoints(measurementPoints)
+  }, [measurementPoints])
 
   // ── Highlight rebuild effect ───────────────────────────────────────────────
   useEffect(() => {

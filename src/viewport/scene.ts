@@ -12,8 +12,9 @@
 
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import * as TWEEN from '@tweenjs/tween.js'
-import type { DisplayMode } from '../store/viewportStore'
+import type { DisplayMode, Measurement } from '../store/viewportStore'
 import { decimateToolpath, LOD_MAX_DISPLAY_POINTS, LOD_THRESHOLDS } from './decimateToolpath'
 import { buildToolpathLines } from './toolpathLines'
 import type { LineGeometryData } from '../api/types'
@@ -23,6 +24,9 @@ export class SceneManager {
   readonly scene: THREE.Scene
 
   private renderer: THREE.WebGLRenderer
+  private css2dRenderer: CSS2DRenderer
+  private measurementGroup: THREE.Group
+  private measurementMarkersGroup: THREE.Group
   private perspectiveCamera: THREE.PerspectiveCamera
   private orthographicCamera: THREE.OrthographicCamera
   private controls: OrbitControls
@@ -45,6 +49,15 @@ export class SceneManager {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, canvas })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(container.clientWidth, container.clientHeight)
+
+    // ── CSS2DRenderer ─────────────────────────────────────────────────────
+    this.css2dRenderer = new CSS2DRenderer()
+    this.css2dRenderer.setSize(container.clientWidth, container.clientHeight)
+    this.css2dRenderer.domElement.style.position = 'absolute'
+    this.css2dRenderer.domElement.style.top = '0'
+    this.css2dRenderer.domElement.style.left = '0'
+    this.css2dRenderer.domElement.style.pointerEvents = 'none'
+    container.appendChild(this.css2dRenderer.domElement)
 
     // ── Cameras (both Z-up) ───────────────────────────────────────────────
     const aspect = container.clientWidth / Math.max(container.clientHeight, 1)
@@ -86,6 +99,14 @@ export class SceneManager {
     this.toolpathGroup.name = 'ToolpathGroup'
     this.scene.add(this.toolpathGroup)
 
+    this.measurementGroup = new THREE.Group()
+    this.measurementGroup.name = 'MeasurementGroup'
+    this.scene.add(this.measurementGroup)
+
+    this.measurementMarkersGroup = new THREE.Group()
+    this.measurementMarkersGroup.name = 'MeasurementMarkersGroup'
+    this.measurementGroup.add(this.measurementMarkersGroup)
+
     this._tweenGroup = new TWEEN.Group()
 
     // ── Three-point lighting (intensities from docs/viewport-design.md) ───
@@ -124,6 +145,7 @@ export class SceneManager {
     this.orthographicCamera.updateProjectionMatrix()
 
     this.renderer.setSize(w, h)
+    this.css2dRenderer.setSize(w, h)
   }
 
   private _activeCamera(): THREE.PerspectiveCamera | THREE.OrthographicCamera {
@@ -137,6 +159,7 @@ export class SceneManager {
     this._tweenGroup.update(performance.now())
     this.controls.update()
     this.renderer.render(this.scene, this._activeCamera())
+    this.css2dRenderer.render(this.scene, this._activeCamera())
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -235,6 +258,7 @@ export class SceneManager {
     this.resizeObserver.disconnect()
     this.controls.dispose()
     this.renderer.dispose()
+    this.css2dRenderer.domElement.parentElement?.removeChild(this.css2dRenderer.domElement)
   }
 
   /**
@@ -442,6 +466,41 @@ export class SceneManager {
     this.toolpathGroup.clear()
     if (lines !== null) {
       this.toolpathGroup.add(lines)
+    }
+  }
+
+  /** Sync CSS2DObject labels for completed measurements. */
+  updateMeasurementLabels(measurements: Measurement[]): void {
+    for (const child of [...this.measurementGroup.children]) {
+      if (child instanceof CSS2DObject) {
+        this.measurementGroup.remove(child)
+      }
+    }
+    for (const measurement of measurements) {
+      const div = document.createElement('div')
+      div.style.color = 'white'
+      div.style.background = 'rgba(0,0,0,0.6)'
+      div.style.padding = '4px'
+      div.style.borderRadius = '4px'
+      div.style.pointerEvents = 'none'
+      div.style.fontSize = '12px'
+      div.textContent = measurement.label
+      const label = new CSS2DObject(div)
+      label.position.set(...measurement.anchor)
+      this.measurementGroup.add(label)
+    }
+  }
+
+  /** Sync sphere markers for in-progress measurement click points. */
+  updateMeasurementPoints(points: [number, number, number][]): void {
+    this.measurementMarkersGroup.clear()
+    for (const point of points) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ffff }),
+      )
+      mesh.position.set(...point)
+      this.measurementMarkersGroup.add(mesh)
     }
   }
 }
