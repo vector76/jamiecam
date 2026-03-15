@@ -49,9 +49,10 @@ vi.mock('three/addons/controls/OrbitControls.js', () => ({
     enableDamping = false
     enablePan = false
     screenSpacePanning = true
-    target = { x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() }
+    target = { x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn(), distanceTo: vi.fn(() => 500) }
     update = vi.fn()
     dispose = vi.fn()
+    addEventListener = vi.fn()
   },
 }))
 

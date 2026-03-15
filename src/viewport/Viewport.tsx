@@ -10,7 +10,6 @@ import type React from 'react'
 import * as THREE from 'three'
 import { SceneManager } from './scene'
 import { buildModelMesh } from './modelMesh'
-import { buildToolpathLines } from './toolpathLines'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 import type { DisplayMode } from '../store/viewportStore'
@@ -25,7 +24,6 @@ export function Viewport({ style }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
-  const toolpathLinesRef = useRef<THREE.LineSegments | null>(null)
   const highlightMeshRef = useRef<THREE.Mesh | null>(null)
 
   useSimulationLoop(mgrRef)
@@ -149,9 +147,7 @@ export function Viewport({ style }: ViewportProps) {
   useEffect(() => {
     const mgr = mgrRef.current
     if (!mgr) return
-    const lines = buildToolpathLines(toolpathGeometry)
-    toolpathLinesRef.current = lines
-    mgr.setToolpathLines(lines)
+    mgr.setToolpathData(toolpathGeometry)
   }, [toolpathGeometry])
 
   // ── Mesh update ────────────────────────────────────────────────────────────

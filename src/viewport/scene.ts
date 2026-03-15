@@ -14,6 +14,9 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import * as TWEEN from '@tweenjs/tween.js'
 import type { DisplayMode } from '../store/viewportStore'
+import { decimateToolpath, LOD_MAX_DISPLAY_POINTS, LOD_THRESHOLDS } from './decimateToolpath'
+import { buildToolpathLines } from './toolpathLines'
+import type { LineGeometryData } from '../api/types'
 
 export class SceneManager {
   /** The Three.js scene.  Viewport.tsx adds/removes model meshes here. */
@@ -31,6 +34,9 @@ export class SceneManager {
   private _projectionMode: 'perspective' | 'orthographic' = 'perspective'
   private _modelMesh: THREE.Mesh | null = null
   private _edgeOverlay: THREE.LineSegments | null = null
+  private _rawToolpathData: LineGeometryData | null = null
+  private _modelBoundingRadius: number = 100
+  private _activeLodMaxPoints: number = LOD_MAX_DISPLAY_POINTS
 
   constructor(canvas: HTMLCanvasElement, container: HTMLElement) {
     this.scene = new THREE.Scene()
@@ -66,6 +72,8 @@ export class SceneManager {
     this.controls.enablePan = true
     this.controls.screenSpacePanning = false // keeps pan on XY plane
     this.controls.target.set(0, 0, 0)
+
+    this.controls.addEventListener('change', () => this._applyLOD())
 
     // ── Grid — XY plane at Z = 0 ──────────────────────────────────────────
     // Three.js GridHelper lies on the XZ plane by default; rotate 90° around
@@ -320,6 +328,15 @@ export class SceneManager {
       ;(this._edgeOverlay.material as THREE.Material).dispose()
       this._edgeOverlay = null
     }
+    if (mesh === null) {
+      this._modelBoundingRadius = 100
+      this._activeLodMaxPoints = -1
+    } else {
+      mesh.geometry.computeBoundingSphere()
+      this._modelBoundingRadius = mesh.geometry.boundingSphere?.radius ?? 100
+      this._activeLodMaxPoints = -1
+      this._applyLOD()
+    }
     this._modelMesh = mesh
   }
 
@@ -371,10 +388,50 @@ export class SceneManager {
   }
 
   /**
+   * Accept raw toolpath data, store it, and immediately apply LOD decimation.
+   * Replaces the previous public setToolpathLines API.
+   */
+  setToolpathData(data: LineGeometryData | null): void {
+    this._rawToolpathData = data
+    this._activeLodMaxPoints = -1
+    this._applyLOD()
+  }
+
+  /**
+   * Recompute the LOD tier based on camera distance and rebuild the toolpath
+   * line segments if the tier has changed.
+   */
+  private _applyLOD(): void {
+    if (this._rawToolpathData === null) {
+      this._setToolpathLines(null)
+      return
+    }
+    const cameraDistance = this.controls.target.distanceTo(this._activeCamera().position)
+    const ratio = cameraDistance / this._modelBoundingRadius
+    let maxPoints: number
+    if (ratio < LOD_THRESHOLDS.FULL) {
+      maxPoints = LOD_MAX_DISPLAY_POINTS
+    } else if (ratio < LOD_THRESHOLDS.HALF) {
+      maxPoints = LOD_MAX_DISPLAY_POINTS / 2
+    } else if (ratio < LOD_THRESHOLDS.QUARTER) {
+      maxPoints = LOD_MAX_DISPLAY_POINTS / 4
+    } else {
+      maxPoints = LOD_MAX_DISPLAY_POINTS / 8
+    }
+    if (maxPoints === this._activeLodMaxPoints) {
+      return
+    }
+    this._activeLodMaxPoints = maxPoints
+    const decimated = decimateToolpath(this._rawToolpathData, maxPoints)
+    const lines = buildToolpathLines(decimated)
+    this._setToolpathLines(lines)
+  }
+
+  /**
    * Replace the toolpath line segments displayed in the scene.
    * Disposes the previous geometry before replacing.
    */
-  setToolpathLines(lines: THREE.LineSegments | null): void {
+  private _setToolpathLines(lines: THREE.LineSegments | null): void {
     for (const child of [...this.toolpathGroup.children]) {
       if (child instanceof THREE.LineSegments) {
         // Dispose geometry only — the material is a shared module-level

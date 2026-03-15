@@ -32,7 +32,7 @@ vi.mock('./scene', () => ({
     camera: new THREE.PerspectiveCamera(),
     dispose: vi.fn(),
     frameModel: vi.fn(),
-    setToolpathLines: vi.fn(),
+    setToolpathData: vi.fn(),
     setOrbitEnabled: vi.fn(),
     setModelMesh: vi.fn(),
     setDisplayMode: vi.fn(),
@@ -59,7 +59,7 @@ function latestMgr() {
     scene: THREE.Scene
     dispose: ReturnType<typeof vi.fn>
     frameModel: ReturnType<typeof vi.fn>
-    setToolpathLines: ReturnType<typeof vi.fn>
+    setToolpathData: ReturnType<typeof vi.fn>
     setModelMesh: ReturnType<typeof vi.fn>
     setDisplayMode: ReturnType<typeof vi.fn>
     snapTop: ReturnType<typeof vi.fn>

@@ -9,6 +9,7 @@
 import * as THREE from 'three'
 import * as TWEEN from '@tweenjs/tween.js'
 import { SceneManager } from './scene'
+import type { LineGeometryData } from '../api/types'
 
 // ── Global stubs ─────────────────────────────────────────────────────────────
 
@@ -51,9 +52,10 @@ vi.mock('three/addons/controls/OrbitControls.js', () => ({
     enableDamping = false
     enablePan = false
     screenSpacePanning = true
-    target = { x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() }
+    target = { x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn(), distanceTo: vi.fn(() => 500) }
     update = vi.fn()
     dispose = vi.fn()
+    addEventListener = vi.fn()
   },
 }))
 
@@ -606,5 +608,37 @@ describe('SceneManager — snapToView', () => {
     expect(cam.up.x).toBeCloseTo(0, 5)
     expect(cam.up.y).toBeCloseTo(1, 5)
     expect(cam.up.z).toBeCloseTo(0, 5)
+  })
+})
+
+// ── setToolpathData / LOD ─────────────────────────────────────────────────────
+
+describe('SceneManager — setToolpathData', () => {
+  let mgr: SceneManager
+
+  const twoSegmentData: LineGeometryData = {
+    positions: [0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0],
+    colours: [1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
+    types: [0, 0, 0, 0],
+  }
+
+  beforeEach(() => {
+    const { canvas, container } = makeElements()
+    mgr = new SceneManager(canvas, container)
+  })
+
+  afterEach(() => mgr.dispose())
+
+  it('adds one child to toolpathGroup after setToolpathData with valid data', () => {
+    mgr.setToolpathData(twoSegmentData)
+    const group = priv<THREE.Group>(mgr, 'toolpathGroup')
+    expect(group.children.length).toBe(1)
+  })
+
+  it('clears toolpathGroup after setToolpathData(null)', () => {
+    mgr.setToolpathData(twoSegmentData)
+    mgr.setToolpathData(null)
+    const group = priv<THREE.Group>(mgr, 'toolpathGroup')
+    expect(group.children.length).toBe(0)
   })
 })
