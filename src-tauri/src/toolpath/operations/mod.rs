@@ -1,6 +1,7 @@
 pub mod adaptive_clearing;
 pub mod drill;
 pub mod engagement;
+pub mod flowline_finishing;
 pub mod parallel_finishing;
 pub mod pencil_milling;
 pub mod pocket;
