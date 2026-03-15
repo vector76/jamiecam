@@ -5,6 +5,7 @@ use jamiecam_lib::models::operation::{FlowlineDirection, FlowlineFinishingParams
 use jamiecam_lib::models::stock::BoxDimensions;
 use jamiecam_lib::models::{StockDefinition, Vec3};
 use jamiecam_lib::toolpath::operations::flowline_finishing::flowline_finishing_passes;
+use jamiecam_lib::toolpath::types::PassKind;
 use std::path::{Path, PathBuf};
 
 fn sphere_step_path() -> PathBuf {
@@ -43,8 +44,8 @@ fn make_tool() -> jamiecam_lib::models::Tool {
     use uuid::Uuid;
     Tool {
         id: Uuid::nil(),
-        name: "6mm Flat Endmill".to_string(),
-        tool_type: ToolType::FlatEndmill,
+        name: "6mm Ball Endmill".to_string(),
+        tool_type: ToolType::BallNose,
         material: "carbide".to_string(),
         diameter: 6.0,
         flute_count: 4,
@@ -298,6 +299,11 @@ fn flowline_finishing_u_v_perpendicular() {
 
     assert!(!passes_u.is_empty(), "U direction produced no passes");
     assert!(!passes_v.is_empty(), "V direction produced no passes");
+
+    // All passes should be Cutting (no linking passes in raw planner output).
+    for pass in passes_u.iter().chain(passes_v.iter()) {
+        assert_eq!(pass.kind, PassKind::Cutting, "expected all Cutting passes");
+    }
 
     let elev_u = cross_pass_elevation_angle(&passes_u);
     let elev_v = cross_pass_elevation_angle(&passes_v);

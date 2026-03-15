@@ -36,7 +36,7 @@ pub fn flowline_finishing_passes(
 
     #[cfg(cam_geometry_bindings)]
     {
-        flowline_finishing_inner(stock, params, _tool_diameter, shape)
+        flowline_finishing_inner(stock, params, shape)
     }
 }
 
@@ -90,7 +90,6 @@ fn boustrophedon_reorder(passes: &mut [Pass]) {
 fn flowline_finishing_inner(
     _stock: &StockDefinition,
     params: &FlowlineFinishingParams,
-    tool_diameter: f64,
     shape: &OcctShape,
 ) -> Result<Vec<Pass>, AppError> {
     // ── Step 1: Resolve faces ────────────────────────────────────────────────
@@ -117,11 +116,11 @@ fn flowline_finishing_inner(
         return Ok(Vec::new());
     }
 
-    let tool_radius = tool_diameter / 2.0;
+    let tool_radius = params.tool_diameter / 2.0;
     let num_samples: usize = 100;
     // Maximum gap between consecutive points before splitting into separate runs.
     // Use a fraction of the tool diameter as a reasonable heuristic.
-    let max_gap = tool_diameter * 2.0;
+    let max_gap = params.tool_diameter * 2.0;
 
     let mut all_passes: Vec<Pass> = Vec::new();
 
@@ -164,15 +163,6 @@ fn flowline_finishing_inner(
                     Ok(p) => p,
                     Err(_) => continue,
                 };
-
-                // Validate that the point is actually on the (trimmed) face.
-                let (_, dist) = match geometry::face_project_point(face, pos[0], pos[1], pos[2]) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                };
-                if dist > 1e-3 {
-                    continue;
-                }
 
                 // Evaluate surface normal.
                 let normal = match geometry::face_eval_normal(face, u, v) {
