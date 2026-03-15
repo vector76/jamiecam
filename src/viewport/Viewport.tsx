@@ -40,6 +40,9 @@ export function Viewport({ style }: ViewportProps) {
   const setDisplayMode = useViewportStore((state) => state.setDisplayMode)
   const setHoveredFaceIdx = useViewportStore((state) => state.setHoveredFaceIdx)
   const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
+  const measurementMode = useViewportStore((state) => state.measurementMode)
+  const setMeasurementMode = useViewportStore((state) => state.setMeasurementMode)
+  const clearMeasurements = useViewportStore((state) => state.clearMeasurements)
 
   // Mutable refs to avoid stale closures in mount-registered event handlers.
   const selectionModeRef = useRef(selectionMode)
@@ -311,6 +314,29 @@ export function Viewport({ style }: ViewportProps) {
           <option value="wireframe">Wireframe</option>
           <option value="transparent">Transparent</option>
         </select>
+        <button
+          title="Distance measurement"
+          className={measurementMode === 'distance' ? 'active' : ''}
+          onClick={() => setMeasurementMode('distance')}
+          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+        >
+          Ruler
+        </button>
+        <button
+          title="Angle measurement"
+          className={measurementMode === 'angle' ? 'active' : ''}
+          onClick={() => setMeasurementMode('angle')}
+          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+        >
+          Protractor
+        </button>
+        <button
+          title="Clear measurements"
+          onClick={() => { clearMeasurements(); setMeasurementMode('off') }}
+          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+        >
+          Clear
+        </button>
       </div>
       <SimulationControls />
     </div>

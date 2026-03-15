@@ -395,3 +395,52 @@ describe('Viewport — display mode', () => {
     expect(mgr.setModelMesh).toHaveBeenLastCalledWith(null)
   })
 })
+
+describe('Viewport — measurement toolbar', () => {
+  beforeEach(() => {
+    useViewportStore.setState({ measurementMode: 'off', measurementPoints: [], measurements: [] })
+  })
+
+  it('clicking Ruler button sets measurementMode to distance', async () => {
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Distance measurement'))
+    })
+    expect(useViewportStore.getState().measurementMode).toBe('distance')
+  })
+
+  it('clicking Protractor button sets measurementMode to angle', async () => {
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Angle measurement'))
+    })
+    expect(useViewportStore.getState().measurementMode).toBe('angle')
+  })
+
+  it('clicking Clear calls clearMeasurements and sets mode to off', async () => {
+    useViewportStore.setState({
+      measurementMode: 'distance',
+      measurements: [{ points: [[0, 0, 0], [1, 0, 0]], value: 1, label: '1.0 mm', anchor: [0.5, 0, 0] }],
+      measurementPoints: [[1, 2, 3]],
+    })
+    render(<Viewport />)
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('Clear measurements'))
+    })
+    expect(useViewportStore.getState().measurementMode).toBe('off')
+    expect(useViewportStore.getState().measurements).toEqual([])
+    expect(useViewportStore.getState().measurementPoints).toEqual([])
+  })
+
+  it('Ruler button has active class when measurementMode is distance', async () => {
+    useViewportStore.setState({ measurementMode: 'distance' })
+    render(<Viewport />)
+    expect(screen.getByTitle('Distance measurement')).toHaveClass('active')
+  })
+
+  it('Protractor button has active class when measurementMode is angle', async () => {
+    useViewportStore.setState({ measurementMode: 'angle' })
+    render(<Viewport />)
+    expect(screen.getByTitle('Angle measurement')).toHaveClass('active')
+  })
+})
