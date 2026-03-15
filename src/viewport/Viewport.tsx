@@ -15,6 +15,7 @@ import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 import type { DisplayMode } from '../store/viewportStore'
 import { SimulationControls } from '../components/simulation/SimulationControls'
+import { useSimulationLoop } from './useSimulationLoop'
 
 interface ViewportProps {
   style?: React.CSSProperties
@@ -26,6 +27,8 @@ export function Viewport({ style }: ViewportProps) {
   const modelGroupRef = useRef<THREE.Group | null>(null)
   const toolpathLinesRef = useRef<THREE.LineSegments | null>(null)
   const highlightMeshRef = useRef<THREE.Mesh | null>(null)
+
+  useSimulationLoop(mgrRef)
 
   const meshData = useViewportStore((state) => state.meshData)
   const toolpathGeometry = useViewportStore((state) => state.toolpathGeometry)
