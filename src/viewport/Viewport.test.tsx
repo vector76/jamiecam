@@ -42,6 +42,10 @@ vi.mock('./scene', () => ({
     snapIsometric: vi.fn(),
     toggleProjection: vi.fn(),
     getProjectionMode: vi.fn().mockReturnValue('perspective'),
+    updateMeasurementLabels: vi.fn(),
+    updateMeasurementPoints: vi.fn(),
+    getActiveCamera: vi.fn().mockReturnValue(new THREE.PerspectiveCamera()),
+    getModelMesh: vi.fn().mockReturnValue(null),
   })),
 }))
 
@@ -442,5 +446,43 @@ describe('Viewport — measurement toolbar', () => {
     useViewportStore.setState({ measurementMode: 'angle' })
     render(<Viewport />)
     expect(screen.getByTitle('Angle measurement')).toHaveClass('active')
+  })
+})
+
+describe('Viewport — measurement mode interactions', () => {
+  beforeEach(() => {
+    useViewportStore.setState({
+      measurementMode: 'off',
+      selectionMode: false,
+      measurementPoints: [],
+      measurements: [],
+    })
+  })
+
+  it('Escape key sets measurementMode to off when in distance mode', async () => {
+    useViewportStore.setState({ measurementMode: 'distance' })
+    render(<Viewport />)
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(useViewportStore.getState().measurementMode).toBe('off')
+  })
+
+  it('setting measurementMode to distance while selectionMode is true sets selectionMode to false', async () => {
+    useViewportStore.setState({ selectionMode: true })
+    render(<Viewport />)
+    await act(async () => {
+      useViewportStore.getState().setMeasurementMode('distance')
+    })
+    expect(useViewportStore.getState().selectionMode).toBe(false)
+  })
+
+  it('setting selectionMode to true while measurementMode is distance sets measurementMode to off', async () => {
+    useViewportStore.setState({ measurementMode: 'distance' })
+    render(<Viewport />)
+    await act(async () => {
+      useViewportStore.getState().setSelectionMode(true)
+    })
+    expect(useViewportStore.getState().measurementMode).toBe('off')
   })
 })

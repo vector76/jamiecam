@@ -169,6 +169,16 @@ export class SceneManager {
     return this._activeCamera()
   }
 
+  /** Return the active camera for external raycasting. */
+  public getActiveCamera(): THREE.Camera {
+    return this._activeCamera()
+  }
+
+  /** Return the current model mesh for external raycasting. */
+  public getModelMesh(): THREE.Mesh | null {
+    return this._modelMesh
+  }
+
   /** Return the current projection mode. */
   getProjectionMode(): 'perspective' | 'orthographic' {
     return this._projectionMode

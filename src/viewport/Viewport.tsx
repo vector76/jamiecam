@@ -42,6 +42,7 @@ export function Viewport({ style }: ViewportProps) {
   const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
   const measurementMode = useViewportStore((state) => state.measurementMode)
   const setMeasurementMode = useViewportStore((state) => state.setMeasurementMode)
+  const setSelectionMode = useViewportStore((state) => state.setSelectionMode)
   const clearMeasurements = useViewportStore((state) => state.clearMeasurements)
   const measurements = useViewportStore((state) => state.measurements)
   const measurementPoints = useViewportStore((state) => state.measurementPoints)
@@ -122,6 +123,25 @@ export function Viewport({ style }: ViewportProps) {
       }
     }
 
+    function onPointerDown(e: PointerEvent) {
+      const mode = useViewportStore.getState().measurementMode
+      if (mode === 'off') return
+      const currentMgr = mgrRef.current
+      if (!currentMgr) return
+      const rect = canvas.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / rect.width * 2 - 1
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      const rc = new THREE.Raycaster()
+      rc.setFromCamera(new THREE.Vector2(x, y), currentMgr.getActiveCamera())
+      const mesh = currentMgr.getModelMesh()
+      const hits = rc.intersectObjects(mesh ? [mesh] : [], false)
+      if (hits.length > 0) {
+        const hit = hits[0]
+        useViewportStore.getState().addMeasurementPoint([hit.point.x, hit.point.y, hit.point.z])
+      }
+      e.stopPropagation()
+    }
+
     function onKeyDown(event: KeyboardEvent) {
       const tag = document.activeElement?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -131,14 +151,21 @@ export function Viewport({ style }: ViewportProps) {
         case 'R': mgrRef.current?.snapRight(); break
         case 'I': mgrRef.current?.snapIsometric(); break
         case 'P': setProjectionMode(projectionModeRef.current === 'perspective' ? 'orthographic' : 'perspective'); break
+        case 'ESCAPE': {
+          const currentMode = useViewportStore.getState().measurementMode
+          if (currentMode !== 'off') setMeasurementMode('off')
+          break
+        }
       }
     }
 
+    canvas.addEventListener('pointerdown', onPointerDown)
     container.addEventListener('mousemove', onMouseMove)
     container.addEventListener('click', onClick)
     window.addEventListener('keydown', onKeyDown)
 
     return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown)
       container.removeEventListener('mousemove', onMouseMove)
       container.removeEventListener('click', onClick)
       window.removeEventListener('keydown', onKeyDown)
@@ -246,6 +273,15 @@ export function Viewport({ style }: ViewportProps) {
   useEffect(() => {
     mgrRef.current?.updateMeasurementPoints(measurementPoints)
   }, [measurementPoints])
+
+  // ── Measurement / selection mutual exclusivity ─────────────────────────────
+  useEffect(() => {
+    if (measurementMode !== 'off') setSelectionMode(false)
+  }, [measurementMode])
+
+  useEffect(() => {
+    if (selectionMode) setMeasurementMode('off')
+  }, [selectionMode])
 
   // ── Highlight rebuild effect ───────────────────────────────────────────────
   useEffect(() => {
