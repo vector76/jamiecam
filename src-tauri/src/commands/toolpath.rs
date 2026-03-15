@@ -291,6 +291,13 @@ pub fn calculate_toolpath_inner(
             p.helical_entry_pitch,
             p.ramp_entry_angle_deg,
         ),
+        OperationParams::PencilMilling(p) => (
+            p.arc_lead_in_radius,
+            p.arc_lead_out_radius,
+            p.helical_entry_radius,
+            p.helical_entry_pitch,
+            p.ramp_entry_angle_deg,
+        ),
     };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
@@ -300,7 +307,8 @@ pub fn calculate_toolpath_inner(
         | OperationParams::AdaptiveClearing(_)
         | OperationParams::ParallelFinishing(_)
         | OperationParams::ScallopFinishing(_)
-        | OperationParams::FlowlineFinishing(_) => linking::link_passes(
+        | OperationParams::FlowlineFinishing(_)
+        | OperationParams::PencilMilling(_) => linking::link_passes(
             raw_passes,
             &LinkingParams {
                 tool_diameter: tool.diameter,
@@ -469,13 +477,14 @@ fn tool_type_str(tool_type: &ToolType) -> &'static str {
 
 /// Extract the surface finishing allowance from the operation params.
 ///
-/// Only `ParallelFinishing`, `ScallopFinishing`, and `FlowlineFinishing` are
-/// supported; all other operation types return an error.
+/// Only `ParallelFinishing`, `ScallopFinishing`, `FlowlineFinishing`, and
+/// `PencilMilling` are supported; all other operation types return an error.
 fn extract_finishing_allowance(params: &OperationParams) -> Result<f64, AppError> {
     match params {
         OperationParams::ParallelFinishing(p) => Ok(p.allowance),
         OperationParams::ScallopFinishing(p) => Ok(p.allowance),
         OperationParams::FlowlineFinishing(p) => Ok(p.allowance),
+        OperationParams::PencilMilling(p) => Ok(p.allowance),
         _ => Err(AppError::InvalidInput(
             "gouge checking is only supported for surface finishing operations".to_string(),
         )),

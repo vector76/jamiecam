@@ -250,6 +250,20 @@ export interface FlowlineFinishingParams {
   rampEntryAngleDeg?: number | null
 }
 
+/** Parameters for a Pencil Milling operation. */
+export interface PencilMillingParams {
+  allowance: number
+  toolDiameter: number
+  curvatureThreshold?: number | null
+  minPassLength: number
+  geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -261,8 +275,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -277,8 +291,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -287,7 +301,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
   enabled: boolean
   needsRecalculate: boolean
 }

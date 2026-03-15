@@ -101,6 +101,11 @@ pub fn plan(
                 "flowline finishing toolpath generation is not yet implemented".to_string(),
             ));
         }
+        OperationParams::PencilMilling(_) => {
+            return Err(crate::error::AppError::InvalidInput(
+                "pencil milling toolpath generation is not yet implemented".to_string(),
+            ));
+        }
     };
 
     // Step 3: Compute stats over the returned passes.

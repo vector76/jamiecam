@@ -277,6 +277,37 @@ pub struct FlowlineFinishingParams {
     pub ramp_entry_angle_deg: Option<f64>,
 }
 
+/// Parameters for a Pencil Milling operation.
+///
+/// Traces concave edges and fillets where the tool naturally contacts
+/// two surfaces, removing material that larger tools cannot reach.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PencilMillingParams {
+    /// Stock allowance in mm (offset along surface normal).
+    pub allowance: f64,
+    /// Tool diameter in mm.
+    pub tool_diameter: f64,
+    /// Curvature threshold for edge detection; `None` means derive from tool radius.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curvature_threshold: Option<f64>,
+    /// Minimum pass length in mm; shorter passes are discarded.
+    pub min_pass_length: f64,
+    /// Face fingerprints that define the surface selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -297,6 +328,8 @@ pub enum OperationParams {
     ScallopFinishing(ScallopFinishingParams),
     #[serde(rename = "flowlineFinishing")]
     FlowlineFinishing(FlowlineFinishingParams),
+    #[serde(rename = "pencilMilling")]
+    PencilMilling(PencilMillingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -1211,5 +1244,119 @@ mod tests {
             params.geometry.is_none(),
             "geometry must default to None when absent"
         );
+    }
+
+    #[test]
+    fn pencil_milling_params_serde_round_trip() {
+        let params = PencilMillingParams {
+            allowance: 0.05,
+            tool_diameter: 6.0,
+            curvature_threshold: Some(0.3),
+            min_pass_length: 2.0,
+            geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: Some(2.0),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(5.0),
+        };
+        let op = OperationParams::PencilMilling(params);
+        let val = serde_json::to_value(&op).unwrap();
+
+        // Type discriminant uses camelCase override.
+        assert_eq!(val["type"], "pencilMilling");
+
+        // Fields are camelCase.
+        let p = &val["params"];
+        assert!(p.get("allowance").is_some());
+        assert!(p.get("toolDiameter").is_some());
+        assert!(p.get("curvatureThreshold").is_some());
+        assert!(p.get("minPassLength").is_some());
+
+        // Optional absent fields are omitted.
+        assert!(p.get("arcLeadOutRadius").is_none());
+        assert!(p.get("helicalEntryRadius").is_none());
+        assert!(p.get("helicalEntryPitch").is_none());
+
+        // Optional present fields are included.
+        assert!(p.get("arcLeadInRadius").is_some());
+        assert!(p.get("rampEntryAngleDeg").is_some());
+
+        // Round-trip.
+        let json = serde_json::to_string(&op).unwrap();
+        let back: OperationParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(op, back);
+    }
+
+    #[test]
+    fn pencil_milling_optional_fields_absent_when_none() {
+        let params = PencilMillingParams {
+            allowance: 0.0,
+            tool_diameter: 6.0,
+            curvature_threshold: None,
+            min_pass_length: 1.0,
+            geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+        assert!(
+            value.get("curvatureThreshold").is_none(),
+            "curvatureThreshold must be absent when None"
+        );
+    }
+
+    #[test]
+    fn pencil_milling_operation_serde_round_trip() {
+        let original = Operation {
+            id: Uuid::parse_str("eeee0000-0000-0000-0000-000000000009").unwrap(),
+            name: "Pencil Mill".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::PencilMilling(PencilMillingParams {
+                allowance: 0.02,
+                tool_diameter: 3.0,
+                curvature_threshold: None,
+                min_pass_length: 1.5,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn pencil_milling_defaults_absent_in_minimal_json() {
+        let json = r#"{
+            "allowance": 0.1,
+            "toolDiameter": 6.0,
+            "minPassLength": 2.0
+        }"#;
+        let params: PencilMillingParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
+        assert!(
+            params.curvature_threshold.is_none(),
+            "curvatureThreshold must default to None when absent"
+        );
+        assert!(params.arc_lead_in_radius.is_none());
     }
 }
