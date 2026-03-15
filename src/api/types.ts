@@ -78,6 +78,7 @@ export interface ToolSummary {
   name: string
   /** Snake_case tool type string (e.g. `"flat_endmill"`). */
   toolType: string
+  material?: string
 }
 
 // ── Stock types ───────────────────────────────────────────────────────────────

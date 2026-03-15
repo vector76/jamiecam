@@ -17,12 +17,26 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, FlowlineFinishingParams, PencilMillingParams } from '../../api/types'
 import ParallelFinishingEditor from './ParallelFinishingEditor'
+import { MaterialSelectorField } from './MaterialSelectorField'
 import ScallopFinishingEditor from './ScallopFinishingEditor'
 import FlowlineFinishingEditor from './FlowlineFinishingEditor'
 import PencilMillingEditor from './PencilMillingEditor'
 import GougeCheckPanel from './GougeCheckPanel'
 import { useViewportStore } from '../../store/viewportStore'
 import { getModelFaces, detectHoles } from '../../api/geometry'
+
+const OPERATION_CATEGORY: Record<string, string> = {
+  pocket: 'roughing',
+  adaptive_clearing: 'roughing',
+  z_level_roughing: 'roughing',
+  profile: 'roughing',
+  drill: 'drilling',
+  z_level_finishing: 'finishing',
+  parallelFinishing: 'finishing',
+  scallopFinishing: 'finishing',
+  flowlineFinishing: 'finishing',
+  pencilMilling: 'finishing',
+}
 
 interface Props {
   operationId: string | null
@@ -35,6 +49,7 @@ export function OperationEditorForm({ operationId }: Props) {
   const setSnapshot = useProjectStore((s) => s.setSnapshot)
   const pushNotification = useProjectStore((s) => s.pushNotification)
   const [operation, setOperation] = useState<Operation | null>(null)
+  const [workpieceMaterial, setWorkpieceMaterial] = useState<string | null>(null)
   const selectionMode = useViewportStore((s) => s.selectionMode)
   const selectedFps = useViewportStore((s) => s.selectedFaceFingerprints)
   const setSelectionMode = useViewportStore((s) => s.setSelectionMode)
@@ -52,13 +67,40 @@ export function OperationEditorForm({ operationId }: Props) {
   useEffect(() => {
     if (!operationId) { setOperation(null); return }
     listOperations()
-      .then((ops) => setOperation(ops.find((o) => o.id === operationId) ?? null))
+      .then((ops) => {
+        const op = ops.find((o) => o.id === operationId) ?? null
+        setOperation(op)
+        setWorkpieceMaterial(op?.workpieceMaterial ?? null)
+      })
       .catch(handleError)
     return () => { setSelectionMode(false) }
   }, [operationId])
 
   if (!operationId || !operation) {
     return <div style={{ padding: '0.5rem', color: '#888' }}>Select an operation to edit</div>
+  }
+
+  const currentTool = tools.find((t) => t.id === operation.toolId) ?? null
+
+  function materialSelectorField() {
+    return (
+      <MaterialSelectorField
+        currentMaterialId={workpieceMaterial}
+        toolMaterial={currentTool?.material ?? null}
+        operationCategory={OPERATION_CATEGORY[operation!.type] ?? 'roughing'}
+        onMaterialChange={(id) => {
+          setWorkpieceMaterial(id)
+          void save({ workpieceMaterial: id || undefined })
+        }}
+        onFeedsFetched={(entry) => {
+          void save({
+            spindleSpeedOverride: entry.spindleSpeedRpm,
+            feedRateOverride: entry.feedRateMmpm,
+          })
+        }}
+        onFeedsNotFound={() => pushNotification('No feed data found for this material/tool/category combination')}
+      />
+    )
   }
 
   async function handleSelectFaces() {
@@ -96,6 +138,7 @@ export function OperationEditorForm({ operationId }: Props) {
         params: operation.params,
         spindleSpeedOverride: operation.spindleSpeedOverride,
         feedRateOverride: operation.feedRateOverride,
+        workpieceMaterial: operation.workpieceMaterial,
         ...patch,
       }
       await editOperation(operationId!, input)
@@ -156,6 +199,7 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
             onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -243,6 +287,7 @@ export function OperationEditorForm({ operationId }: Props) {
             <option value="right">Right</option>
           </select>
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -297,6 +342,7 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-peck-depth" type="number" defaultValue={params.peckDepth ?? ''}
             onBlur={(e) => void save({ params: { ...params, peckDepth: e.target.value === '' ? undefined : parseFloat(e.target.value) } })} />
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -375,6 +421,7 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-stepover" type="number" defaultValue={params.stepover * 100}
             onBlur={(e) => void save({ params: { ...params, stepover: Number(e.target.value) / 100 } })} />
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -469,6 +516,7 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -578,6 +626,7 @@ export function OperationEditorForm({ operationId }: Props) {
           <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
         </div>
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -628,6 +677,7 @@ export function OperationEditorForm({ operationId }: Props) {
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -662,6 +712,7 @@ export function OperationEditorForm({ operationId }: Props) {
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -696,6 +747,7 @@ export function OperationEditorForm({ operationId }: Props) {
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
@@ -730,6 +782,7 @@ export function OperationEditorForm({ operationId }: Props) {
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
+        {materialSelectorField()}
         <div style={{ marginBottom: '0.25rem' }}>
           <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
           <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}

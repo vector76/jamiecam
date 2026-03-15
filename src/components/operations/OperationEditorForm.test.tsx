@@ -27,9 +27,15 @@ vi.mock('../../api/geometry', () => ({
   detectHoles: vi.fn(),
 }))
 
+vi.mock('../../api/feeds', () => ({
+  listMaterials: vi.fn(),
+  lookupFeeds: vi.fn(),
+}))
+
 const opsApi = await import('../../api/operations')
 const fileApi = await import('../../api/file')
 const geoApi = await import('../../api/geometry')
+const feedsApi = await import('../../api/feeds')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -102,6 +108,7 @@ beforeEach(() => {
     hoveredFaceIdx: null,
   })
   vi.mocked(geoApi.getModelFaces).mockResolvedValue([])
+  vi.mocked(feedsApi.listMaterials).mockResolvedValue([])
 })
 
 // ── Null / empty state ─────────────────────────────────────────────────────────
@@ -269,7 +276,7 @@ describe('OperationEditorForm — pocket form', () => {
   it('renders tool select with the tools from the store', async () => {
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByRole('option', { name: '10mm Flat' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: '6mm Ball' })).toBeInTheDocument()
   })
@@ -365,8 +372,8 @@ describe('OperationEditorForm — tool change saves', () => {
 
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: TOOL_ID_B } })
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tool' }), { target: { value: TOOL_ID_B } })
 
     await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
       POCKET_OP_ID,
@@ -382,8 +389,8 @@ describe('OperationEditorForm — tool change saves', () => {
 
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: TOOL_ID_B } })
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tool' }), { target: { value: TOOL_ID_B } })
 
     await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
     expect(useProjectStore.getState().snapshot?.projectName).toBe('After Tool Change')
@@ -446,7 +453,7 @@ describe('OperationEditorForm — drill form', () => {
   it('drill form renders tool select, depth, and peck depth inputs', async () => {
     render(<OperationEditorForm operationId={DRILL_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Peck depth (mm)')).toBeInTheDocument()
   })
@@ -609,7 +616,7 @@ describe('OperationEditorForm — z_level_roughing branch', () => {
   it('renders tool selector, Depth, Stepdown, Stepover inputs, geometry section', async () => {
     render(<OperationEditorForm operationId={ZLEVEL_ROUGHING_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Stepdown (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Stepover (%)')).toBeInTheDocument()
@@ -859,7 +866,7 @@ describe('OperationEditorForm — adaptive_clearing branch', () => {
   it('renders tool selector, Depth, Stepdown, Optimal load, Stepover, and entry motion fields', async () => {
     render(<OperationEditorForm operationId={ADAPTIVE_CLEARING_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByLabelText('Depth (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Stepdown (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Optimal load (%)')).toBeInTheDocument()
@@ -978,7 +985,7 @@ describe('OperationEditorForm — parallelFinishing branch', () => {
   it('renders tool selector, Stepover, Direction, Allowance, and entry motion fields', async () => {
     render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByLabelText('Stepover (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument()
     expect(screen.getByLabelText('Allowance (mm)')).toBeInTheDocument()
@@ -1075,6 +1082,97 @@ describe('OperationEditorForm — parallelFinishing branch', () => {
   })
 })
 
+// ── Material selector ─────────────────────────────────────────────────────────
+
+describe('OperationEditorForm — material selector', () => {
+  beforeEach(() => {
+    useProjectStore.setState({
+      snapshot: {
+        ...SNAPSHOT_BASE,
+        tools: [
+          { id: TOOL_ID_A, name: '10mm Flat', toolType: 'flat_endmill', material: 'carbide' },
+        ],
+      },
+    })
+    vi.mocked(feedsApi.listMaterials).mockResolvedValue([
+      { id: 'aluminum-6061', displayName: 'Aluminum 6061' },
+    ])
+    vi.mocked(feedsApi.lookupFeeds).mockResolvedValue({
+      spindleSpeedRpm: 12000,
+      feedRateMmpm: 1500,
+    })
+    vi.mocked(opsApi.listOperations).mockResolvedValue([POCKET_OP])
+    vi.mocked(opsApi.editOperation).mockResolvedValue(POCKET_OP)
+    vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_BASE)
+  })
+
+  it('selecting a material calls editOperation with spindle/feed overrides from lookup', async () => {
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
+      target: { value: 'aluminum-6061' },
+    })
+
+    await waitFor(() =>
+      expect(opsApi.editOperation).toHaveBeenCalledWith(
+        POCKET_OP_ID,
+        expect.objectContaining({ spindleSpeedOverride: 12000, feedRateOverride: 1500 }),
+      )
+    )
+  })
+
+  it('blur on spindle override saves user-entered value after material pre-fill', async () => {
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+
+    // Select material to trigger pre-fill
+    fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
+      target: { value: 'aluminum-6061' },
+    })
+    await waitFor(() =>
+      expect(opsApi.editOperation).toHaveBeenCalledWith(
+        POCKET_OP_ID,
+        expect.objectContaining({ spindleSpeedOverride: 12000 }),
+      )
+    )
+
+    vi.mocked(opsApi.editOperation).mockClear()
+
+    // User manually sets a different spindle value
+    fireEvent.blur(screen.getByLabelText('Spindle speed override (RPM)'), {
+      target: { value: '15000' },
+    })
+
+    await waitFor(() =>
+      expect(opsApi.editOperation).toHaveBeenCalledWith(
+        POCKET_OP_ID,
+        expect.objectContaining({ spindleSpeedOverride: 15000 }),
+      )
+    )
+  })
+
+  it('not-found response pushes a notification', async () => {
+    vi.mocked(feedsApi.lookupFeeds).mockRejectedValue({ kind: 'NotFound' })
+
+    render(<OperationEditorForm operationId={POCKET_OP_ID} />)
+
+    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+
+    fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
+      target: { value: 'aluminum-6061' },
+    })
+
+    await waitFor(() =>
+      expect(useProjectStore.getState().notifications).toContain(
+        'No feed data found for this material/tool/category combination',
+      )
+    )
+  })
+})
+
 // ── Error handling ────────────────────────────────────────────────────────────
 
 describe('OperationEditorForm — error handling', () => {
@@ -1094,8 +1192,8 @@ describe('OperationEditorForm — error handling', () => {
 
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByRole('combobox')).toBeInTheDocument())
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: TOOL_ID_B } })
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Tool' }), { target: { value: TOOL_ID_B } })
 
     await waitFor(() =>
       expect(useProjectStore.getState().notifications).toContain('Bad tool')
