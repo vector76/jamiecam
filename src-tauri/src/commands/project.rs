@@ -125,6 +125,7 @@ impl From<&Project> for ProjectSnapshot {
                         OperationParams::AdaptiveClearing(_) => "adaptive_clearing".to_string(),
                         OperationParams::ParallelFinishing(_) => "parallelFinishing".to_string(),
                         OperationParams::ScallopFinishing(_) => "scallopFinishing".to_string(),
+                        OperationParams::FlowlineFinishing(_) => "flowlineFinishing".to_string(),
                     },
                     enabled: op.enabled,
                     needs_recalculate,

@@ -233,6 +233,23 @@ export interface ScallopFinishingParams {
   rampEntryAngleDeg?: number | null
 }
 
+/** Direction in parameter space for flowline finishing passes. */
+export type FlowlineDirection = 'u' | 'v'
+
+/** Parameters for a Flowline Finishing operation. */
+export interface FlowlineFinishingParams {
+  stepover: number
+  direction: FlowlineDirection
+  allowance: number
+  toolDiameter: number
+  geometry?: string[] | null
+  arcLeadInRadius?: number | null
+  arcLeadOutRadius?: number | null
+  helicalEntryRadius?: number | null
+  helicalEntryPitch?: number | null
+  rampEntryAngleDeg?: number | null
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -244,8 +261,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -260,8 +277,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
 }
@@ -270,7 +287,7 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing'
   enabled: boolean
   needsRecalculate: boolean
 }

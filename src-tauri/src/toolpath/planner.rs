@@ -96,6 +96,11 @@ pub fn plan(
                 shape,
             )?
         }
+        OperationParams::FlowlineFinishing(_) => {
+            return Err(crate::error::AppError::InvalidInput(
+                "flowline finishing toolpath generation is not yet implemented".to_string(),
+            ));
+        }
     };
 
     // Step 3: Compute stats over the returned passes.

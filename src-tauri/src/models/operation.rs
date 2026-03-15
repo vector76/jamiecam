@@ -239,6 +239,44 @@ pub struct ScallopFinishingParams {
     pub ramp_entry_angle_deg: Option<f64>,
 }
 
+/// Direction in parameter space for flowline finishing passes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FlowlineDirection {
+    U,
+    V,
+}
+
+/// Parameters for a Flowline Finishing operation.
+///
+/// Generates toolpaths that follow the natural UV flowlines of the
+/// selected surface geometry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowlineFinishingParams {
+    /// Parameter-space stepover distance.
+    pub stepover: f64,
+    /// Which parameter direction to follow.
+    pub direction: FlowlineDirection,
+    /// Stock allowance in mm (offset along surface normal).
+    pub allowance: f64,
+    /// Tool diameter in mm.
+    pub tool_diameter: f64,
+    /// Face fingerprints that define the surface selection.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_in_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arc_lead_out_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_radius: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helical_entry_pitch: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_entry_angle_deg: Option<f64>,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -257,6 +295,8 @@ pub enum OperationParams {
     ParallelFinishing(ParallelFinishingParams),
     #[serde(rename = "scallopFinishing")]
     ScallopFinishing(ScallopFinishingParams),
+    #[serde(rename = "flowlineFinishing")]
+    FlowlineFinishing(FlowlineFinishingParams),
 }
 
 /// A machining operation in the project operation list.
@@ -1074,6 +1114,99 @@ mod tests {
             "toolRadius": 3.0
         }"#;
         let params: ScallopFinishingParams = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            params.geometry.is_none(),
+            "geometry must default to None when absent"
+        );
+    }
+
+    #[test]
+    fn flowline_direction_serde_round_trip() {
+        let u = FlowlineDirection::U;
+        let json = serde_json::to_string(&u).unwrap();
+        assert_eq!(json, "\"u\"");
+        let back: FlowlineDirection = serde_json::from_str(&json).unwrap();
+        assert_eq!(u, back);
+
+        let v = FlowlineDirection::V;
+        let json = serde_json::to_string(&v).unwrap();
+        assert_eq!(json, "\"v\"");
+        let back: FlowlineDirection = serde_json::from_str(&json).unwrap();
+        assert_eq!(v, back);
+    }
+
+    #[test]
+    fn flowline_finishing_params_serde_round_trip() {
+        let params = FlowlineFinishingParams {
+            stepover: 0.1,
+            direction: FlowlineDirection::U,
+            allowance: 0.05,
+            tool_diameter: 6.0,
+            geometry: Some(vec!["fp1".into()]),
+            arc_lead_in_radius: Some(2.0),
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: Some(5.0),
+        };
+        let op = OperationParams::FlowlineFinishing(params);
+        let val = serde_json::to_value(&op).unwrap();
+
+        // Type discriminant uses camelCase override.
+        assert_eq!(val["type"], "flowlineFinishing");
+
+        // Fields are camelCase.
+        let p = &val["params"];
+        assert!(p.get("stepover").is_some());
+        assert_eq!(p["direction"], "u");
+        assert!(p.get("allowance").is_some());
+        assert!(p.get("toolDiameter").is_some());
+
+        // Optional absent fields are omitted.
+        assert!(p.get("arcLeadOutRadius").is_none());
+        assert!(p.get("helicalEntryRadius").is_none());
+        assert!(p.get("helicalEntryPitch").is_none());
+
+        // Optional present fields are included.
+        assert!(p.get("arcLeadInRadius").is_some());
+        assert!(p.get("rampEntryAngleDeg").is_some());
+
+        // Round-trip.
+        let json = serde_json::to_string(&op).unwrap();
+        let back: OperationParams = serde_json::from_str(&json).unwrap();
+        assert_eq!(op, back);
+    }
+
+    #[test]
+    fn flowline_finishing_geometry_absent_when_none() {
+        let params = FlowlineFinishingParams {
+            stepover: 0.1,
+            direction: FlowlineDirection::V,
+            allowance: 0.0,
+            tool_diameter: 6.0,
+            geometry: None,
+            arc_lead_in_radius: None,
+            arc_lead_out_radius: None,
+            helical_entry_radius: None,
+            helical_entry_pitch: None,
+            ramp_entry_angle_deg: None,
+        };
+        let value = serde_json::to_value(&params).expect("to_value");
+        assert!(
+            value.get("geometry").is_none(),
+            "geometry must be absent when None"
+        );
+    }
+
+    #[test]
+    fn flowline_finishing_geometry_defaults_absent_in_old_json() {
+        let json = r#"{
+            "stepover": 0.1,
+            "direction": "u",
+            "allowance": 0.0,
+            "toolDiameter": 6.0
+        }"#;
+        let params: FlowlineFinishingParams = serde_json::from_str(json).expect("deserialize");
         assert!(
             params.geometry.is_none(),
             "geometry must default to None when absent"
