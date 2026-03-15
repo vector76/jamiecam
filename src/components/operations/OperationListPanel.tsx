@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing') {
     const tool = tools[0]
     if (!tool) return
 
@@ -163,6 +163,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'parallelFinishing',
         params: { stepover: 0.5, directionAngleDeg: 0, allowance: 0 } as ParallelFinishingParams,
+      }
+    } else if (type === 'scallopFinishing') {
+      input = {
+        name: 'Scallop Finishing',
+        toolId: tool.id,
+        type: 'scallopFinishing',
+        params: { targetScallopHeight: 0.01, minStepover: 0.1, maxStepover: 1.0, directionAngleDeg: 0, allowance: 0, toolRadius: 3.0 } as ScallopFinishingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -276,6 +283,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Parallel Finishing
+        </button>
+        <button
+          onClick={() => void handleAdd('scallopFinishing')}
+          disabled={noTools}
+        >
+          + Scallop Finishing
         </button>
       </div>
     </div>
