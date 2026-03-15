@@ -346,6 +346,19 @@ export interface HoleDescriptor {
   isThrough: boolean
 }
 
+/** A single point where the toolpath gouges into the model surface. */
+export interface GougeViolation {
+  position: [number, number, number]
+  gougeDepth: number
+  faceIndex: number
+}
+
+/** Result of a gouge check across an entire toolpath. */
+export interface GougeCheckResult {
+  violations: GougeViolation[]
+  passed: boolean
+}
+
 /** Progress event emitted during toolpath calculation. */
 export interface ToolpathProgressEvent {
   operationId: string

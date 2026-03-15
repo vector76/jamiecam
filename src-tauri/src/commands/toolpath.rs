@@ -10,9 +10,11 @@ use tauri::Emitter;
 
 use crate::error::AppError;
 use crate::models::operation::OperationParams;
+use crate::models::tool::ToolType;
 use crate::models::StockDefinition;
 use crate::postprocessor::{program::GenerateOptions, PostProcessor, PostProcessorMeta};
 use crate::state::{AppState, Project};
+use crate::toolpath::gouge::GougeCheckResult;
 use crate::toolpath::types::{LinkingParams, PassKind, Toolpath, DEFAULT_CLEARANCE_OFFSET};
 use crate::toolpath::{arc_fitting, linking, LineGeometryData, ToolpathStats};
 
@@ -447,6 +449,149 @@ pub(crate) fn get_toolpath_geometry_inner(
     })
 }
 
+// ── check_gouge ──────────────────────────────────────────────────────────────
+
+/// Map a [`ToolType`] to the string expected by the gouge detection module.
+fn tool_type_str(tool_type: &ToolType) -> &'static str {
+    match tool_type {
+        ToolType::BallNose => "ball",
+        _ => "flat",
+    }
+}
+
+/// Extract the surface finishing allowance from the operation params.
+///
+/// Only `ParallelFinishing` and `ScallopFinishing` are supported; all other
+/// operation types return an error.
+fn extract_finishing_allowance(params: &OperationParams) -> Result<f64, AppError> {
+    match params {
+        OperationParams::ParallelFinishing(p) => Ok(p.allowance),
+        OperationParams::ScallopFinishing(p) => Ok(p.allowance),
+        _ => Err(AppError::InvalidInput(
+            "gouge checking is only supported for surface finishing operations".to_string(),
+        )),
+    }
+}
+
+/// Testable inner logic for [`check_gouge`].
+///
+/// Looks up the operation, tool, shape, and cached toolpath, then delegates
+/// to [`crate::toolpath::gouge::check_gouges`].
+pub(crate) fn check_gouge_inner(
+    operation_id: &str,
+    project_lock: &RwLock<Project>,
+) -> Result<GougeCheckResult, AppError> {
+    let op_uuid = parse_entity_id(operation_id, "operation")?;
+
+    let project = read_project(project_lock)?;
+
+    let operation = project
+        .operations
+        .iter()
+        .find(|op| op.id == op_uuid)
+        .ok_or_else(|| AppError::NotFound(format!("operation {op_uuid} not found")))?;
+
+    let tool = project
+        .tools
+        .iter()
+        .find(|t| t.id == operation.tool_id)
+        .ok_or_else(|| AppError::NotFound(format!("tool {} not found", operation.tool_id)))?;
+
+    let allowance = extract_finishing_allowance(&operation.params)?;
+
+    let shape = project
+        .source_model
+        .as_ref()
+        .and_then(|m| m.shape.as_ref())
+        .ok_or_else(|| AppError::NotFound("no model shape loaded".to_string()))?;
+
+    let toolpath = project
+        .toolpaths
+        .get(&op_uuid)
+        .ok_or_else(|| AppError::NotFound(format!("no toolpath for operation {op_uuid}")))?;
+
+    crate::toolpath::gouge::check_gouges(
+        &toolpath.passes,
+        shape,
+        tool_type_str(&tool.tool_type),
+        tool.diameter,
+        allowance,
+    )
+}
+
+// ── auto_lift ────────────────────────────────────────────────────────────────
+
+/// Testable inner logic for [`auto_lift`].
+///
+/// Same lookups as [`check_gouge_inner`], but obtains a mutable reference to
+/// the cached passes and calls [`crate::toolpath::gouge::auto_lift_gouges`].
+/// Returns the number of corrected points.
+pub(crate) fn auto_lift_inner(
+    operation_id: &str,
+    project_lock: &RwLock<Project>,
+) -> Result<usize, AppError> {
+    let op_uuid = parse_entity_id(operation_id, "operation")?;
+
+    let mut project = write_project(project_lock)?;
+
+    // Extract scalar values before taking the toolpath out.
+    let (allowance, tt, diameter) = {
+        let operation = project
+            .operations
+            .iter()
+            .find(|op| op.id == op_uuid)
+            .ok_or_else(|| AppError::NotFound(format!("operation {op_uuid} not found")))?;
+
+        let tool = project
+            .tools
+            .iter()
+            .find(|t| t.id == operation.tool_id)
+            .ok_or_else(|| AppError::NotFound(format!("tool {} not found", operation.tool_id)))?;
+
+        (
+            extract_finishing_allowance(&operation.params)?,
+            tool_type_str(&tool.tool_type),
+            tool.diameter,
+        )
+    };
+
+    // Check shape exists before removing the toolpath.
+    if project
+        .source_model
+        .as_ref()
+        .and_then(|m| m.shape.as_ref())
+        .is_none()
+    {
+        return Err(AppError::NotFound("no model shape loaded".to_string()));
+    }
+
+    // Temporarily remove the toolpath so we can mutate its passes while
+    // holding an immutable reference to the shape (a sibling field).
+    let mut toolpath = project
+        .toolpaths
+        .remove(&op_uuid)
+        .ok_or_else(|| AppError::NotFound(format!("no toolpath for operation {op_uuid}")))?;
+
+    let shape = project
+        .source_model
+        .as_ref()
+        .and_then(|m| m.shape.as_ref())
+        .expect("shape existence checked above");
+
+    let result = crate::toolpath::gouge::auto_lift_gouges(
+        &mut toolpath.passes,
+        shape,
+        tt,
+        diameter,
+        allowance,
+    );
+
+    // Re-insert regardless of success/failure.
+    project.toolpaths.insert(op_uuid, toolpath);
+
+    result
+}
+
 // ── Tauri command wrappers ────────────────────────────────────────────────────
 
 /// List all builtin post-processors, returning their metadata.
@@ -488,6 +633,24 @@ pub async fn get_toolpath_geometry(
     state: tauri::State<'_, AppState>,
 ) -> Result<LineGeometryData, AppError> {
     get_toolpath_geometry_inner(&operation_id, &state.project)
+}
+
+/// Check the cached toolpath for gouge violations against the model surface.
+#[tauri::command]
+pub async fn check_gouge(
+    operation_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<GougeCheckResult, AppError> {
+    check_gouge_inner(&operation_id, &state.project)
+}
+
+/// Auto-lift gouging points in the cached toolpath so they no longer violate.
+#[tauri::command]
+pub async fn auto_lift(
+    operation_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<usize, AppError> {
+    auto_lift_inner(&operation_id, &state.project)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

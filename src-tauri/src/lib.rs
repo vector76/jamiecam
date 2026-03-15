@@ -77,6 +77,8 @@ pub fn run() {
             commands::toolpath::list_post_processors,
             commands::toolpath::calculate_toolpath,
             commands::toolpath::get_toolpath_geometry,
+            commands::toolpath::check_gouge,
+            commands::toolpath::auto_lift,
             commands::toolpath::get_gcode_preview,
             commands::file::export_gcode,
             commands::geometry::get_model_faces,
