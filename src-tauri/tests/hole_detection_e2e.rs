@@ -134,6 +134,7 @@ fn detected_holes_produce_valid_drill_toolpath() {
             tool_id,
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: min_depth as f64,
                 peck_depth: Some(3.0),

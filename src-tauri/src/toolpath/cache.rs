@@ -92,6 +92,7 @@ mod tests {
             tool_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: Some(2.5),

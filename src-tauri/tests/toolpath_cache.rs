@@ -32,6 +32,7 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
         tool_id,
         spindle_speed_override: None,
         feed_rate_override: None,
+        workpiece_material: None,
         params: OperationParams::Drill(DrillParams {
             depth: 10.0,
             peck_depth: Some(3.0),

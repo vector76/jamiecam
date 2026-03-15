@@ -381,6 +381,7 @@ mod tests {
                 tool_id,
                 spindle_speed_override: None,
                 feed_rate_override: None,
+                workpiece_material: None,
                 params: OperationParams::Pocket(PocketParams {
                     depth: 15.0,
                     stepdown: 3.0,
@@ -401,6 +402,7 @@ mod tests {
                 tool_id,
                 spindle_speed_override: None,
                 feed_rate_override: None,
+                workpiece_material: None,
                 params: OperationParams::Profile(ProfileParams {
                     depth: 10.0,
                     stepdown: Some(2.5),
@@ -444,6 +446,7 @@ mod tests {
             tool_id,
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 10.0,
                 points: vec![],
@@ -515,6 +518,7 @@ mod tests {
             tool_id,
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 10.0,
                 points: vec![],

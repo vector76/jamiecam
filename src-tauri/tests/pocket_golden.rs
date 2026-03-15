@@ -39,6 +39,7 @@ fn pocket_algorithm_golden_matches() {
         tool_id: Uuid::nil(),
         spindle_speed_override: None,
         feed_rate_override: None,
+        workpiece_material: None,
         params: OperationParams::Pocket(PocketParams {
             depth: 10.0,
             stepdown: 2.0,

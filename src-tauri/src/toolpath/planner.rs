@@ -228,6 +228,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -260,6 +261,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: Some(2.5),
@@ -292,6 +294,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 5.0,
                 stepdown: Some(2.0),
@@ -321,6 +324,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override,
             feed_rate_override,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 5.0,
                 peck_depth: None,
@@ -412,6 +416,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -443,6 +448,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::ZLevelRoughing(ZLevelRoughingParams {
                 depth: 5.0,
                 stepdown: 0.0, // invalid
@@ -474,6 +480,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 10.0,
                 stepdown: 2.0,
@@ -506,6 +513,7 @@ mod tests {
             tool_id: uuid::Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::ParallelFinishing(ParallelFinishingParams {
                 stepover: 0.5,
                 direction_angle_deg: 0.0,
@@ -542,6 +550,7 @@ mod tests {
             tool_id: uuid::Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::ScallopFinishing(ScallopFinishingParams {
                 target_scallop_height: 0.01,
                 min_stepover: 0.1,
@@ -581,6 +590,7 @@ mod tests {
             tool_id: uuid::Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::FlowlineFinishing(FlowlineFinishingParams {
                 stepover: 0.1,
                 direction: FlowlineDirection::U,
@@ -618,6 +628,7 @@ mod tests {
             tool_id: uuid::Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::PencilMilling(PencilMillingParams {
                 allowance: 0.0,
                 tool_diameter: 6.0,
@@ -655,6 +666,7 @@ mod tests {
             tool_id: Uuid::nil(),
             spindle_speed_override: None,
             feed_rate_override: Some(600.0),
+            workpiece_material: None,
             params: OperationParams::AdaptiveClearing(AdaptiveClearingParams {
                 depth: 5.0,
                 stepdown: 2.5,

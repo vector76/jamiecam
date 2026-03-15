@@ -279,6 +279,7 @@ export interface Operation {
   params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
+  workpieceMaterial?: string
 }
 
 /**
@@ -295,6 +296,7 @@ export interface OperationInput {
   params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
+  workpieceMaterial?: string
 }
 
 /** A compact operation summary included in ProjectSnapshot. */
@@ -421,4 +423,19 @@ export interface LineGeometryData {
   colours: number[]
   /** Per-segment move type identifier — one value per line segment. */
   types: number[]
+}
+
+// ── Material / feeds types ────────────────────────────────────────────────────
+
+/** Metadata for a workpiece material in the feeds/speeds library. */
+export interface MaterialMeta {
+  id: string
+  displayName: string
+}
+
+/** A single feed/speed entry for a material + tool-material + operation combination. */
+export interface FeedEntry {
+  spindleSpeedRpm: number
+  feedRateMmpm: number
+  docMm?: number
 }

@@ -43,6 +43,9 @@ pub struct OperationInput {
     /// Optional feed rate override in mm/min; `null` to use the tool default.
     #[serde(default)]
     pub feed_rate_override: Option<f64>,
+    /// Optional workpiece material ID for feed/speed auto-population.
+    #[serde(default)]
+    pub workpiece_material: Option<String>,
     /// Type-discriminated parameters (`"type"` + `"params"` at the same level).
     #[serde(flatten)]
     pub params: OperationParams,
@@ -77,6 +80,7 @@ pub(crate) fn add_operation_inner(
         tool_id: tool_uuid,
         spindle_speed_override: input.spindle_speed_override,
         feed_rate_override: input.feed_rate_override,
+        workpiece_material: input.workpiece_material,
         params: input.params,
         cache: CacheState::default(),
     };
@@ -122,6 +126,7 @@ pub(crate) fn edit_operation_inner(
     entry.tool_id = tool_uuid;
     entry.spindle_speed_override = input.spindle_speed_override;
     entry.feed_rate_override = input.feed_rate_override;
+    entry.workpiece_material = input.workpiece_material;
     entry.params = input.params;
 
     Ok(entry.clone())
@@ -307,6 +312,7 @@ mod tests {
             tool_id: tool_id.to_string(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: Some(2.5),
@@ -328,6 +334,7 @@ mod tests {
             tool_id: tool_id.to_string(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 15.0,
                 stepdown: 3.0,
@@ -349,6 +356,7 @@ mod tests {
             tool_id: tool_id.to_string(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -390,6 +398,7 @@ mod tests {
                 tool_id: tid.clone(),
                 spindle_speed_override: None,
                 feed_rate_override: None,
+                workpiece_material: None,
                 params: OperationParams::Pocket(PocketParams {
                     depth: 8.0,
                     stepdown: 2.0,

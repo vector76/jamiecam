@@ -356,6 +356,9 @@ pub struct Operation {
     /// Optional feed rate override in mm/min; `null` to use the tool default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feed_rate_override: Option<f64>,
+    /// Optional workpiece material ID for feed/speed auto-population.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workpiece_material: Option<String>,
     /// Type and parameters specific to this operation kind.
     #[serde(flatten)]
     pub params: OperationParams,
@@ -409,6 +412,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::ZLevelRoughing(ZLevelRoughingParams {
                 depth: 8.0,
                 stepdown: 2.0,
@@ -432,6 +436,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Profile(ProfileParams {
                 depth: 10.0,
                 stepdown: Some(2.5),
@@ -455,6 +460,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 15.0,
                 stepdown: 3.0,
@@ -478,6 +484,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -556,6 +563,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Drill(DrillParams {
                 depth: 20.0,
                 points: vec![],
@@ -651,6 +659,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 5.0,
                 stepdown: 1.0,
@@ -684,6 +693,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: Some(12000),
             feed_rate_override: Some(800.0),
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 5.0,
                 stepdown: 1.0,
@@ -966,6 +976,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::AdaptiveClearing(AdaptiveClearingParams {
                 depth: 12.0,
                 stepdown: 3.0,
@@ -1022,6 +1033,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::Pocket(PocketParams {
                 depth: 5.0,
                 stepdown: 1.0,
@@ -1322,6 +1334,7 @@ mod tests {
             tool_id: tool_id(),
             spindle_speed_override: None,
             feed_rate_override: None,
+            workpiece_material: None,
             params: OperationParams::PencilMilling(PencilMillingParams {
                 allowance: 0.02,
                 tool_diameter: 3.0,

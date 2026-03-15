@@ -41,6 +41,7 @@ fn profile_algorithm_golden_matches() {
         tool_id: Uuid::nil(),
         spindle_speed_override: None,
         feed_rate_override: None,
+        workpiece_material: None,
         params: OperationParams::Profile(ProfileParams {
             depth: 10.0,
             stepdown: Some(2.5),

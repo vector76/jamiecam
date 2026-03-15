@@ -59,6 +59,7 @@ fn pocket_toolpath() -> Toolpath {
         tool_id: Uuid::nil(),
         spindle_speed_override: None,
         feed_rate_override: None,
+        workpiece_material: None,
         params: OperationParams::Pocket(PocketParams {
             depth: 10.0,
             stepdown: 2.0,
@@ -485,6 +486,7 @@ fn finishing_toolpath() -> Toolpath {
         tool_id: Uuid::nil(),
         spindle_speed_override: None,
         feed_rate_override: None,
+        workpiece_material: None,
         params: OperationParams::ZLevelFinishing(ZLevelFinishingParams {
             depth: 5.0,
             stepdown: 1.0,
