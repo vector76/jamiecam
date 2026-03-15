@@ -27,6 +27,9 @@ beforeEach(() => {
     simulationPointIndex: 0,
     simulationPlaybackSpeed: 10.0,
     simulationPoints: null,
+    measurementMode: 'off',
+    measurementPoints: [],
+    measurements: [],
   })
 })
 
@@ -353,5 +356,145 @@ describe('viewportStore — setSimulationPlaybackSpeed', () => {
     useViewportStore.getState().setSimulationPlaybackSpeed(2.0)
     useViewportStore.getState().setSimulationPlaybackSpeed(20.0)
     expect(useViewportStore.getState().simulationPlaybackSpeed).toBe(20.0)
+  })
+})
+
+describe('viewportStore — measurement initial state', () => {
+  it('starts with measurementMode off', () => {
+    expect(useViewportStore.getState().measurementMode).toBe('off')
+  })
+
+  it('starts with empty measurementPoints', () => {
+    expect(useViewportStore.getState().measurementPoints).toEqual([])
+  })
+
+  it('starts with empty measurements', () => {
+    expect(useViewportStore.getState().measurements).toEqual([])
+  })
+})
+
+describe('viewportStore — addMeasurementPoint (distance mode)', () => {
+  beforeEach(() => {
+    useViewportStore.getState().setMeasurementMode('distance')
+  })
+
+  it('first point does not complete a measurement', () => {
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    const state = useViewportStore.getState()
+    expect(state.measurements).toHaveLength(0)
+    expect(state.measurementPoints).toEqual([[0, 0, 0]])
+  })
+
+  it('second point completes measurement and resets measurementPoints', () => {
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    const state = useViewportStore.getState()
+    expect(state.measurements).toHaveLength(1)
+    expect(state.measurementPoints).toEqual([])
+  })
+
+  it('completed distance measurement stores correct value', () => {
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    const m = useViewportStore.getState().measurements[0]
+    expect(m.value).toBeCloseTo(5, 5)
+  })
+
+  it('completed distance measurement label is formatted as mm', () => {
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    const m = useViewportStore.getState().measurements[0]
+    expect(m.label).toBe('5.0 mm')
+  })
+
+  it('completed distance measurement anchor is midpoint', () => {
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([4, 0, 0])
+    const m = useViewportStore.getState().measurements[0]
+    expect(m.anchor).toEqual([2, 0, 0])
+  })
+})
+
+describe('viewportStore — addMeasurementPoint (angle mode)', () => {
+  beforeEach(() => {
+    useViewportStore.getState().setMeasurementMode('angle')
+  })
+
+  it('first point does not complete a measurement', () => {
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    expect(useViewportStore.getState().measurements).toHaveLength(0)
+    expect(useViewportStore.getState().measurementPoints).toHaveLength(1)
+  })
+
+  it('second point does not complete a measurement', () => {
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    expect(useViewportStore.getState().measurements).toHaveLength(0)
+    expect(useViewportStore.getState().measurementPoints).toHaveLength(2)
+  })
+
+  it('third point completes measurement with correct angle value', () => {
+    // 90° angle: p1=(1,0,0), vertex=(0,0,0), p3=(0,1,0)
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 1, 0])
+    const state = useViewportStore.getState()
+    expect(state.measurements).toHaveLength(1)
+    expect(state.measurements[0].value).toBeCloseTo(90, 5)
+    expect(state.measurements[0].label).toBe('90.0°')
+    expect(state.measurementPoints).toEqual([])
+  })
+
+  it('completed angle measurement anchor is vertex', () => {
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 1, 0])
+    const m = useViewportStore.getState().measurements[0]
+    expect(m.anchor).toEqual([0, 0, 0])
+  })
+})
+
+describe('viewportStore — clearMeasurements', () => {
+  it('resets measurements and measurementPoints to empty arrays', () => {
+    useViewportStore.getState().setMeasurementMode('distance')
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    useViewportStore.getState().clearMeasurements()
+    const state = useViewportStore.getState()
+    expect(state.measurements).toEqual([])
+    expect(state.measurementPoints).toEqual([])
+  })
+})
+
+describe('viewportStore — removeMeasurement', () => {
+  it('removes the first entry and preserves remaining', () => {
+    useViewportStore.getState().setMeasurementMode('distance')
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([0, 0, 5])
+    const before = useViewportStore.getState().measurements
+    expect(before).toHaveLength(2)
+    useViewportStore.getState().removeMeasurement(0)
+    const after = useViewportStore.getState().measurements
+    expect(after).toHaveLength(1)
+    expect(after[0]).toEqual(before[1])
+  })
+})
+
+describe('viewportStore — setMeasurementMode', () => {
+  it('resets measurementPoints to [] but keeps completed measurements', () => {
+    useViewportStore.getState().setMeasurementMode('distance')
+    useViewportStore.getState().addMeasurementPoint([0, 0, 0])
+    useViewportStore.getState().addMeasurementPoint([3, 4, 0])
+    // Start a new incomplete measurement
+    useViewportStore.getState().addMeasurementPoint([1, 0, 0])
+    expect(useViewportStore.getState().measurementPoints).toHaveLength(1)
+    useViewportStore.getState().setMeasurementMode('angle')
+    const state = useViewportStore.getState()
+    expect(state.measurementPoints).toEqual([])
+    expect(state.measurements).toHaveLength(1)
+    expect(state.measurementMode).toBe('angle')
   })
 })

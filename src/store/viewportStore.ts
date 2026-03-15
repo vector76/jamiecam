@@ -9,8 +9,16 @@
 import { create } from 'zustand'
 import type { MeshData, LineGeometryData, FaceDescriptor } from '../api/types'
 import type { SimPoint } from '../viewport/simulationPoints'
+import { distanceBetweenPoints, angleBetweenThreePoints } from '../viewport/measurementMath'
 
 export type DisplayMode = 'shaded' | 'shaded-edges' | 'wireframe' | 'transparent'
+
+export interface Measurement {
+  points: [number, number, number][]
+  value: number
+  label: string
+  anchor: [number, number, number]
+}
 
 interface ViewportState {
   /** Tessellated mesh currently loaded into the viewport, or null. */
@@ -71,6 +79,16 @@ interface ViewportState {
   stopSimulation: () => void
   setSimulationPointIndex: (idx: number) => void
   setSimulationPlaybackSpeed: (speed: number) => void
+  /** Current measurement mode. */
+  measurementMode: 'off' | 'distance' | 'angle'
+  /** Points collected so far for the in-progress measurement. */
+  measurementPoints: [number, number, number][]
+  /** All completed measurements. */
+  measurements: Measurement[]
+  setMeasurementMode: (mode: 'off' | 'distance' | 'angle') => void
+  addMeasurementPoint: (point: [number, number, number]) => void
+  clearMeasurements: () => void
+  removeMeasurement: (index: number) => void
 }
 
 export const useViewportStore = create<ViewportState>((set) => ({
@@ -113,4 +131,40 @@ export const useViewportStore = create<ViewportState>((set) => ({
   stopSimulation: () => set({ simulationActive: false, simulationPaused: false, simulationPointIndex: 0, simulationPoints: null }),
   setSimulationPointIndex: (idx) => set({ simulationPointIndex: idx }),
   setSimulationPlaybackSpeed: (speed) => set({ simulationPlaybackSpeed: speed }),
+  measurementMode: 'off',
+  measurementPoints: [],
+  measurements: [],
+  setMeasurementMode: (mode) => set({ measurementMode: mode, measurementPoints: [] }),
+  addMeasurementPoint: (point) => set((s) => {
+    const pts = s.measurementPoints
+    if (s.measurementMode === 'distance' && pts.length === 1) {
+      const p1 = pts[0]
+      const p2 = point
+      const distance = distanceBetweenPoints(p1, p2)
+      const anchor: [number, number, number] = [
+        (p1[0] + p2[0]) / 2,
+        (p1[1] + p2[1]) / 2,
+        (p1[2] + p2[2]) / 2,
+      ]
+      return {
+        measurements: [...s.measurements, { points: [p1, p2], value: distance, label: `${distance.toFixed(1)} mm`, anchor }],
+        measurementPoints: [],
+      }
+    }
+    if (s.measurementMode === 'angle' && pts.length === 2) {
+      const p1 = pts[0]
+      const vertex = pts[1]
+      const p3 = point
+      const angle = angleBetweenThreePoints(p1, vertex, p3)
+      return {
+        measurements: [...s.measurements, { points: [p1, vertex, p3], value: angle, label: `${angle.toFixed(1)}°`, anchor: vertex }],
+        measurementPoints: [],
+      }
+    }
+    return { measurementPoints: [...pts, point] }
+  }),
+  clearMeasurements: () => set({ measurements: [], measurementPoints: [] }),
+  removeMeasurement: (index) => set((s) => ({
+    measurements: s.measurements.filter((_, i) => i !== index),
+  })),
 }))
