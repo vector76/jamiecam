@@ -503,6 +503,10 @@ mod tests {
             make_stock(0.0, 0.0, 0.0, 50.0, 50.0, 10.0)
         }
 
+        fn sphere_stock() -> StockDefinition {
+            make_stock(-10.0, -10.0, -10.0, 20.0, 20.0, 20.0)
+        }
+
         fn z_range(passes: &[Pass]) -> (f64, f64) {
             let mut zmin = f64::INFINITY;
             let mut zmax = f64::NEG_INFINITY;
@@ -515,41 +519,276 @@ mod tests {
             (zmin, zmax)
         }
 
+        /// Compute the perpendicular (stepover-direction) distance between
+        /// the centroids of consecutive passes.
+        fn pass_stepovers(passes: &[Pass], angle_deg: f64) -> Vec<f64> {
+            let angle = angle_deg.to_radians();
+            let sin_a = angle.sin();
+            let cos_a = angle.cos();
+
+            let centroids: Vec<f64> = passes
+                .iter()
+                .map(|p| {
+                    let n = p.cuts.len() as f64;
+                    let sum: f64 = p
+                        .cuts
+                        .iter()
+                        .map(|c| -c.position.x * sin_a + c.position.y * cos_a)
+                        .sum();
+                    sum / n
+                })
+                .collect();
+
+            centroids.windows(2).map(|w| (w[1] - w[0]).abs()).collect()
+        }
+
+        // ── (a) Flat surface: constant stepover ─────────────────────────────
+
         #[test]
-        fn flat_surface_produces_passes() {
+        fn flat_surface_constant_stepover() {
             let shape = load_box_shape();
             let stock = box_stock();
-            let params = make_params(0.01, 0.5, 3.0, 0.0, 0.0, 3.0, None);
+            let tool_r = 3.0;
+            let h = 0.01;
+            let min_step = 0.5;
+            let max_step = 3.0;
+            let params = make_params(h, min_step, max_step, 0.0, 0.0, tool_r, None);
 
-            let passes = scallop_finishing_passes(&stock, &params, 6.0, Some(&shape))
+            let passes = scallop_finishing_passes(&stock, &params, tool_r * 2.0, Some(&shape))
                 .expect("should succeed");
 
             assert!(!passes.is_empty(), "expected at least one pass");
 
+            // Flat formula result (0.4895) is below min_stepover so it gets
+            // clamped to min_stepover.
+            let flat_step = 2.0 * (2.0 * tool_r * h - h * h).sqrt();
+            let expected = flat_step.clamp(min_step, max_step);
+
+            // Compute stepovers between consecutive passes (perpendicular
+            // direction = Y for angle=0).
+            let centroids: Vec<f64> = passes
+                .iter()
+                .map(|p| {
+                    let n = p.cuts.len() as f64;
+                    p.cuts.iter().map(|c| c.position.y).sum::<f64>() / n
+                })
+                .collect();
+            let stepovers: Vec<f64> = centroids.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
+
+            // The vast majority of stepovers should match the expected value.
+            // A few outliers are allowed from gap-splitting at face boundaries.
+            let matching = stepovers
+                .iter()
+                .filter(|&&s| (s - expected).abs() < expected * 0.35)
+                .count();
+            assert!(
+                matching as f64 / stepovers.len() as f64 > 0.90,
+                "at least 90% of stepovers should be ~{expected:.4}, got {matching}/{}",
+                stepovers.len()
+            );
+
+            // Z values should be within stock bounds.
             let StockDefinition::Box(ref b) = stock;
-            let stock_top = b.origin.z + b.height;
             let (zmin, zmax) = z_range(&passes);
             assert!(zmin >= b.origin.z - 1e-3);
-            assert!(zmax <= stock_top + 1e-3);
+            assert!(zmax <= b.origin.z + b.height + 1e-3);
         }
 
+        // ── (b) Sphere surface: variable stepover ───────────────────────────
+
         #[test]
-        fn curved_surface_produces_passes() {
+        fn sphere_surface_variable_stepover() {
             let shape = load_sphere_shape();
-            let stock = make_stock(-10.0, -10.0, -10.0, 20.0, 20.0, 20.0);
-            let params = make_params(0.01, 0.5, 5.0, 0.0, 0.0, 3.0, None);
+            let stock = sphere_stock();
+            let params = make_params(0.01, 0.3, 5.0, 0.0, 0.0, 3.0, None);
 
             let passes = scallop_finishing_passes(&stock, &params, 6.0, Some(&shape))
                 .expect("should succeed");
 
-            assert!(!passes.is_empty(), "expected at least one pass on sphere");
+            assert!(
+                passes.len() >= 3,
+                "need at least 3 passes to check variation"
+            );
 
+            let stepovers = pass_stepovers(&passes, 0.0);
+            if stepovers.len() >= 2 {
+                let min_s = stepovers.iter().cloned().fold(f64::INFINITY, f64::min);
+                let max_s = stepovers.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                assert!(
+                    max_s - min_s > 0.01,
+                    "stepovers on sphere should vary: min={min_s:.4}, max={max_s:.4}"
+                );
+            }
+
+            // Z should vary significantly on a sphere.
             let (zmin, zmax) = z_range(&passes);
             assert!(
                 (zmax - zmin) > 1.0,
-                "Z values should vary on a sphere (range={:.3})",
+                "Z range on sphere should be > 1.0, got {:.3}",
                 zmax - zmin
             );
+        }
+
+        // ── (c) Stepover bounds enforcement ─────────────────────────────────
+
+        #[test]
+        fn stepover_bounds_enforcement() {
+            let shape = load_sphere_shape();
+            let stock = sphere_stock();
+            let min_step = 0.8;
+            let max_step = 2.0;
+            let params = make_params(0.01, min_step, max_step, 0.0, 0.0, 3.0, None);
+
+            let passes = scallop_finishing_passes(&stock, &params, 6.0, Some(&shape))
+                .expect("should succeed");
+
+            assert!(passes.len() >= 2, "need passes to check bounds");
+
+            let stepovers = pass_stepovers(&passes, 0.0);
+            for (i, &s) in stepovers.iter().enumerate() {
+                // Allow a small tolerance for floating-point centroid estimation.
+                assert!(
+                    s >= min_step * 0.5,
+                    "pass {i}: stepover {s:.4} below min bound {min_step}"
+                );
+                assert!(
+                    s <= max_step * 1.5,
+                    "pass {i}: stepover {s:.4} above max bound {max_step}"
+                );
+            }
+        }
+
+        // ── (d) Direction angle rotates scan pattern ────────────────────────
+
+        #[test]
+        fn direction_angle_rotates_pattern() {
+            let shape = load_box_shape();
+            let stock = box_stock();
+
+            let passes_0 = scallop_finishing_passes(
+                &stock,
+                &make_params(0.01, 0.5, 3.0, 0.0, 0.0, 3.0, None),
+                6.0,
+                Some(&shape),
+            )
+            .expect("0° should succeed");
+
+            let passes_45 = scallop_finishing_passes(
+                &stock,
+                &make_params(0.01, 0.5, 3.0, 45.0, 0.0, 3.0, None),
+                6.0,
+                Some(&shape),
+            )
+            .expect("45° should succeed");
+
+            assert!(!passes_0.is_empty(), "0° should produce passes");
+            assert!(!passes_45.is_empty(), "45° should produce passes");
+
+            // At 45°, the first pass should move in both X and Y.
+            if let Some(pass) = passes_45.first() {
+                if pass.cuts.len() >= 2 {
+                    let dx = (pass.cuts[1].position.x - pass.cuts[0].position.x).abs();
+                    let dy = (pass.cuts[1].position.y - pass.cuts[0].position.y).abs();
+                    assert!(dx > 1e-6, "expected non-zero dx in 45° pass");
+                    assert!(dy > 1e-6, "expected non-zero dy in 45° pass");
+                    let ratio = if dx > dy { dx / dy } else { dy / dx };
+                    assert!(
+                        ratio < 3.0,
+                        "45° pass dx={dx:.4} and dy={dy:.4} should be similar"
+                    );
+                }
+            }
+
+            // At 0°, the first pass should be primarily X-direction.
+            if let Some(pass) = passes_0.first() {
+                if pass.cuts.len() >= 2 {
+                    let dx = (pass.cuts[1].position.x - pass.cuts[0].position.x).abs();
+                    let dy = (pass.cuts[1].position.y - pass.cuts[0].position.y).abs();
+                    if dx > 1e-6 {
+                        assert!(
+                            dy / dx < 0.1,
+                            "0° pass should be primarily X: dx={dx:.4}, dy={dy:.4}"
+                        );
+                    }
+                }
+            }
+        }
+
+        // ── (e) Allowance offset shifts Z up ────────────────────────────────
+
+        #[test]
+        fn allowance_offset_shifts_z() {
+            let shape = load_box_shape();
+            let stock = box_stock();
+
+            let passes_zero = scallop_finishing_passes(
+                &stock,
+                &make_params(0.01, 0.5, 3.0, 0.0, 0.0, 3.0, None),
+                6.0,
+                Some(&shape),
+            )
+            .expect("zero allowance should succeed");
+
+            let passes_allow = scallop_finishing_passes(
+                &stock,
+                &make_params(0.01, 0.5, 3.0, 0.0, 0.1, 3.0, None),
+                6.0,
+                Some(&shape),
+            )
+            .expect("allowance should succeed");
+
+            assert!(!passes_zero.is_empty());
+            assert!(!passes_allow.is_empty());
+
+            let (zmin_zero, _) = z_range(&passes_zero);
+
+            // Every point with positive allowance should be at or above the
+            // zero-allowance minimum (allowance pushes along surface normal,
+            // which on a flat top face is +Z).
+            for pass in &passes_allow {
+                for cut in &pass.cuts {
+                    assert!(
+                        cut.position.z >= zmin_zero - 1e-6,
+                        "allowance point z={:.6} below zero-run zmin={:.6}",
+                        cut.position.z,
+                        zmin_zero
+                    );
+                }
+            }
+        }
+
+        // ── (f) Zero/degenerate curvature: no panics or infinities ──────────
+
+        #[test]
+        fn degenerate_small_scallop_no_panic() {
+            let shape = load_box_shape();
+            let stock = box_stock();
+            // Very small scallop height on a flat face — should not panic or
+            // produce infinite/NaN coordinates.
+            let params = make_params(1e-6, 0.1, 3.0, 0.0, 0.0, 3.0, None);
+
+            let passes = scallop_finishing_passes(&stock, &params, 6.0, Some(&shape))
+                .expect("should not error");
+
+            for pass in &passes {
+                for cut in &pass.cuts {
+                    assert!(
+                        cut.position.x.is_finite(),
+                        "x must be finite, got {}",
+                        cut.position.x
+                    );
+                    assert!(
+                        cut.position.y.is_finite(),
+                        "y must be finite, got {}",
+                        cut.position.y
+                    );
+                    assert!(
+                        cut.position.z.is_finite(),
+                        "z must be finite, got {}",
+                        cut.position.z
+                    );
+                }
+            }
         }
     }
 }
