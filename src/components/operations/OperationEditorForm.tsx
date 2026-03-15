@@ -18,6 +18,7 @@ import { toAppError } from '../../api/errors'
 import type { Operation, OperationInput, PocketParams, ProfileParams, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams } from '../../api/types'
 import ParallelFinishingEditor from './ParallelFinishingEditor'
 import ScallopFinishingEditor from './ScallopFinishingEditor'
+import GougeCheckPanel from './GougeCheckPanel'
 import { useViewportStore } from '../../store/viewportStore'
 import { getModelFaces, detectHoles } from '../../api/geometry'
 
@@ -37,6 +38,9 @@ export function OperationEditorForm({ operationId }: Props) {
   const setSelectionMode = useViewportStore((s) => s.setSelectionMode)
   const setFaceDescriptors = useViewportStore((s) => s.setFaceDescriptors)
   const clearFaceSelection = useViewportStore((s) => s.clearFaceSelection)
+  const toolpathGeometry = useViewportStore((s) => s.toolpathGeometry)
+  const [toolpathVersion, setToolpathVersion] = useState(0)
+  useEffect(() => { setToolpathVersion((v) => v + 1) }, [toolpathGeometry])
 
   function handleError(e: unknown) {
     const err = toAppError(e)
@@ -635,6 +639,9 @@ export function OperationEditorForm({ operationId }: Props) {
         <div style={{ marginTop: '0.5rem' }}>
           <button disabled={stock === null}>Calculate</button>
         </div>
+        {toolpathGeometry && (
+          <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
+        )}
       </div>
     )
   }
@@ -666,6 +673,9 @@ export function OperationEditorForm({ operationId }: Props) {
         <div style={{ marginTop: '0.5rem' }}>
           <button disabled={stock === null}>Calculate</button>
         </div>
+        {toolpathGeometry && (
+          <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
+        )}
       </div>
     )
   }
