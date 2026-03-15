@@ -96,10 +96,13 @@ pub fn plan(
                 shape,
             )?
         }
-        OperationParams::FlowlineFinishing(_) => {
-            return Err(crate::error::AppError::InvalidInput(
-                "flowline finishing toolpath generation is not yet implemented".to_string(),
-            ));
+        OperationParams::FlowlineFinishing(params) => {
+            operations::flowline_finishing::flowline_finishing_passes(
+                stock,
+                params,
+                tool.diameter,
+                shape,
+            )?
         }
         OperationParams::PencilMilling(_) => {
             return Err(crate::error::AppError::InvalidInput(
@@ -548,6 +551,43 @@ mod tests {
                 direction_angle_deg: 0.0,
                 allowance: 0.0,
                 tool_radius: 5.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let result = plan(
+            &operation,
+            &make_tool_10mm(),
+            &make_stock_50x50x10(),
+            None,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "expected error when no shape provided, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn plan_flowline_finishing_returns_error_without_shape() {
+        use crate::models::operation::{CacheState, FlowlineDirection, FlowlineFinishingParams};
+        let operation = Operation {
+            id: uuid::Uuid::nil(),
+            name: "FF Op".to_string(),
+            enabled: true,
+            tool_id: uuid::Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::FlowlineFinishing(FlowlineFinishingParams {
+                stepover: 0.1,
+                direction: FlowlineDirection::U,
+                allowance: 0.0,
+                tool_diameter: 6.0,
                 geometry: None,
                 arc_lead_in_radius: None,
                 arc_lead_out_radius: None,
