@@ -198,16 +198,18 @@ fn pencil_milling_inner(
         .unwrap_or(2.0 / params.tool_diameter);
 
     let tool_radius = params.tool_diameter / 2.0;
+    let offset = params.allowance + tool_radius;
 
-    // ── Step 3: For each face, sample UV grid and find concave points ────────
+    // ── Step 3: For each face, sample UV grid and find high-curvature points ──
     const GRID_SIZE: usize = 50;
-    let flat_epsilon = 1e-6;
 
     let mut all_passes: Vec<Pass> = Vec::new();
 
     for face in &selected_faces {
-        let (umin, umax, vmin, vmax) = geometry::face_uv_bounds(face)
-            .map_err(|e| AppError::GeometryImport(format!("UV bounds: {e}")))?;
+        let (umin, umax, vmin, vmax) = match geometry::face_uv_bounds(face) {
+            Ok(bounds) => bounds,
+            Err(_) => continue,
+        };
 
         let u_span = umax - umin;
         let v_span = vmax - vmin;
@@ -215,10 +217,9 @@ fn pencil_milling_inner(
             continue;
         }
 
-        // Sample curvature on a grid and mark concave points.
+        // Sample curvature on a grid and mark high-curvature points.
         let mut concave_grid = vec![vec![false; GRID_SIZE]; GRID_SIZE];
         let mut any_concave = false;
-        let mut all_flat = true;
 
         for (ir, row) in concave_grid.iter_mut().enumerate() {
             for (ic, cell) in row.iter_mut().enumerate() {
@@ -227,9 +228,6 @@ fn pencil_milling_inner(
 
                 if let Ok(curv) = geometry::face_eval_curvature(face, u, v) {
                     let max_k = curv.k1.abs().max(curv.k2.abs());
-                    if max_k > flat_epsilon {
-                        all_flat = false;
-                    }
                     if max_k > curvature_threshold {
                         *cell = true;
                         any_concave = true;
@@ -238,8 +236,8 @@ fn pencil_milling_inner(
             }
         }
 
-        // Skip entirely flat faces.
-        if all_flat || !any_concave {
+        // Skip faces with no high-curvature regions.
+        if !any_concave {
             continue;
         }
 
@@ -264,7 +262,6 @@ fn pencil_milling_inner(
                 };
 
                 // Offset along surface normal: allowance + tool radius compensation.
-                let offset = params.allowance + tool_radius;
                 let (px, py, pz) = if offset.abs() > f64::EPSILON {
                     if let Ok(n) = geometry::face_eval_normal(face, u, v) {
                         (
@@ -290,6 +287,11 @@ fn pencil_milling_inner(
                     feed_rate_override: None,
                 });
             }
+
+            // Remove consecutive identical positions that arise when multiple
+            // UV cells collapse to the same offset point (e.g. when hole
+            // radius ≈ tool radius).
+            cuts.dedup_by(|a, b| a.position == b.position);
 
             if !cuts.is_empty() {
                 all_passes.push(Pass {
@@ -464,6 +466,30 @@ mod tests {
         let passes = vec![make_pass_with_length(0.1), make_pass_with_length(0.2)];
         let filtered = filter_short_passes(passes, 1.0);
         assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn filter_removes_single_point_pass() {
+        // A pass with one cut has zero path length (windows(2) yields nothing).
+        // It should be removed whenever min_length > 0.
+        let pass = Pass {
+            kind: PassKind::Cutting,
+            cuts: vec![CutPoint {
+                position: Vec3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0,
+                },
+                move_kind: MoveKind::Feed,
+                tool_orientation: None,
+                feed_rate_override: None,
+            }],
+        };
+        let filtered = filter_short_passes(vec![pass], 1.0);
+        assert!(
+            filtered.is_empty(),
+            "single-point pass has zero length and should be removed"
+        );
     }
 
     // ── Tests without OCCT ──────────────────────────────────────────────────

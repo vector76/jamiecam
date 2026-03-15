@@ -17,40 +17,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 0.0
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.8163265306122449
         },
         "moveKind": {
           "type": "feed"
@@ -83,40 +50,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 1.2244897959183674
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.0408163265306123
         },
         "moveKind": {
           "type": "feed"
@@ -149,40 +83,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 2.4489795918367347
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 3.2653061224489797
         },
         "moveKind": {
           "type": "feed"
@@ -215,40 +116,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 3.6734693877551017
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.489795918367347
         },
         "moveKind": {
           "type": "feed"
@@ -281,40 +149,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 4.8979591836734695
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.714285714285714
         },
         "moveKind": {
           "type": "feed"
@@ -347,40 +182,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 6.122448979591836
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.938775510204081
         },
         "moveKind": {
           "type": "feed"
@@ -413,40 +215,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 7.346938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.16326530612245
         },
         "moveKind": {
           "type": "feed"
@@ -479,40 +248,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 8.571428571428571
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 9.387755102040817
         },
         "moveKind": {
           "type": "feed"
@@ -545,40 +281,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 9.795918367346939
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.612244897959183
         },
         "moveKind": {
           "type": "feed"
@@ -611,40 +314,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 11.020408163265307
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.83673469387755
         },
         "moveKind": {
           "type": "feed"
@@ -677,40 +347,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 12.244897959183673
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.061224489795919
         },
         "moveKind": {
           "type": "feed"
@@ -743,40 +380,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 13.46938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 14.285714285714286
         },
         "moveKind": {
           "type": "feed"
@@ -809,40 +413,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 14.693877551020408
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.51020408163265
         },
         "moveKind": {
           "type": "feed"
@@ -875,40 +446,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 15.918367346938776
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.73469387755102
         },
         "moveKind": {
           "type": "feed"
@@ -941,40 +479,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 17.142857142857142
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.959183673469386
         },
         "moveKind": {
           "type": "feed"
@@ -1007,28 +512,6 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 18.367346938775512
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 18.775510204081634
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 18.775510204081634
         },
         "moveKind": {
@@ -1051,40 +534,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 19.183673469387756
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 20.0
         },
         "moveKind": {
           "type": "feed"
@@ -1122,40 +572,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 0.0
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.8163265306122449
         },
         "moveKind": {
           "type": "feed"
@@ -1188,40 +605,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 1.2244897959183674
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.0408163265306123
         },
         "moveKind": {
           "type": "feed"
@@ -1254,40 +638,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 2.4489795918367347
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 3.2653061224489797
         },
         "moveKind": {
           "type": "feed"
@@ -1320,40 +671,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 3.6734693877551017
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.489795918367347
         },
         "moveKind": {
           "type": "feed"
@@ -1386,40 +704,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 4.8979591836734695
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.714285714285714
         },
         "moveKind": {
           "type": "feed"
@@ -1452,40 +737,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 6.122448979591836
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.938775510204081
         },
         "moveKind": {
           "type": "feed"
@@ -1518,40 +770,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 7.346938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.16326530612245
         },
         "moveKind": {
           "type": "feed"
@@ -1584,40 +803,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 8.571428571428571
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 9.387755102040817
         },
         "moveKind": {
           "type": "feed"
@@ -1650,40 +836,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 9.795918367346939
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.612244897959183
         },
         "moveKind": {
           "type": "feed"
@@ -1716,40 +869,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 11.020408163265307
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.83673469387755
         },
         "moveKind": {
           "type": "feed"
@@ -1782,40 +902,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 12.244897959183673
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.061224489795919
         },
         "moveKind": {
           "type": "feed"
@@ -1848,40 +935,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 13.46938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 14.285714285714286
         },
         "moveKind": {
           "type": "feed"
@@ -1914,40 +968,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 14.693877551020408
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.51020408163265
         },
         "moveKind": {
           "type": "feed"
@@ -1980,40 +1001,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 15.918367346938776
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.73469387755102
         },
         "moveKind": {
           "type": "feed"
@@ -2046,40 +1034,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 17.142857142857142
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.959183673469386
         },
         "moveKind": {
           "type": "feed"
@@ -2112,28 +1067,6 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 18.367346938775512
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 18.775510204081634
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 18.775510204081634
         },
         "moveKind": {
@@ -2156,40 +1089,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 19.183673469387756
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 20.0
         },
         "moveKind": {
           "type": "feed"
@@ -2782,40 +1682,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 0.0
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.40816326530612246
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 0.8163265306122449
         },
         "moveKind": {
           "type": "feed"
@@ -2848,40 +1715,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 1.2244897959183674
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 1.6326530612244898
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.0408163265306123
         },
         "moveKind": {
           "type": "feed"
@@ -2914,40 +1748,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 2.4489795918367347
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 2.857142857142857
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 3.2653061224489797
         },
         "moveKind": {
           "type": "feed"
@@ -2980,40 +1781,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 3.6734693877551017
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.081632653061225
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 4.489795918367347
         },
         "moveKind": {
           "type": "feed"
@@ -3046,40 +1814,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 4.8979591836734695
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.3061224489795915
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 5.714285714285714
         },
         "moveKind": {
           "type": "feed"
@@ -3112,40 +1847,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 6.122448979591836
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.530612244897959
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 6.938775510204081
         },
         "moveKind": {
           "type": "feed"
@@ -3178,40 +1880,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 7.346938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 7.755102040816325
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.16326530612245
         },
         "moveKind": {
           "type": "feed"
@@ -3244,40 +1913,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 8.571428571428571
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 8.979591836734693
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 9.387755102040817
         },
         "moveKind": {
           "type": "feed"
@@ -3310,40 +1946,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 9.795918367346939
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.204081632653061
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 10.612244897959183
         },
         "moveKind": {
           "type": "feed"
@@ -3376,40 +1979,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 11.020408163265307
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.428571428571429
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 11.83673469387755
         },
         "moveKind": {
           "type": "feed"
@@ -3442,40 +2012,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 12.244897959183673
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 12.653061224489797
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.061224489795919
         },
         "moveKind": {
           "type": "feed"
@@ -3508,40 +2045,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 13.46938775510204
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 13.877551020408163
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 14.285714285714286
         },
         "moveKind": {
           "type": "feed"
@@ -3574,40 +2078,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 14.693877551020408
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.10204081632653
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 15.51020408163265
         },
         "moveKind": {
           "type": "feed"
@@ -3640,40 +2111,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 15.918367346938776
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.3265306122449
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 16.73469387755102
         },
         "moveKind": {
           "type": "feed"
@@ -3706,40 +2144,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 17.142857142857142
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.551020408163264
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 17.959183673469386
         },
         "moveKind": {
           "type": "feed"
@@ -3772,28 +2177,6 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 18.367346938775512
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 18.775510204081634
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 18.775510204081634
         },
         "moveKind": {
@@ -3816,40 +2199,7 @@
         "position": {
           "x": 75.0,
           "y": 25.0,
-          "z": 19.183673469387756
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
           "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 19.591836734693878
-        },
-        "moveKind": {
-          "type": "feed"
-        },
-        "toolOrientation": null
-      },
-      {
-        "position": {
-          "x": 75.0,
-          "y": 25.0,
-          "z": 20.0
         },
         "moveKind": {
           "type": "feed"
