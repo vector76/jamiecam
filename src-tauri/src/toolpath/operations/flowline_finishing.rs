@@ -116,6 +116,10 @@ fn flowline_finishing_inner(
         return Ok(Vec::new());
     }
 
+    if params.stepover <= 0.0 {
+        return Ok(Vec::new());
+    }
+
     let tool_radius = params.tool_diameter / 2.0;
     let num_samples: usize = 100;
     // Maximum gap between consecutive points before splitting into separate runs.
