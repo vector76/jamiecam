@@ -503,6 +503,12 @@ export class SceneManager {
 
   /** Sync sphere markers for in-progress measurement click points. */
   updateMeasurementPoints(points: [number, number, number][]): void {
+    for (const child of this.measurementMarkersGroup.children) {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose()
+        ;(child.material as THREE.Material).dispose()
+      }
+    }
     this.measurementMarkersGroup.clear()
     for (const point of points) {
       const mesh = new THREE.Mesh(

@@ -97,11 +97,13 @@ per-point feed rate scaling based on local engagement, data model, algorithm,
 planner dispatch, IPC, operation editor UI, golden tests for both toolpath JSON
 and G-code output).
 
-Phase 3 is **in progress**. Seven major deliverables are complete end-to-end:
+Phase 3 is **complete**. Ten deliverables were implemented end-to-end:
 OCCT surface evaluation, parallel finishing, scallop finishing, 3-axis gouge
-detection with auto-lift, flowline finishing, pencil milling, and basic viewport
-simulation mode. Remaining Phase 3 infrastructure (measurement overlays, etc.)
-is not yet started.
+detection with auto-lift, flowline finishing, pencil milling, basic viewport
+simulation mode, material/feed library, viewport measurement overlays, and
+viewport toolpath LOD. Planar face detection (`cg_shape_find_planar_faces`),
+tessellation LOD (multiple mesh resolution levels), and 5-axis tool orientation
+indicators were deferred out of Phase 3 scope.
 
 The following Phase 3 deliverables have been implemented:
 
@@ -1580,7 +1582,7 @@ All 18 of 18 Phase 2 items are complete.
 
 ---
 
-## Phase 3: 3D Surface Machining — In Progress
+## Phase 3: 3D Surface Machining — Complete
 
 ### Phase 3.1: C++ surface evaluation (`cam_geometry.h`, `cam_geometry.cpp`)
 
@@ -2090,18 +2092,87 @@ buttons, scrub slider, and speed selector, all wired to `useViewportStore`;
 mounted inside the `Viewport` HUD overlay. 8 component tests in
 `SimulationControls.test.tsx`.
 
-### Remaining Phase 3 roadmap items (not yet implemented)
+### Phase 3.12: Material / feed library — complete end-to-end
 
-The `development-roadmap.md` Phase 3 section lists additional infrastructure
-that was not part of the initial scope:
+**Rust data model** (`src-tauri/src/feed_library/`)
+- `FeedLibrary` struct loaded from an embedded `FEEDS_TOML` constant at startup;
+  stored directly on `AppState` (not inside `RwLock<Project>`) as it is
+  read-only after initialization
+- `MaterialMeta { id: String, display_name: String }` — lightweight material
+  descriptor returned by `list_materials`; both fields camelCase over IPC
+- `FeedEntry { spindle_speed_rpm: u32, feed_rate_mmpm: f64, doc_mm: Option<f64> }`
+  — recommended parameters for a
+  (material_id, tool_material, operation_category) triple; returned by
+  `lookup_feeds`
 
-**Infrastructure:**
-- Material / feed library (lookup table by material + tool + operation type)
-- Planar face detection (`cg_shape_find_planar_faces`)
-- Tessellation LOD (multiple resolution levels; switch on viewport zoom)
-- 5-axis tool orientation indicators (infrastructure for Phase 4)
-- Viewport: measurement overlays (CSS2DRenderer distance and angle labels)
-- Viewport: toolpath LOD (decimated display path at low zoom)
+**IPC commands** (`src-tauri/src/commands/feeds.rs`)
+- `list_materials` → `Vec<MaterialMeta>`: enumerates all materials in the
+  embedded library; no state write lock required
+- `lookup_feeds(material_id, tool_material, operation_category)` → `FeedEntry`:
+  resolves a (workpiece material × tool material × operation category) triple;
+  returns `AppError::NotFound` for unknown combinations
+
+**`Operation.workpiece_material`** (`src-tauri/src/models/operation.rs`)
+- `workpiece_material: Option<String>` added as a top-level field on the
+  `Operation` struct (not inside any `OperationParams` variant);
+  `#[serde(default, skip_serializing_if = "Option::is_none")]` ensures backward
+  compatibility with existing `.jcam` files
+
+**Frontend** (`src/components/operations/MaterialSelectorField.tsx`)
+- Dropdown backed by `list_materials` IPC; on selection calls `lookup_feeds`
+  and auto-fills the spindle speed and feed rate override fields in the
+  operation editor
+
+### Phase 3.13: Viewport measurement overlays — complete end-to-end
+
+**`CSS2DRenderer`** (`src/viewport/scene.ts`)
+- Added to `SceneManager` alongside `WebGLRenderer`; sized to match the canvas
+  on construction and on `resize()`; DOM element appended to the container with
+  `pointer-events: none` and `position: absolute`; rendered after the WebGL
+  pass in `_animate()`; removed from the DOM in `dispose()`
+
+**Scene graph additions** (`src/viewport/scene.ts`)
+- `measurementGroup` (`THREE.Group`, name `'MeasurementGroup'`) added directly
+  to the root scene; holds `CSS2DObject` labels for completed measurements
+- `measurementMarkersGroup` (`THREE.Group`, name `'MeasurementMarkersGroup'`)
+  is a child of `measurementGroup` and holds in-progress sphere marker meshes
+
+**`src/viewport/measurementMath.ts`**
+- Pure utility module with two exported functions:
+  `distanceBetweenPoints(a, b): number` and
+  `angleBetweenThreePoints(a, vertex, b): number`
+
+**Measurement state** (`src/store/viewportStore.ts`)
+- State fields: `measurementMode: 'off' | 'distance' | 'angle'`,
+  `measurementPoints: [number, number, number][]`, `measurements: Measurement[]`
+- Actions: `setMeasurementMode` (resets in-progress points), `addMeasurementPoint`
+  (completes a measurement when the required number of points is collected,
+  delegating to `distanceBetweenPoints` / `angleBetweenThreePoints`),
+  `clearMeasurements`, `removeMeasurement(index)`
+
+### Phase 3.14: Viewport toolpath LOD — complete end-to-end
+
+**`src/viewport/decimateToolpath.ts`**
+- `LOD_MAX_DISPLAY_POINTS = 50_000`: maximum point count at full resolution
+- `LOD_THRESHOLDS = { FULL: 1.5, HALF: 3.0, QUARTER: 6.0 }`: camera distance
+  expressed as multiples of the model bounding-sphere radius; distances beyond
+  `QUARTER` use eighth resolution (`LOD_MAX_DISPLAY_POINTS / 8`)
+- `decimateToolpath(data, maxPoints): LineGeometryData`: uniform stride
+  sub-sampling of `LineGeometryData` segments; always includes the last
+  segment; returns the original data unchanged if already under `maxPoints`
+
+**LOD system** (`src/viewport/scene.ts`)
+- `setToolpathData(data)`: stores raw `LineGeometryData` on `_rawToolpathData`
+  then calls `_applyLOD()`
+- `_applyLOD()`: reads camera distance and model bounding-sphere radius,
+  selects `maxPoints` via `LOD_THRESHOLDS`, calls `decimateToolpath`, and
+  rebuilds the toolpath `THREE.LineSegments`; re-runs on OrbitControls
+  `change` events, on new toolpath data, and when the model mesh changes
+
+**Deferred Phase 3 items (out of scope)**
+- Planar face detection (`cg_shape_find_planar_faces`) — deferred
+- Tessellation LOD (multiple mesh resolution levels) — deferred
+- 5-axis tool orientation indicators — deferred
 
 ---
 

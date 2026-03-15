@@ -30,4 +30,12 @@ describe('angleBetweenThreePoints', () => {
     const b: [number, number, number] = [0.5, Math.sqrt(3) / 2, 0]
     expect(angleBetweenThreePoints(a, vertex, b)).toBeCloseTo(60)
   })
+
+  it('returns 0 when vertex coincides with point a (degenerate)', () => {
+    expect(angleBetweenThreePoints([0, 0, 0], [0, 0, 0], [1, 0, 0])).toBe(0)
+  })
+
+  it('returns 0 when vertex coincides with point b (degenerate)', () => {
+    expect(angleBetweenThreePoints([1, 0, 0], [0, 0, 0], [0, 0, 0])).toBe(0)
+  })
 })

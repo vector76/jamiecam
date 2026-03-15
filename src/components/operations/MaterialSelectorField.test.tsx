@@ -167,6 +167,37 @@ it('changing toolMaterial from one value to another re-triggers lookup; NotFound
   expect(onFeedsFetched).toHaveBeenCalledTimes(1) // no additional call
 })
 
+it('changing operationCategory while currentMaterialId is set re-triggers lookup', async () => {
+  const onFeedsFetched = vi.fn()
+  const { rerender } = render(
+    <MaterialSelectorField
+      currentMaterialId="carbide-test"
+      toolMaterial="carbide"
+      operationCategory="pocket"
+      onMaterialChange={vi.fn()}
+      onFeedsFetched={onFeedsFetched}
+      onFeedsNotFound={vi.fn()}
+    />,
+  )
+
+  await waitFor(() => expect(feedsApi.lookupFeeds).toHaveBeenCalledWith('carbide-test', 'carbide', 'pocket'))
+
+  rerender(
+    <MaterialSelectorField
+      currentMaterialId="carbide-test"
+      toolMaterial="carbide"
+      operationCategory="finishing"
+      onMaterialChange={vi.fn()}
+      onFeedsFetched={onFeedsFetched}
+      onFeedsNotFound={vi.fn()}
+    />,
+  )
+
+  await waitFor(() => {
+    expect(feedsApi.lookupFeeds).toHaveBeenCalledWith('carbide-test', 'carbide', 'finishing')
+  })
+})
+
 it('selecting a material updates the visible select value', async () => {
   const { rerender } = render(
     <MaterialSelectorField

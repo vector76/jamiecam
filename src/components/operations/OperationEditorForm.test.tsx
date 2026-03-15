@@ -1093,6 +1093,7 @@ describe('OperationEditorForm — material selector', () => {
           { id: TOOL_ID_A, name: '10mm Flat', toolType: 'flat_endmill', material: 'carbide' },
         ],
       },
+      notifications: [],
     })
     vi.mocked(feedsApi.listMaterials).mockResolvedValue([
       { id: 'aluminum-6061', displayName: 'Aluminum 6061' },
@@ -1109,7 +1110,10 @@ describe('OperationEditorForm — material selector', () => {
   it('selecting a material calls editOperation with spindle/feed overrides from lookup', async () => {
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+    // Wait until listMaterials resolves so the option exists in the DOM.
+    // Without this, fireEvent.change on a select with no matching option silently
+    // leaves select.value as '' and the handler receives an empty value.
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Aluminum 6061' })).toBeInTheDocument())
 
     fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
       target: { value: 'aluminum-6061' },
@@ -1118,7 +1122,13 @@ describe('OperationEditorForm — material selector', () => {
     await waitFor(() =>
       expect(opsApi.editOperation).toHaveBeenCalledWith(
         POCKET_OP_ID,
-        expect.objectContaining({ spindleSpeedOverride: 12000, feedRateOverride: 1500 }),
+        expect.objectContaining({ workpieceMaterial: 'aluminum-6061' }),
+      )
+    )
+    await waitFor(() =>
+      expect(opsApi.editOperation).toHaveBeenCalledWith(
+        POCKET_OP_ID,
+        expect.objectContaining({ workpieceMaterial: 'aluminum-6061', spindleSpeedOverride: 12000, feedRateOverride: 1500 }),
       )
     )
   })
@@ -1126,7 +1136,7 @@ describe('OperationEditorForm — material selector', () => {
   it('blur on spindle override saves user-entered value after material pre-fill', async () => {
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Aluminum 6061' })).toBeInTheDocument())
 
     // Select material to trigger pre-fill
     fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
@@ -1159,7 +1169,7 @@ describe('OperationEditorForm — material selector', () => {
 
     render(<OperationEditorForm operationId={POCKET_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByDisplayValue('-- Select material --')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Aluminum 6061' })).toBeInTheDocument())
 
     fireEvent.change(screen.getByDisplayValue('-- Select material --'), {
       target: { value: 'aluminum-6061' },

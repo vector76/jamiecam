@@ -10,7 +10,7 @@
  * soon" placeholder.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTools, useProjectStore, useStock, useOperations } from '../../store/projectStore'
 import { editOperation, listOperations } from '../../api/operations'
 import { getProjectSnapshot } from '../../api/file'
@@ -50,6 +50,7 @@ export function OperationEditorForm({ operationId }: Props) {
   const pushNotification = useProjectStore((s) => s.pushNotification)
   const [operation, setOperation] = useState<Operation | null>(null)
   const [workpieceMaterial, setWorkpieceMaterial] = useState<string | null>(null)
+  const workpieceMaterialRef = useRef<string | null>(null)
   const selectionMode = useViewportStore((s) => s.selectionMode)
   const selectedFps = useViewportStore((s) => s.selectedFaceFingerprints)
   const setSelectionMode = useViewportStore((s) => s.setSelectionMode)
@@ -70,6 +71,7 @@ export function OperationEditorForm({ operationId }: Props) {
       .then((ops) => {
         const op = ops.find((o) => o.id === operationId) ?? null
         setOperation(op)
+        workpieceMaterialRef.current = op?.workpieceMaterial ?? null
         setWorkpieceMaterial(op?.workpieceMaterial ?? null)
       })
       .catch(handleError)
@@ -89,11 +91,13 @@ export function OperationEditorForm({ operationId }: Props) {
         toolMaterial={currentTool?.material ?? null}
         operationCategory={OPERATION_CATEGORY[operation!.type] ?? 'roughing'}
         onMaterialChange={(id) => {
+          workpieceMaterialRef.current = id
           setWorkpieceMaterial(id)
           void save({ workpieceMaterial: id || undefined })
         }}
         onFeedsFetched={(entry) => {
           void save({
+            workpieceMaterial: workpieceMaterialRef.current || undefined,
             spindleSpeedOverride: entry.spindleSpeedRpm,
             feedRateOverride: entry.feedRateMmpm,
           })

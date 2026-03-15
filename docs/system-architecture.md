@@ -64,7 +64,7 @@ concurrently while mutations are exclusive.
 
 ```
 AppState
-├── project: Project
+├── project: Project                        ← guarded by RwLock
 │   ├── source_model: Option<LoadedModel>
 │   │   ├── path, checksum
 │   │   ├── b_rep (OCCT handle)
@@ -72,11 +72,15 @@ AppState
 │   ├── stock: StockDefinition
 │   ├── wcs: WorkCoordinateSystem
 │   ├── tool_library: Vec<Tool>
-│   ├── operations: Vec<Operation>   ← ordered list
+│   ├── operations: Vec<Operation>          ← ordered list; each carries
+│   │                                          workpiece_material: Option<String>
 │   ├── toolpaths: HashMap<OperationId, Toolpath>
 │   ├── sim_results: HashMap<OperationId, SimResult>  ← physics sim output
 │   ├── machine_model: Option<MachineModel>  ← spindle, stiffness, travel limits
 │   └── physics_limits: PhysicsLimits  ← project-level force/deflection thresholds
+├── feed_library: FeedLibrary               ← read-only after startup; no RwLock
+│   └── initialized from embedded FEEDS_TOML constant
+│       (src-tauri/src/feed_library/mod.rs)
 └── preferences: UserPreferences
     ├── recent_files
     ├── default_post_processor
@@ -127,6 +131,13 @@ Commands return `Promise<T>` on the frontend; `Result<T, AppError>` in Rust.
 | `update_tool` | `ToolId, ToolDefinition` | — | — |
 | `remove_tool` | `ToolId` | — | Errors if tool in use |
 | `list_tools` | — | `Tool[]` | — |
+
+### Feed Library Commands
+
+| Command | Arguments | Returns | Notes |
+|---|---|---|---|
+| `list_materials` | — | `MaterialMeta[]` | All materials with IDs and display names; no lock needed |
+| `lookup_feeds` | `material_id, tool_material, operation_category` | `FeedEntry` | Returns `NotFound` for unknown triple |
 
 ### Operation Commands
 
@@ -353,10 +364,14 @@ src-tauri/src/
 │   ├── file.rs              # open_model, save_project, load_project, export_gcode
 │   ├── project.rs           # set_stock, set_wcs, get_project_snapshot
 │   ├── tools.rs             # add_tool, update_tool, remove_tool, list_tools
+│   ├── feeds.rs             # list_materials, lookup_feeds
 │   ├── operations.rs        # add_operation, update_operation, remove_operation
 │   ├── toolpath.rs          # calculate_toolpath, cancel_job, get_toolpath_geometry
 │   ├── simulation.rs        # run_simulation, get_simulation_data, get_simulation_heatmap, apply_optimization
 │   └── display.rs           # get_mesh_data, get_simulation_frames
+│
+├── feed_library/            # Embedded material/feed lookup table
+│   └── mod.rs               # FeedLibrary, MaterialMeta, FeedEntry; FEEDS_TOML constant
 │
 ├── geometry/                # Geometry kernel integration
 │   ├── mod.rs
@@ -430,15 +445,25 @@ src/
 │
 ├── store/                   # Zustand state
 │   ├── projectStore.ts      # Project summary, selection state
-│   ├── viewportStore.ts     # Camera, display modes, visibility, heatmap mode
+│   ├── viewportStore.ts     # Camera, display modes, visibility, heatmap mode;
+│   │                        # measurement state (measurementMode, measurementPoints,
+│   │                        # measurements) and actions (setMeasurementMode,
+│   │                        # addMeasurementPoint, clearMeasurements, removeMeasurement)
 │   ├── jobStore.ts          # Active computation jobs and progress
 │   └── simulationStore.ts   # Simulation results, violation list, heatmap selection
 │
 ├── viewport/                # Three.js integration
 │   ├── Viewport.tsx         # React component hosting the canvas
-│   ├── scene.ts             # Three.js scene, camera, renderer setup
+│   ├── scene.ts             # Three.js scene, camera, renderer setup;
+│   │                        # CSS2DRenderer for measurement labels;
+│   │                        # measurementGroup + measurementMarkersGroup scene nodes;
+│   │                        # LOD system (_rawToolpathData, setToolpathData, _applyLOD)
 │   ├── modelMesh.ts         # Building geometry from MeshData
 │   ├── toolpathLines.ts     # Building geometry from LineGeometryData
+│   ├── decimateToolpath.ts  # LOD utility: LOD_MAX_DISPLAY_POINTS, LOD_THRESHOLDS,
+│   │                        # decimateToolpath()
+│   ├── measurementMath.ts   # Pure utilities: distanceBetweenPoints,
+│   │                        # angleBetweenThreePoints
 │   ├── stockMesh.ts
 │   ├── simulation.ts        # Tool animation along toolpath
 │   ├── simulationOverlay.ts # Heatmap color layer, violation markers
@@ -462,7 +487,8 @@ src/
 1. OS launches Rust process
 2. Rust: initialize tracing (log to file + stderr)
 3. Rust: load UserPreferences from OS config dir
-4. Rust: initialize AppState with empty project
+4. Rust: initialize AppState with empty project; parse embedded FEEDS_TOML
+   into FeedLibrary (read-only from this point forward)
 5. Rust: register all Tauri commands and plugins
 6. Tauri: create window, load embedded frontend assets
 7. Frontend: React renders — reads empty Zustand store → shows empty/welcome state

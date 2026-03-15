@@ -26,7 +26,10 @@ export function MaterialSelectorField({
     listMaterials().then(setMaterials).catch(() => {})
   }, [])
 
-  // Re-run lookup when toolMaterial changes and a material is already selected.
+  // Re-run lookup when toolMaterial or operationCategory changes and a material is already
+  // selected. currentMaterialId/onFeedsFetched/onFeedsNotFound are intentionally excluded:
+  // material-change lookups are handled by handleChange to avoid double-calls, and the
+  // callbacks are recreated on every parent render (not useCallback-wrapped).
   useEffect(() => {
     if (!currentMaterialId || !toolMaterial) return
     lookupFeeds(currentMaterialId, toolMaterial, operationCategory)
@@ -40,8 +43,7 @@ export function MaterialSelectorField({
           onFeedsNotFound()
         }
       })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toolMaterial])
+  }, [toolMaterial, operationCategory]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const value = e.target.value

@@ -12,6 +12,7 @@ export function angleBetweenThreePoints(a: Point3, vertex: Point3, b: Point3): n
   const dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
   const magU = Math.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2)
   const magV = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+  if (magU === 0 || magV === 0) return 0
   const cosAngle = Math.max(-1, Math.min(1, dot / (magU * magV)))
   return Math.acos(cosAngle) * (180 / Math.PI)
 }
