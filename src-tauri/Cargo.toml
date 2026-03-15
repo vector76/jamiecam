@@ -74,6 +74,10 @@ path = "tests/parallel_finishing_golden.rs"
 name = "gouge_golden"
 path = "tests/gouge_golden.rs"
 
+[[test]]
+name = "scallop_finishing_golden"
+path = "tests/scallop_finishing_golden.rs"
+
 [features]
 # this feature is used for production builds or when `devtools` feature is not
 # enabled, which is the case when cargo test is run
