@@ -104,10 +104,8 @@ pub fn plan(
                 shape,
             )?
         }
-        OperationParams::PencilMilling(_) => {
-            return Err(crate::error::AppError::InvalidInput(
-                "pencil milling toolpath generation is not yet implemented".to_string(),
-            ));
+        OperationParams::PencilMilling(params) => {
+            operations::pencil_milling::pencil_milling_passes(stock, params, tool.diameter, shape)?
         }
     };
 
@@ -588,6 +586,43 @@ mod tests {
                 direction: FlowlineDirection::U,
                 allowance: 0.0,
                 tool_diameter: 6.0,
+                geometry: None,
+                arc_lead_in_radius: None,
+                arc_lead_out_radius: None,
+                helical_entry_radius: None,
+                helical_entry_pitch: None,
+                ramp_entry_angle_deg: None,
+            }),
+            cache: CacheState::default(),
+        };
+        let result = plan(
+            &operation,
+            &make_tool_10mm(),
+            &make_stock_50x50x10(),
+            None,
+            None,
+        );
+        assert!(
+            result.is_err(),
+            "expected error when no shape provided, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn plan_pencil_milling_returns_error_without_shape() {
+        use crate::models::operation::{CacheState, PencilMillingParams};
+        let operation = Operation {
+            id: uuid::Uuid::nil(),
+            name: "PM Op".to_string(),
+            enabled: true,
+            tool_id: uuid::Uuid::nil(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            params: OperationParams::PencilMilling(PencilMillingParams {
+                allowance: 0.0,
+                tool_diameter: 6.0,
+                curvature_threshold: None,
+                min_pass_length: 1.0,
                 geometry: None,
                 arc_lead_in_radius: None,
                 arc_lead_out_radius: None,
