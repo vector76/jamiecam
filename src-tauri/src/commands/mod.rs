@@ -9,6 +9,7 @@
 //! - [`toolpath`]   — toolpath queries and post-processor management
 //! - [`tools`]      — tool library CRUD
 
+pub mod feeds;
 pub mod file;
 pub mod geometry;
 pub mod operations;

@@ -10,6 +10,7 @@ use std::sync::RwLock;
 
 use uuid::Uuid;
 
+use crate::feed_library::FeedLibrary;
 use crate::geometry::MeshData;
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
 
@@ -98,6 +99,8 @@ pub struct AppState {
     pub project: RwLock<Project>,
     /// User preferences, guarded for concurrent read access.
     pub preferences: RwLock<UserPreferences>,
+    /// Feed/speed library loaded from the bundled TOML at startup.
+    pub feed_library: FeedLibrary,
 }
 
 impl Default for AppState {
@@ -105,6 +108,8 @@ impl Default for AppState {
         Self {
             project: RwLock::new(Project::default()),
             preferences: RwLock::new(UserPreferences::default()),
+            feed_library: FeedLibrary::from_toml(crate::feed_library::FEEDS_TOML)
+                .expect("bundled feed library must parse"),
         }
     }
 }
