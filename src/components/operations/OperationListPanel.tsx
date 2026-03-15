@@ -15,7 +15,7 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
-import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, FlowlineFinishingParams, ToolpathProgressEvent } from '../../api/types'
+import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, FlowlineFinishingParams, PencilMillingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
   const operations = useOperations()
@@ -127,7 +127,7 @@ export function OperationListPanel() {
 
   // ── Add ───────────────────────────────────────────────────────────────────
 
-  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing') {
+  async function handleAdd(type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling') {
     const tool = tools[0]
     if (!tool) return
 
@@ -177,6 +177,13 @@ export function OperationListPanel() {
         toolId: tool.id,
         type: 'flowlineFinishing',
         params: { stepover: 0.1, direction: 'u', allowance: 0, toolDiameter: 6.0 } as FlowlineFinishingParams,
+      }
+    } else if (type === 'pencilMilling') {
+      input = {
+        name: 'Pencil Milling',
+        toolId: tool.id,
+        type: 'pencilMilling',
+        params: { allowance: 0, toolDiameter: 6.0, curvatureThreshold: null, minPassLength: 1.0 } as PencilMillingParams,
       }
     } else {
       input = { name: 'New drill', toolId: tool.id, type, params: { depth: 10.0, points: [] } }
@@ -302,6 +309,12 @@ export function OperationListPanel() {
           disabled={noTools}
         >
           + Flowline Finishing
+        </button>
+        <button
+          onClick={() => void handleAdd('pencilMilling')}
+          disabled={noTools}
+        >
+          + Pencil Milling
         </button>
       </div>
     </div>
