@@ -1,6 +1,7 @@
 import { useViewportStore } from './viewportStore'
 import type { DisplayMode } from './viewportStore'
 import type { FaceDescriptor, MeshData } from '../api/types'
+import type { SimPoint } from '../viewport/simulationPoints'
 
 const MESH: MeshData = {
   vertices: [0, 1, 2, 3, 4, 5],
@@ -21,6 +22,11 @@ beforeEach(() => {
     hoveredFaceIdx: null,
     selectedFaceFingerprints: [],
     faceDescriptors: [],
+    simulationActive: false,
+    simulationPaused: false,
+    simulationPointIndex: 0,
+    simulationPlaybackSpeed: 10.0,
+    simulationPoints: null,
   })
 })
 
@@ -213,5 +219,139 @@ describe('viewportStore — setDisplayMode', () => {
     useViewportStore.getState().setDisplayMode('wireframe')
     useViewportStore.getState().setDisplayMode('transparent')
     expect(useViewportStore.getState().displayMode).toBe('transparent')
+  })
+})
+
+const SIM_POINTS: SimPoint[] = [
+  { x: 0, y: 0, z: 0, moveType: 0 },
+  { x: 1, y: 0, z: 0, moveType: 1 },
+  { x: 2, y: 1, z: 0, moveType: 1 },
+]
+
+describe('viewportStore — simulation initial state', () => {
+  it('starts with simulationActive false', () => {
+    expect(useViewportStore.getState().simulationActive).toBe(false)
+  })
+
+  it('starts with simulationPaused false', () => {
+    expect(useViewportStore.getState().simulationPaused).toBe(false)
+  })
+
+  it('starts with simulationPointIndex 0', () => {
+    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+  })
+
+  it('starts with simulationPlaybackSpeed 10.0', () => {
+    expect(useViewportStore.getState().simulationPlaybackSpeed).toBe(10.0)
+  })
+
+  it('starts with simulationPoints null', () => {
+    expect(useViewportStore.getState().simulationPoints).toBeNull()
+  })
+})
+
+describe('viewportStore — startSimulation', () => {
+  it('sets simulationActive true', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    expect(useViewportStore.getState().simulationActive).toBe(true)
+  })
+
+  it('stores the provided points', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    expect(useViewportStore.getState().simulationPoints).toEqual(SIM_POINTS)
+  })
+
+  it('resets simulationPointIndex to 0', () => {
+    useViewportStore.setState({ simulationPointIndex: 5 })
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+  })
+
+  it('clears simulationPaused', () => {
+    useViewportStore.setState({ simulationPaused: true })
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    expect(useViewportStore.getState().simulationPaused).toBe(false)
+  })
+})
+
+describe('viewportStore — pauseSimulation / resumeSimulation', () => {
+  it('pauseSimulation sets simulationPaused true', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().pauseSimulation()
+    expect(useViewportStore.getState().simulationPaused).toBe(true)
+  })
+
+  it('pauseSimulation leaves simulationActive unchanged', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().pauseSimulation()
+    expect(useViewportStore.getState().simulationActive).toBe(true)
+  })
+
+  it('resumeSimulation sets simulationPaused false', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().pauseSimulation()
+    useViewportStore.getState().resumeSimulation()
+    expect(useViewportStore.getState().simulationPaused).toBe(false)
+  })
+
+  it('resumeSimulation leaves simulationActive unchanged', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().pauseSimulation()
+    useViewportStore.getState().resumeSimulation()
+    expect(useViewportStore.getState().simulationActive).toBe(true)
+  })
+})
+
+describe('viewportStore — stopSimulation', () => {
+  it('sets simulationActive false', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().stopSimulation()
+    expect(useViewportStore.getState().simulationActive).toBe(false)
+  })
+
+  it('sets simulationPaused false', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().pauseSimulation()
+    useViewportStore.getState().stopSimulation()
+    expect(useViewportStore.getState().simulationPaused).toBe(false)
+  })
+
+  it('resets simulationPointIndex to 0', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().setSimulationPointIndex(2)
+    useViewportStore.getState().stopSimulation()
+    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+  })
+
+  it('clears simulationPoints to null', () => {
+    useViewportStore.getState().startSimulation(SIM_POINTS)
+    useViewportStore.getState().stopSimulation()
+    expect(useViewportStore.getState().simulationPoints).toBeNull()
+  })
+})
+
+describe('viewportStore — setSimulationPointIndex', () => {
+  it('updates the point index', () => {
+    useViewportStore.getState().setSimulationPointIndex(7)
+    expect(useViewportStore.getState().simulationPointIndex).toBe(7)
+  })
+
+  it('can be set to 0', () => {
+    useViewportStore.getState().setSimulationPointIndex(3)
+    useViewportStore.getState().setSimulationPointIndex(0)
+    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+  })
+})
+
+describe('viewportStore — setSimulationPlaybackSpeed', () => {
+  it('updates the playback speed', () => {
+    useViewportStore.getState().setSimulationPlaybackSpeed(5.0)
+    expect(useViewportStore.getState().simulationPlaybackSpeed).toBe(5.0)
+  })
+
+  it('replaces the previous speed', () => {
+    useViewportStore.getState().setSimulationPlaybackSpeed(2.0)
+    useViewportStore.getState().setSimulationPlaybackSpeed(20.0)
+    expect(useViewportStore.getState().simulationPlaybackSpeed).toBe(20.0)
   })
 })

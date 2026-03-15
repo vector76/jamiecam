@@ -8,6 +8,7 @@
 
 import { create } from 'zustand'
 import type { MeshData, LineGeometryData, FaceDescriptor } from '../api/types'
+import type { SimPoint } from '../viewport/simulationPoints'
 
 export type DisplayMode = 'shaded' | 'shaded-edges' | 'wireframe' | 'transparent'
 
@@ -54,6 +55,22 @@ interface ViewportState {
   setFaceDescriptors: (descriptors: FaceDescriptor[]) => void
   /** Set the camera projection mode. */
   setProjectionMode: (mode: 'perspective' | 'orthographic') => void
+  /** Whether simulation is active (playing or paused). */
+  simulationActive: boolean
+  /** Whether simulation is paused (simulationActive must also be true). */
+  simulationPaused: boolean
+  /** Current point index along the simulation path. */
+  simulationPointIndex: number
+  /** Playback speed multiplier (default 10.0 = 10× real feed rate). */
+  simulationPlaybackSpeed: number
+  /** Simulation points set by startSimulation, cleared by stopSimulation. */
+  simulationPoints: SimPoint[] | null
+  startSimulation: (points: SimPoint[]) => void
+  pauseSimulation: () => void
+  resumeSimulation: () => void
+  stopSimulation: () => void
+  setSimulationPointIndex: (idx: number) => void
+  setSimulationPlaybackSpeed: (speed: number) => void
 }
 
 export const useViewportStore = create<ViewportState>((set) => ({
@@ -85,4 +102,15 @@ export const useViewportStore = create<ViewportState>((set) => ({
   clearFaceSelection: () => set({ selectedFaceFingerprints: [] }),
   setFaceDescriptors: (faceDescriptors) => set({ faceDescriptors }),
   setProjectionMode: (projectionMode) => set({ projectionMode }),
+  simulationActive: false,
+  simulationPaused: false,
+  simulationPointIndex: 0,
+  simulationPlaybackSpeed: 10.0,
+  simulationPoints: null,
+  startSimulation: (points) => set({ simulationActive: true, simulationPaused: false, simulationPointIndex: 0, simulationPoints: points }),
+  pauseSimulation: () => set({ simulationPaused: true }),
+  resumeSimulation: () => set({ simulationPaused: false }),
+  stopSimulation: () => set({ simulationActive: false, simulationPaused: false, simulationPointIndex: 0, simulationPoints: null }),
+  setSimulationPointIndex: (idx) => set({ simulationPointIndex: idx }),
+  setSimulationPlaybackSpeed: (speed) => set({ simulationPlaybackSpeed: speed }),
 }))
