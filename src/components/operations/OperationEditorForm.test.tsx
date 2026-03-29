@@ -206,7 +206,7 @@ describe('OperationEditorForm — profile form', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Ramp entry angle/)).toBeInTheDocument()
   })
 
   it('entry motion fields are empty by default when params have no values', async () => {
@@ -217,7 +217,7 @@ describe('OperationEditorForm — profile form', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toHaveValue(null)
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toHaveValue(null)
+    expect(screen.getByLabelText(/Ramp entry angle/)).toHaveValue(null)
   })
 
   it('arc lead-in radius blur with a value calls editOperation with arcLeadInRadius set', async () => {
@@ -304,7 +304,7 @@ describe('OperationEditorForm — pocket form', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Ramp entry angle/)).toBeInTheDocument()
   })
 
   it('arc lead-out radius blur with a value calls editOperation with arcLeadOutRadius set', async () => {
@@ -875,7 +875,7 @@ describe('OperationEditorForm — adaptive_clearing branch', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Ramp entry angle/)).toBeInTheDocument()
   })
 
   it('optimal load input displays value as percentage (0.25 → 25)', async () => {
@@ -987,13 +987,13 @@ describe('OperationEditorForm — parallelFinishing branch', () => {
 
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tool' })).toBeInTheDocument())
     expect(screen.getByLabelText('Stepover (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Direction (deg)')).toBeInTheDocument()
     expect(screen.getByLabelText('Allowance (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Arc lead-in radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (deg)')).toBeInTheDocument()
     expect(screen.getByText('Select Faces')).toBeInTheDocument()
   })
 
@@ -1019,8 +1019,8 @@ describe('OperationEditorForm — parallelFinishing branch', () => {
   it('direction blur calls editOperation with updated directionAngleDeg', async () => {
     render(<OperationEditorForm operationId={PARALLEL_FINISHING_OP_ID} />)
 
-    await waitFor(() => expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument())
-    fireEvent.blur(screen.getByLabelText('Direction (°)'), { target: { value: '90' } })
+    await waitFor(() => expect(screen.getByLabelText('Direction (deg)')).toBeInTheDocument())
+    fireEvent.blur(screen.getByLabelText('Direction (deg)'), { target: { value: '90' } })
 
     await waitFor(() => expect(opsApi.editOperation).toHaveBeenCalledWith(
       PARALLEL_FINISHING_OP_ID,

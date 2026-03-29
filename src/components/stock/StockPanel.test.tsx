@@ -33,7 +33,7 @@ it('shows "No stock defined" and no Clear button when stock is null', () => {
   useProjectStore.setState({ snapshot: SNAPSHOT_NO_STOCK, selectedOperationId: null, notifications: [] })
   render(<StockPanel />)
   expect(screen.getByText('No stock defined')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Clear Stock' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
 })
 
 it('shows dimension values and Clear Stock button when stock is defined', () => {
@@ -42,7 +42,7 @@ it('shows dimension values and Clear Stock button when stock is defined', () => 
   expect(screen.getByText(/100/)).toBeInTheDocument()
   expect(screen.getByText(/80/)).toBeInTheDocument()
   expect(screen.getByText(/50/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Clear Stock' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
 })
 
 it('Set Stock submit calls setStock with form values and refreshes snapshot', async () => {
@@ -52,9 +52,9 @@ it('Set Stock submit calls setStock with form values and refreshes snapshot', as
 
   render(<StockPanel />)
 
-  fireEvent.change(screen.getByLabelText(/Width \(X, mm\)/i), { target: { value: '100' } })
-  fireEvent.change(screen.getByLabelText(/Depth \(Y, mm\)/i), { target: { value: '80' } })
-  fireEvent.change(screen.getByLabelText(/Height \(Z, mm\)/i), { target: { value: '50' } })
+  fireEvent.change(screen.getByLabelText(/Width \(X\)/i), { target: { value: '100' } })
+  fireEvent.change(screen.getByLabelText(/Depth \(Y\)/i), { target: { value: '80' } })
+  fireEvent.change(screen.getByLabelText(/Height \(Z\)/i), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'Set Stock' }))
 
   await waitFor(() => expect(stockApi.setStock).toHaveBeenCalledWith({
@@ -74,7 +74,7 @@ it('Clear Stock calls setStock(null) and refreshes snapshot', async () => {
   vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_NO_STOCK)
 
   render(<StockPanel />)
-  fireEvent.click(screen.getByRole('button', { name: 'Clear Stock' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
   await waitFor(() => expect(stockApi.setStock).toHaveBeenCalledWith(null))
   expect(fileApi.getProjectSnapshot).toHaveBeenCalled()
@@ -86,9 +86,9 @@ it('pushes error notification when setStock rejects', async () => {
 
   render(<StockPanel />)
 
-  fireEvent.change(screen.getByLabelText(/Width \(X, mm\)/i), { target: { value: '100' } })
-  fireEvent.change(screen.getByLabelText(/Depth \(Y, mm\)/i), { target: { value: '80' } })
-  fireEvent.change(screen.getByLabelText(/Height \(Z, mm\)/i), { target: { value: '50' } })
+  fireEvent.change(screen.getByLabelText(/Width \(X\)/i), { target: { value: '100' } })
+  fireEvent.change(screen.getByLabelText(/Depth \(Y\)/i), { target: { value: '80' } })
+  fireEvent.change(screen.getByLabelText(/Height \(Z\)/i), { target: { value: '50' } })
   fireEvent.click(screen.getByRole('button', { name: 'Set Stock' }))
 
   await waitFor(() => expect(useProjectStore.getState().notifications).toContain('write error'))

@@ -15,6 +15,11 @@ import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
 import { calculateToolpath, getToolpathGeometry, listenToolpathProgress } from '../../api/toolpath'
 import { OperationEditorForm } from './OperationEditorForm'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Progress } from '@/components/ui/progress'
+import { ChevronUp, ChevronDown, Trash2, Calculator, Plus } from 'lucide-react'
 import type { OperationInput, DrillParams, ZLevelRoughingParams, ZLevelFinishingParams, AdaptiveClearingParams, ParallelFinishingParams, ScallopFinishingParams, FlowlineFinishingParams, PencilMillingParams, ToolpathProgressEvent } from '../../api/types'
 
 export function OperationListPanel() {
@@ -199,123 +204,108 @@ export function OperationListPanel() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ width: '240px', borderLeft: '1px solid #ccc', overflowY: 'auto', padding: '0.5rem' }}>
-      <div>
+    <div className="space-y-2">
+      <div className="space-y-0.5">
         {operations.map((op) => (
           <div
             key={op.id}
             onClick={() => setSelectedOpId(op.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem',
-              cursor: 'pointer',
-              background: op.id === selectedOpId ? '#e0e8ff' : undefined,
-            }}
+            className={cn(
+              'flex cursor-pointer items-center gap-1 rounded-sm px-1.5 py-1',
+              op.id === selectedOpId ? 'bg-primary/10' : 'hover:bg-accent',
+            )}
           >
-            <input
-              type="checkbox"
+            <Checkbox
               checked={op.enabled}
-              onChange={() => void handleToggleEnabled(op.id, op.enabled)}
+              onCheckedChange={() => void handleToggleEnabled(op.id, op.enabled)}
               onClick={(e) => e.stopPropagation()}
               aria-label={`Toggle ${op.name}`}
+              className="h-3.5 w-3.5"
             />
-            <span style={{ flex: 1 }}>{op.name}</span>
+            <span className="flex-1 truncate text-sm" title={op.name}>{op.name}</span>
             {op.needsRecalculate && (
-              <span style={{ color: '#b45309', fontSize: '0.7em' }} aria-label="stale">
-                (stale)
+              <span className="text-[0.65rem] text-warning" aria-label="stale">
+                stale
               </span>
             )}
-            <span style={{ fontSize: '0.75em', color: '#666' }}>{op.operationType}</span>
-            <button
+            <span className="text-xs text-muted-foreground">{op.operationType}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); void handleReorder(op.id, 'up') }}
               disabled={operations.indexOf(op) === 0}
               aria-label={`Move up ${op.name}`}
-            >▲</button>
-            <button
+            >
+              <ChevronUp className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); void handleReorder(op.id, 'down') }}
               disabled={operations.indexOf(op) === operations.length - 1}
               aria-label={`Move down ${op.name}`}
-            >▼</button>
-            <button
+            >
+              <ChevronDown className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 text-muted-foreground hover:text-destructive"
               onClick={(e) => { e.stopPropagation(); void handleDelete(op.id) }}
               aria-label={`Delete ${op.name}`}
             >
-              ✕
-            </button>
-            <button
+              <Trash2 className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
               onClick={(e) => { e.stopPropagation(); void handleCalculate(op.id) }}
               disabled={!stock || (op.operationType === 'drill' ? (drillPointCounts[op.id] ?? 0) < 1 : false) || calculatingId !== null}
               aria-label={`Calculate ${op.name}`}
             >
-              {calculatingId === op.id ? '…' : 'Calc'}
-            </button>
+              <Calculator className="h-3 w-3" />
+            </Button>
             {calculatingId === op.id && (
-              <progress value={progress} max={100} style={{ width: '60px' }} aria-label={`Progress for ${op.name}`} />
+              <Progress value={progress} className="h-1.5 w-14" aria-label={`Progress for ${op.name}`} />
             )}
           </div>
         ))}
       </div>
       <OperationEditorForm operationId={selectedOpId} />
-      <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.5rem' }}>
-        <button
-          onClick={() => void handleAdd('profile')}
-          disabled={noTools}
-        >
-          + Profile
-        </button>
-        <button
-          onClick={() => void handleAdd('pocket')}
-          disabled={noTools}
-        >
-          + Pocket
-        </button>
-        <button
-          onClick={() => void handleAdd('drill')}
-          disabled={noTools}
-        >
-          + Drill
-        </button>
-        <button
-          onClick={() => void handleAdd('z_level_roughing')}
-          disabled={noTools}
-        >
-          + Z-Level Roughing
-        </button>
-        <button
-          onClick={() => void handleAdd('z_level_finishing')}
-          disabled={noTools}
-        >
-          + Z-Level Finishing
-        </button>
-        <button
-          onClick={() => void handleAdd('adaptive_clearing')}
-          disabled={noTools}
-        >
-          + Adaptive Clearing
-        </button>
-        <button
-          onClick={() => void handleAdd('parallelFinishing')}
-          disabled={noTools}
-        >
-          + Parallel Finishing
-        </button>
-        <button
-          onClick={() => void handleAdd('scallopFinishing')}
-          disabled={noTools}
-        >
-          + Scallop Finishing
-        </button>
-        <button
-          onClick={() => void handleAdd('flowlineFinishing')}
-          disabled={noTools}
-        >
-          + Flowline Finishing
-        </button>
-        <button
-          onClick={() => void handleAdd('pencilMilling')}
-          disabled={noTools}
-        >
-          + Pencil Milling
-        </button>
+      <div className="grid grid-cols-2 gap-1.5">
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('profile')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Profile
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('pocket')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Pocket
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('drill')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Drill
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('z_level_roughing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Z-Rough
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('z_level_finishing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Z-Finish
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('adaptive_clearing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Adaptive
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('parallelFinishing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Parallel
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('scallopFinishing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Scallop
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('flowlineFinishing')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Flowline
+        </Button>
+        <Button variant="outline" size="sm" className="text-xs" onClick={() => void handleAdd('pencilMilling')} disabled={noTools}>
+          <Plus className="mr-0.5 h-3 w-3" /> Pencil
+        </Button>
       </div>
     </div>
   )

@@ -7,6 +7,7 @@
  */
 
 import { useEffect } from 'react'
+import { X } from 'lucide-react'
 import { useNotifications, useProjectStore } from '../../store/projectStore'
 
 export function Notifications() {
@@ -22,38 +23,19 @@ export function Notifications() {
   if (notifications.length === 0) return null
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: '16px',
-        right: '16px',
-        zIndex: 1000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-      }}
-    >
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
       {notifications.map((message, index) => (
         <div
           key={index}
-          style={{
-            background: '#333',
-            color: '#fff',
-            padding: '8px 12px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            minWidth: '200px',
-          }}
+          className="flex min-w-[200px] items-center gap-2 rounded-md bg-card px-3 py-2 text-sm text-card-foreground shadow-lg"
         >
-          <span style={{ flex: 1 }}>{message}</span>
+          <span className="flex-1">{message}</span>
           <button
             onClick={() => dismissNotification(index)}
             aria-label="Dismiss notification"
-            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '0' }}
+            className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
           >
-            ×
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}

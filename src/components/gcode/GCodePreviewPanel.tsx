@@ -11,6 +11,8 @@ import { listPostProcessors, getGcodePreview, exportGcode } from '../../api/tool
 import { usePushNotification, useSelectedOperationId } from '../../store/projectStore'
 import { toAppError } from '../../api/errors'
 import { save } from '@tauri-apps/plugin-dialog'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
 import type { PostProcessorMeta } from '../../api/types'
 
 const NO_TOOLPATH_MSG = 'No toolpath computed for this operation.'
@@ -78,24 +80,32 @@ export function GCodePreviewPanel() {
   }
 
   if (!selectedOperationId) {
-    return <p>Select an operation to preview G-code.</p>
+    return (
+      <p className="text-xs text-muted-foreground">Select an operation to preview G-code.</p>
+    )
   }
 
   return (
-    <div>
+    <div className="space-y-2">
       <select
         value={selectedPpId ?? ''}
         onChange={(e) => setSelectedPpId(e.target.value || null)}
         aria-label="Post-processor"
+        className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground"
       >
         {postProcessors.map((pp) => (
-          <option key={pp.id} value={pp.id}>{pp.name}</option>
+          <option key={pp.id} value={pp.id}>
+            {pp.name}
+          </option>
         ))}
       </select>
-      <pre>{loading ? 'Loading…' : (gcode ?? NO_TOOLPATH_MSG)}</pre>
-      <button onClick={handleExport} disabled={!gcode}>
-        Export…
-      </button>
+      <pre className="max-h-48 overflow-auto rounded-md bg-muted p-2 font-mono text-xs text-muted-foreground">
+        {loading ? 'Loading...' : (gcode ?? NO_TOOLPATH_MSG)}
+      </pre>
+      <Button variant="outline" size="sm" onClick={handleExport} disabled={!gcode}>
+        <Download className="mr-1 h-3.5 w-3.5" />
+        Export
+      </Button>
     </div>
   )
 }

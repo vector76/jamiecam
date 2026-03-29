@@ -294,25 +294,25 @@ describe('Viewport — keyboard shortcuts', () => {
 })
 
 describe('Viewport — toolbar button', () => {
-  it('renders a button labelled Perspective by default', () => {
+  it('renders a button labelled Persp by default', () => {
     render(<Viewport />)
-    expect(screen.getByRole('button', { name: 'Perspective' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Persp' })).toBeInTheDocument()
   })
 
   it('clicking the button toggles projectionMode to orthographic', async () => {
     render(<Viewport />)
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Perspective' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Persp' }))
     })
     expect(useViewportStore.getState().projectionMode).toBe('orthographic')
   })
 
-  it('button label changes to Orthographic after toggle', async () => {
+  it('button label changes to Ortho after toggle', async () => {
     render(<Viewport />)
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Perspective' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Persp' }))
     })
-    expect(screen.getByRole('button', { name: 'Orthographic' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ortho' })).toBeInTheDocument()
   })
 })
 
@@ -436,16 +436,16 @@ describe('Viewport — measurement toolbar', () => {
     expect(useViewportStore.getState().measurementPoints).toEqual([])
   })
 
-  it('Ruler button has active class when measurementMode is distance', async () => {
+  it('Ruler button uses default variant when measurementMode is distance', async () => {
     useViewportStore.setState({ measurementMode: 'distance' })
     render(<Viewport />)
-    expect(screen.getByTitle('Distance measurement')).toHaveClass('active')
+    expect(screen.getByTitle('Distance measurement')).toHaveAttribute('data-variant', 'default')
   })
 
-  it('Protractor button has active class when measurementMode is angle', async () => {
+  it('Protractor button uses default variant when measurementMode is angle', async () => {
     useViewportStore.setState({ measurementMode: 'angle' })
     render(<Viewport />)
-    expect(screen.getByTitle('Angle measurement')).toHaveClass('active')
+    expect(screen.getByTitle('Angle measurement')).toHaveAttribute('data-variant', 'default')
   })
 })
 

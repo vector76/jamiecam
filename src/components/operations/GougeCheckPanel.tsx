@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { checkGouge, autoLift } from '../../api/toolpath'
 import { toAppError } from '../../api/errors'
 import { useProjectStore } from '../../store/projectStore'
+import { Button } from '@/components/ui/button'
 import type { GougeCheckResult } from '../../api/types'
 
 interface Props {
@@ -58,40 +59,48 @@ export default function GougeCheckPanel({ operationId, toolpathVersion }: Props)
   }
 
   return (
-    <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.5rem' }}>
-      <button onClick={() => void handleCheckGouge()} disabled={loading}>
-        {loading ? 'Checking…' : 'Check Gouges'}
-      </button>
+    <div className="mt-2 border-t border-border pt-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void handleCheckGouge()}
+        disabled={loading}
+      >
+        {loading ? 'Checking...' : 'Check Gouges'}
+      </Button>
 
       {result !== null && (
-        <div style={{ marginTop: '0.25rem' }}>
+        <div className="mt-1">
           {result.passed ? (
-            <span style={{ color: 'green' }}>&#x2714; No gouges</span>
+            <span className="text-sm text-success">&#x2714; No gouges</span>
           ) : (
-            <div>
-              <span style={{ color: 'red', fontWeight: 'bold' }}>
+            <div className="space-y-1">
+              <span className="text-sm font-bold text-destructive">
                 {result.violations.length} violation{result.violations.length === 1 ? '' : 's'}
               </span>
 
-              <details style={{ marginTop: '0.25rem' }}>
-                <summary style={{ cursor: 'pointer' }}>Show violations</summary>
-                <ul style={{ fontSize: '0.85em', margin: '0.25rem 0', paddingLeft: '1.25rem' }}>
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                  Show violations
+                </summary>
+                <ul className="mt-1 space-y-0.5 pl-4 text-muted-foreground">
                   {result.violations.map((v, i) => (
                     <li key={i}>
-                      ({v.position[0].toFixed(3)}, {v.position[1].toFixed(3)}, {v.position[2].toFixed(3)})
-                      &mdash; depth {v.gougeDepth.toFixed(4)} mm
+                      ({v.position[0].toFixed(3)}, {v.position[1].toFixed(3)},{' '}
+                      {v.position[2].toFixed(3)}) &mdash; depth {v.gougeDepth.toFixed(4)} mm
                     </li>
                   ))}
                 </ul>
               </details>
 
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleAutoLift()}
                 disabled={loading}
-                style={{ marginTop: '0.25rem' }}
               >
                 Auto-Lift
-              </button>
+              </Button>
             </div>
           )}
         </div>

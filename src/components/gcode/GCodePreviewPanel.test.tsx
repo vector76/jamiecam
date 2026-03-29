@@ -81,10 +81,10 @@ describe('GCodePreviewPanel', () => {
 
     // Wait for gcode to load so Export button is enabled
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Export…' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /export/i })).not.toBeDisabled()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Export…' }))
+    fireEvent.click(screen.getByRole('button', { name: /export/i }))
 
     await waitFor(() => {
       expect(toolpathApi.exportGcode).toHaveBeenCalledWith(

@@ -2,7 +2,7 @@
  * AppShell — root layout component.
  *
  * Places the Toolbar across the top, the 3-D Viewport in the main area,
- * and the OperationListPanel as a fixed-width sidebar on the right.
+ * and sidebar panels in a scrollable column on the right.
  */
 
 import { Toolbar } from '../toolbar/Toolbar'
@@ -13,20 +13,34 @@ import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
 import { ToolLibraryPanel } from '../tools/ToolLibraryPanel'
 import { StockPanel } from '../stock/StockPanel'
 import { WCSPanel } from '../wcs/WCSPanel'
+import { SidebarSection } from '@/components/ui/sidebar-section'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 export function AppShell() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div className="flex h-screen flex-col bg-background text-foreground">
       <Toolbar />
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Viewport style={{ flex: 1 }} />
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <ToolLibraryPanel />
-          <StockPanel />
-          <WCSPanel />
-          <OperationListPanel />
-          <GCodePreviewPanel />
-        </div>
+      <div className="flex flex-1 overflow-hidden">
+        <Viewport className="flex-1" />
+        <aside className="w-[280px] border-l border-border">
+          <ScrollArea className="h-full">
+            <SidebarSection title="Tools" defaultOpen={false}>
+              <ToolLibraryPanel />
+            </SidebarSection>
+            <SidebarSection title="Stock">
+              <StockPanel />
+            </SidebarSection>
+            <SidebarSection title="WCS" defaultOpen={false}>
+              <WCSPanel />
+            </SidebarSection>
+            <SidebarSection title="Operations">
+              <OperationListPanel />
+            </SidebarSection>
+            <SidebarSection title="G-Code" defaultOpen={false}>
+              <GCodePreviewPanel />
+            </SidebarSection>
+          </ScrollArea>
+        </aside>
       </div>
       <Notifications />
     </div>

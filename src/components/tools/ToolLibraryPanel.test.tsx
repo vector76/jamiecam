@@ -90,8 +90,8 @@ describe('ToolLibraryPanel — add form', () => {
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
     expect(screen.getByLabelText('Type')).toBeInTheDocument()
     expect(screen.getByLabelText('Material')).toBeInTheDocument()
-    expect(screen.getByLabelText('Diameter')).toBeInTheDocument()
-    expect(screen.getByLabelText('Flute Count')).toBeInTheDocument()
+    expect(screen.getByLabelText('Diameter (mm)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Flute count')).toBeInTheDocument()
   })
 
   it('submits add form and updates store', async () => {
@@ -104,8 +104,8 @@ describe('ToolLibraryPanel — add form', () => {
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: '6mm Flat' } })
     fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'flat_endmill' } })
     fireEvent.change(screen.getByLabelText('Material'), { target: { value: 'HSS' } })
-    fireEvent.change(screen.getByLabelText('Diameter'), { target: { value: '6' } })
-    fireEvent.change(screen.getByLabelText('Flute Count'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText('Diameter (mm)'), { target: { value: '6' } })
+    fireEvent.change(screen.getByLabelText('Flute count'), { target: { value: '4' } })
 
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
 
@@ -143,9 +143,9 @@ describe('ToolLibraryPanel — edit', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit 6mm Flat' }))
 
     await waitFor(() => expect(toolsApi.listTools).toHaveBeenCalled())
-    expect((screen.getByLabelText('Diameter') as HTMLInputElement).value).toBe('6')
+    expect((screen.getByLabelText('Diameter (mm)') as HTMLInputElement).value).toBe('6')
     expect((screen.getByLabelText('Material') as HTMLInputElement).value).toBe('HSS')
-    expect((screen.getByLabelText('Flute Count') as HTMLInputElement).value).toBe('4')
+    expect((screen.getByLabelText('Flute count') as HTMLInputElement).value).toBe('4')
   })
 
   it('submits edit form with correct arguments', async () => {
@@ -200,8 +200,8 @@ describe('ToolLibraryPanel — error handling', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add Tool/i }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test' } })
     fireEvent.change(screen.getByLabelText('Material'), { target: { value: 'HSS' } })
-    fireEvent.change(screen.getByLabelText('Diameter'), { target: { value: '6' } })
-    fireEvent.change(screen.getByLabelText('Flute Count'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText('Diameter (mm)'), { target: { value: '6' } })
+    fireEvent.change(screen.getByLabelText('Flute count'), { target: { value: '4' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
 
     await waitFor(() => expect(useProjectStore.getState().notifications).toContain('disk full'))

@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens for JamieCam — a dark theme suited to a desktop CAM tool.
+ * All colour values are HSL channel triplets consumed by Tailwind as
+ * bg-primary, text-muted-foreground, etc.
+ */
+
+@theme inline {
+  --color-background: hsl(220 13% 10%);
+  --color-foreground: hsl(210 10% 85%);
+
+  --color-card: hsl(220 12% 13%);
+  --color-card-foreground: hsl(210 10% 85%);
+
+  --color-popover: hsl(220 12% 15%);
+  --color-popover-foreground: hsl(210 10% 85%);
+
+  --color-primary: hsl(215 60% 50%);
+  --color-primary-foreground: hsl(210 20% 98%);
+
+  --color-secondary: hsl(220 10% 18%);
+  --color-secondary-foreground: hsl(210 10% 85%);
+
+  --color-muted: hsl(220 10% 18%);
+  --color-muted-foreground: hsl(215 12% 65%);
+
+  --color-accent: hsl(220 10% 20%);
+  --color-accent-foreground: hsl(210 10% 85%);
+
+  --color-destructive: hsl(0 62% 50%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  --color-warning: hsl(37 90% 45%);
+  --color-success: hsl(142 60% 40%);
+
+  --color-border: hsl(220 10% 20%);
+  --color-input: hsl(220 10% 16%);
+  --color-ring: hsl(215 60% 50%);
+
+  --radius-lg: 0.5rem;
+  --radius-md: 0.375rem;
+  --radius-sm: 0.25rem;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--color-border);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family:
+      Inter,
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Compact number inputs for data-dense CAM forms */
+  input[type='number'] {
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Focus ring for native selects to match shadcn Input/Button focus style */
+  select:focus-visible {
+    outline: none;
+    border-color: var(--color-ring);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ring) 50%, transparent);
+  }
+}

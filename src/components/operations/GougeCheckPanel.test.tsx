@@ -77,7 +77,7 @@ describe('GougeCheckPanel — check gouges', () => {
     fireEvent.click(screen.getByText('Check Gouges'))
 
     await waitFor(() => expect(screen.getByText(/No gouges/)).toBeInTheDocument())
-    expect(screen.getByText(/No gouges/).closest('span')).toHaveStyle({ color: 'rgb(0, 128, 0)' })
+    expect(screen.getByText(/No gouges/).closest('span')).toHaveClass('text-success')
   })
 
   it('displays red indicator with violation count on fail', async () => {
@@ -87,7 +87,7 @@ describe('GougeCheckPanel — check gouges', () => {
     fireEvent.click(screen.getByText('Check Gouges'))
 
     await waitFor(() => expect(screen.getByText(/1 violation\b/)).toBeInTheDocument())
-    expect(screen.getByText(/1 violation\b/).closest('span')).toHaveStyle({ color: 'rgb(255, 0, 0)' })
+    expect(screen.getByText(/1 violation\b/).closest('span')).toHaveClass('text-destructive')
   })
 })
 
@@ -158,7 +158,7 @@ describe('GougeCheckPanel — auto-lift action', () => {
 // ── Loading state ─────────────────────────────────────────────────────────────
 
 describe('GougeCheckPanel — loading state', () => {
-  it('button is disabled and shows "Checking…" during API call', async () => {
+  it('button is disabled and shows "Checking..." during API call', async () => {
     let resolve!: (value: GougeCheckResult) => void
     vi.mocked(toolpathApi.checkGouge).mockImplementation(
       () => new Promise((r) => { resolve = r })
@@ -168,7 +168,7 @@ describe('GougeCheckPanel — loading state', () => {
     fireEvent.click(screen.getByText('Check Gouges'))
 
     await waitFor(() => {
-      const btn = screen.getByText('Checking…')
+      const btn = screen.getByText('Checking...')
       expect(btn).toBeInTheDocument()
       expect(btn).toBeDisabled()
     })

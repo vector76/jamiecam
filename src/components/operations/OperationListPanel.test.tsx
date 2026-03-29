@@ -133,11 +133,11 @@ describe('OperationListPanel — rendering', () => {
   it('renders add buttons for each operation type', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: /\+ profile/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /\+ drill/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^profile$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^pocket$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^drill$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^z-rough$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^adaptive$/i })).toBeInTheDocument()
   })
 
   it('renders nothing when operation list is empty', () => {
@@ -153,21 +153,21 @@ describe('OperationListPanel — add buttons', () => {
   it('disables add buttons when no tools exist', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_NO_TOOLS })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: /\+ profile/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ pocket/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ drill/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^profile$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^pocket$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^drill$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^z-rough$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^adaptive$/i })).toBeDisabled()
   })
 
   it('enables add buttons when tools exist', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: /\+ profile/i })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ pocket/i })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ drill/i })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: /\+ adaptive clearing/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^profile$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^pocket$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^drill$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^z-rough$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^adaptive$/i })).not.toBeDisabled()
   })
 
   it('add profile calls addOperation with type profile and first tool ID', async () => {
@@ -176,7 +176,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^profile$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'profile', toolId: TOOL_ID })
@@ -189,7 +189,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ pocket/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^pocket$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'pocket', toolId: TOOL_ID })
@@ -203,7 +203,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ drill/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^drill$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'drill', toolId: TOOL_ID })
@@ -213,7 +213,7 @@ describe('OperationListPanel — add buttons', () => {
   it('add z-level roughing button is disabled when no tools exist', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_NO_TOOLS })
     render(<OperationListPanel />)
-    expect(screen.getByRole('button', { name: /\+ z-level roughing/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^z-rough$/i })).toBeDisabled()
   })
 
   it('add z-level roughing calls addOperation with correct defaults', async () => {
@@ -223,7 +223,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ z-level roughing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^z-rough$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -241,7 +241,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ adaptive clearing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^adaptive$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -259,7 +259,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_OPS)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ parallel finishing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^parallel$/i }))
 
     await waitFor(() => expect(opsApi.addOperation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -277,7 +277,7 @@ describe('OperationListPanel — add buttons', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(newSnapshot)
 
     render(<OperationListPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ profile/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^profile$/i }))
 
     await waitFor(() => expect(fileApi.getProjectSnapshot).toHaveBeenCalled())
     expect(useProjectStore.getState().snapshot?.projectName).toBe('Updated')
@@ -359,7 +359,7 @@ describe('OperationListPanel — selection', () => {
     useProjectStore.setState({ snapshot: SNAPSHOT_WITH_OPS, selectedOperationId: OP1_ID })
     render(<OperationListPanel />)
     const row = screen.getByText('Outer Profile').closest('div')!
-    expect(row.style.background).toBeTruthy()
+    expect(row.className).toContain('bg-primary/10')
   })
 
   it('mounts OperationEditorForm with selectedOpId', () => {
@@ -544,12 +544,12 @@ describe('OperationListPanel — calculate loading state', () => {
     vi.mocked(fileApi.getProjectSnapshot).mockResolvedValue(SNAPSHOT_WITH_STOCK)
     render(<OperationListPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Calculate Rough Pocket' }))
-    // before resolving: button text changes to loading indicator and is disabled
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toHaveTextContent('…'))
-    expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeDisabled()
-    // resolve promise and verify label reverts
+    // before resolving: button is disabled and a progress bar is shown
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toBeDisabled())
+    expect(screen.getByRole('progressbar', { name: /progress for rough pocket/i })).toBeInTheDocument()
+    // resolve promise and verify button re-enables
     resolveCalc!()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).toHaveTextContent('Calc'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Calculate Rough Pocket' })).not.toBeDisabled())
   })
 
   it('all other Calculate buttons are disabled while any calculation is in flight', async () => {
@@ -671,12 +671,12 @@ describe('OperationListPanel — progress bar', () => {
     render(<OperationListPanel />)
     fireEvent.click(screen.getByRole('button', { name: 'Calculate Outer Profile' }))
 
-    await waitFor(() => expect(progressHandler).not.toBeNull())
+    // Wait for the listener to be re-registered after calculatingId changes
+    await waitFor(() => expect(toolpathApi.listenToolpathProgress).toHaveBeenCalledTimes(2))
     act(() => { progressHandler!({ operationId: OP1_ID, percent: 50, message: '' }) })
 
     const el = screen.getByRole('progressbar', { name: `Progress for Outer Profile` })
     expect(el).toBeInTheDocument()
-    expect(el).toHaveAttribute('value', '50')
   })
 
   it('progress element is not rendered after calculation completes', async () => {

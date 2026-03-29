@@ -6,7 +6,6 @@
  */
 
 import { useEffect, useRef } from 'react'
-import type React from 'react'
 import * as THREE from 'three'
 import { SceneManager } from './scene'
 import { buildModelMesh } from './modelMesh'
@@ -15,12 +14,15 @@ import { useViewportStore } from '../store/viewportStore'
 import type { DisplayMode } from '../store/viewportStore'
 import { SimulationControls } from '../components/simulation/SimulationControls'
 import { useSimulationLoop } from './useSimulationLoop'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Ruler, Grab, Eraser } from 'lucide-react'
 
 interface ViewportProps {
-  style?: React.CSSProperties
+  className?: string
 }
 
-export function Viewport({ style }: ViewportProps) {
+export function Viewport({ className }: ViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
@@ -342,49 +344,51 @@ export function Viewport({ style }: ViewportProps) {
   }, [selectionMode, hoveredFaceIdx, selectedFaceFingerprints, faceDescriptors, meshData])
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4 }}>
-        <button
+    <div className={cn('relative h-full w-full', className)}>
+      <div ref={containerRef} className="h-full w-full" />
+      <div className="absolute left-2 top-2 z-10 flex items-center gap-1">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => setProjectionMode(projectionMode === 'perspective' ? 'orthographic' : 'perspective')}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
         >
-          {projectionMode === 'perspective' ? 'Perspective' : 'Orthographic'}
-        </button>
+          {projectionMode === 'perspective' ? 'Persp' : 'Ortho'}
+        </Button>
         <select
           aria-label="Display mode"
           value={displayMode}
           onChange={(e) => setDisplayMode(e.target.value as DisplayMode)}
-          style={{ padding: '2px 4px', fontSize: 12, cursor: 'pointer' }}
+          className="h-7 rounded-sm border border-border bg-secondary px-1.5 text-xs text-secondary-foreground"
         >
           <option value="shaded">Shaded</option>
           <option value="shaded-edges">Shaded + Edges</option>
           <option value="wireframe">Wireframe</option>
           <option value="transparent">Transparent</option>
         </select>
-        <button
+        <Button
+          variant={measurementMode === 'distance' ? 'default' : 'secondary'}
+          size="sm"
           title="Distance measurement"
-          className={measurementMode === 'distance' ? 'active' : ''}
           onClick={() => setMeasurementMode('distance')}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
         >
-          Ruler
-        </button>
-        <button
+          <Ruler className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant={measurementMode === 'angle' ? 'default' : 'secondary'}
+          size="sm"
           title="Angle measurement"
-          className={measurementMode === 'angle' ? 'active' : ''}
           onClick={() => setMeasurementMode('angle')}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
         >
-          Protractor
-        </button>
-        <button
+          <Grab className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           title="Clear measurements"
           onClick={() => { clearMeasurements(); setMeasurementMode('off') }}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
         >
-          Clear
-        </button>
+          <Eraser className="h-3.5 w-3.5" />
+        </Button>
       </div>
       <SimulationControls />
     </div>

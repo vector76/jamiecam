@@ -24,6 +24,11 @@ import PencilMillingEditor from './PencilMillingEditor'
 import GougeCheckPanel from './GougeCheckPanel'
 import { useViewportStore } from '../../store/viewportStore'
 import { getModelFaces, detectHoles } from '../../api/geometry'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { FormField } from '@/components/ui/form-field'
+import { Separator } from '@/components/ui/separator'
 
 const OPERATION_CATEGORY: Record<string, string> = {
   pocket: 'roughing',
@@ -79,7 +84,7 @@ export function OperationEditorForm({ operationId }: Props) {
   }, [operationId])
 
   if (!operationId || !operation) {
-    return <div style={{ padding: '0.5rem', color: '#888' }}>Select an operation to edit</div>
+    return <div className="p-2 text-sm text-muted-foreground">Select an operation to edit</div>
   }
 
   const currentTool = tools.find((t) => t.id === operation.toolId) ?? null
@@ -156,66 +161,56 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'pocket') {
     const params = operation.params as PocketParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Floor depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Floor depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepdown">Step-down (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+        </FormField>
+        <FormField label="Step-down (mm)" htmlFor="oef-stepdown">
+          <Input id="oef-stepdown" className="h-7 text-xs" type="number" defaultValue={params.stepdown}
             onBlur={(e) => void save({ params: { ...params, stepdown: parseFloat(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
-          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-in radius (mm)" htmlFor="oef-arc-lead-in">
+          <Input id="oef-arc-lead-in" className="h-7 text-xs" type="number" defaultValue={params.arcLeadInRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
-          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-out radius (mm)" htmlFor="oef-arc-lead-out">
+          <Input id="oef-arc-lead-out" className="h-7 text-xs" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
-          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+        </FormField>
+        <FormField label="Helical entry radius (mm)" htmlFor="oef-helical-radius">
+          <Input id="oef-helical-radius" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
-          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+        </FormField>
+        <FormField label="Helical entry pitch (mm)" htmlFor="oef-helical-pitch">
+          <Input id="oef-helical-pitch" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryPitch ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
-          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+        </FormField>
+        <FormField label="Ramp entry angle (\u00b0)" htmlFor="oef-ramp-angle">
+          <Input id="oef-ramp-angle" className="h-7 text-xs" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepover">Stepover (%)</label>
-          <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
+        </FormField>
+        <FormField label="Stepover (%)" htmlFor="oef-stepover">
+          <Input id="oef-stepover" className="h-7 text-xs" type="number" defaultValue={params.stepoverPercent}
             onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+        </FormField>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <p className="text-xs text-muted-foreground">
             {selectionMode
               ? `${selectedFps.length} face(s) selected`
               : (() => {
@@ -223,15 +218,17 @@ export function OperationEditorForm({ operationId }: Props) {
                   return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
                 })()
             }
+          </p>
+          <div className="flex gap-1.5">
+            {selectionMode ? (
+              <Button variant="outline" size="sm" onClick={() => void handleDoneSelecting()}>Done Selecting</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => void handleSelectFaces()}>Select Faces</Button>
+            )}
+            {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
+              <Button variant="ghost" size="sm" onClick={() => void handleClearGeometry()}>Clear</Button>
+            ) : null}
           </div>
-          {selectionMode ? (
-            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
-          ) : (
-            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
-          )}
-          {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
-            <button onClick={() => void handleClearGeometry()}>Clear</button>
-          ) : null}
         </div>
       </div>
     )
@@ -240,70 +237,60 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'profile') {
     const params = operation.params as ProfileParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Floor depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Floor depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepdown">Step-down (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown ?? ''}
+        </FormField>
+        <FormField label="Step-down (mm)" htmlFor="oef-stepdown">
+          <Input id="oef-stepdown" className="h-7 text-xs" type="number" defaultValue={params.stepdown ?? ''}
             onBlur={(e) => void save({ params: { ...params, stepdown: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
-          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-in radius (mm)" htmlFor="oef-arc-lead-in">
+          <Input id="oef-arc-lead-in" className="h-7 text-xs" type="number" defaultValue={params.arcLeadInRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
-          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-out radius (mm)" htmlFor="oef-arc-lead-out">
+          <Input id="oef-arc-lead-out" className="h-7 text-xs" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
-          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+        </FormField>
+        <FormField label="Helical entry radius (mm)" htmlFor="oef-helical-radius">
+          <Input id="oef-helical-radius" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
-          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+        </FormField>
+        <FormField label="Helical entry pitch (mm)" htmlFor="oef-helical-pitch">
+          <Input id="oef-helical-pitch" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryPitch ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
-          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+        </FormField>
+        <FormField label="Ramp entry angle (\u00b0)" htmlFor="oef-ramp-angle">
+          <Input id="oef-ramp-angle" className="h-7 text-xs" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-compensation">Compensation side</label>
-          <select id="oef-compensation" value={params.compensationSide}
+        </FormField>
+        <FormField label="Compensation side" htmlFor="oef-compensation">
+          <select id="oef-compensation" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={params.compensationSide}
             onChange={(e) => void save({ params: { ...params, compensationSide: e.target.value as ProfileParams['compensationSide'] } })}>
             <option value="left">Left</option>
             <option value="center">Center</option>
             <option value="right">Right</option>
           </select>
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+        </FormField>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <p className="text-xs text-muted-foreground">
             {selectionMode
               ? `${selectedFps.length} face(s) selected`
               : (() => {
@@ -311,15 +298,17 @@ export function OperationEditorForm({ operationId }: Props) {
                   return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
                 })()
             }
+          </p>
+          <div className="flex gap-1.5">
+            {selectionMode ? (
+              <Button variant="outline" size="sm" onClick={() => void handleDoneSelecting()}>Done Selecting</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => void handleSelectFaces()}>Select Faces</Button>
+            )}
+            {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
+              <Button variant="ghost" size="sm" onClick={() => void handleClearGeometry()}>Clear</Button>
+            ) : null}
           </div>
-          {selectionMode ? (
-            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
-          ) : (
-            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
-          )}
-          {!selectionMode && (operation.params as PocketParams | ProfileParams).geometry?.length ? (
-            <button onClick={() => void handleClearGeometry()}>Clear</button>
-          ) : null}
         </div>
       </div>
     )
@@ -329,36 +318,31 @@ export function OperationEditorForm({ operationId }: Props) {
     const params = operation.params as DrillParams
     const points = params.points
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: parseFloat(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-peck-depth">Peck depth (mm)</label>
-          <input id="oef-peck-depth" type="number" defaultValue={params.peckDepth ?? ''}
+        </FormField>
+        <FormField label="Peck depth (mm)" htmlFor="oef-peck-depth">
+          <Input id="oef-peck-depth" className="h-7 text-xs" type="number" defaultValue={params.peckDepth ?? ''}
             onBlur={(e) => void save({ params: { ...params, peckDepth: e.target.value === '' ? undefined : parseFloat(e.target.value) } })} />
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <button onClick={() => {
+        </FormField>
+        <div className="mb-1.5">
+          <Button variant="outline" size="sm" onClick={() => {
             void (async () => {
               try {
                 const holes = await detectHoles()
@@ -375,25 +359,25 @@ export function OperationEditorForm({ operationId }: Props) {
                 handleError(e)
               }
             })()
-          }}>Detect Holes</button>
+          }}>Detect Holes</Button>
         </div>
         <div>
           {points.map((pt, i) => (
-            <div key={i}>
-              <input id={`oef-point-x-${i}`} type="number" defaultValue={pt.x}
+            <div key={i} className="flex items-center gap-1.5 mb-1">
+              <Input id={`oef-point-x-${i}`} className="h-7 text-xs" type="number" defaultValue={pt.x}
                 onBlur={(e) => {
                   const updated = points.map((p, j) => j === i ? { ...p, x: parseFloat(e.target.value) } : p)
                   void save({ params: { ...params, points: updated } })
                 }} />
-              <input id={`oef-point-y-${i}`} type="number" defaultValue={pt.y}
+              <Input id={`oef-point-y-${i}`} className="h-7 text-xs" type="number" defaultValue={pt.y}
                 onBlur={(e) => {
                   const updated = points.map((p, j) => j === i ? { ...p, y: parseFloat(e.target.value) } : p)
                   void save({ params: { ...params, points: updated } })
                 }} />
-              <button onClick={() => void save({ params: { ...params, points: points.filter((_, j) => j !== i) } })}>Remove</button>
+              <Button variant="outline" size="sm" onClick={() => void save({ params: { ...params, points: points.filter((_, j) => j !== i) } })}>Remove</Button>
             </div>
           ))}
-          <button onClick={() => void save({ params: { ...params, points: [...points, { x: 0, y: 0 }] } })}>Add point</button>
+          <Button variant="outline" size="sm" onClick={() => void save({ params: { ...params, points: [...points, { x: 0, y: 0 }] } })}>Add point</Button>
         </div>
       </div>
     )
@@ -402,42 +386,37 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'z_level_roughing') {
     const params = operation.params as ZLevelRoughingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepdown">Stepdown (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+        </FormField>
+        <FormField label="Stepdown (mm)" htmlFor="oef-stepdown">
+          <Input id="oef-stepdown" className="h-7 text-xs" type="number" defaultValue={params.stepdown}
             onBlur={(e) => void save({ params: { ...params, stepdown: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          {/* stepover stored as fraction 0–1; displayed and edited as percentage */}
-          <label htmlFor="oef-stepover">Stepover (%)</label>
-          <input id="oef-stepover" type="number" defaultValue={params.stepover * 100}
+        </FormField>
+        <FormField label="Stepover (%)" htmlFor="oef-stepover">
+          {/* stepover stored as fraction 0-1; displayed and edited as percentage */}
+          <Input id="oef-stepover" className="h-7 text-xs" type="number" defaultValue={params.stepover * 100}
             onBlur={(e) => void save({ params: { ...params, stepover: Number(e.target.value) / 100 } })} />
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+        </FormField>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <p className="text-xs text-muted-foreground">
             {selectionMode
               ? `${selectedFps.length} face(s) selected`
               : (() => {
@@ -445,18 +424,20 @@ export function OperationEditorForm({ operationId }: Props) {
                   return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
                 })()
             }
+          </p>
+          <div className="flex gap-1.5">
+            {selectionMode ? (
+              <Button variant="outline" size="sm" onClick={() => void handleDoneSelecting()}>Done Selecting</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => void handleSelectFaces()}>Select Faces</Button>
+            )}
+            {!selectionMode && (operation.params as ZLevelRoughingParams).geometry?.length ? (
+              <Button variant="ghost" size="sm" onClick={() => void handleClearGeometry()}>Clear</Button>
+            ) : null}
           </div>
-          {selectionMode ? (
-            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
-          ) : (
-            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
-          )}
-          {!selectionMode && (operation.params as ZLevelRoughingParams).geometry?.length ? (
-            <button onClick={() => void handleClearGeometry()}>Clear</button>
-          ) : null}
         </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
       </div>
     )
@@ -466,73 +447,65 @@ export function OperationEditorForm({ operationId }: Props) {
     const params = operation.params as ZLevelFinishingParams
     const roughingOps = allOperations.filter((o) => o.operationType === 'z_level_roughing')
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepdown">Stepdown (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+        </FormField>
+        <FormField label="Stepdown (mm)" htmlFor="oef-stepdown">
+          <Input id="oef-stepdown" className="h-7 text-xs" type="number" defaultValue={params.stepdown}
             onBlur={(e) => void save({ params: { ...params, stepdown: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-finishing-allowance">Finishing allowance (mm)</label>
-          <input id="oef-finishing-allowance" type="number" defaultValue={params.finishingAllowance}
+        </FormField>
+        <FormField label="Finishing allowance (mm)" htmlFor="oef-finishing-allowance">
+          <Input id="oef-finishing-allowance" className="h-7 text-xs" type="number" defaultValue={params.finishingAllowance}
             onBlur={(e) => void save({ params: { ...params, finishingAllowance: Number(e.target.value) } })} />
+        </FormField>
+        <div className="mb-1.5 flex items-center gap-2">
+          <Checkbox
+            id="oef-spring-pass"
+            checked={params.springPass}
+            onCheckedChange={(checked) => void save({ params: { ...params, springPass: checked === true } })}
+            className="h-3.5 w-3.5"
+          />
+          <label htmlFor="oef-spring-pass" className="text-xs text-muted-foreground">Spring pass</label>
         </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label>
-            <input type="checkbox" checked={params.springPass}
-              onChange={(e) => void save({ params: { ...params, springPass: e.target.checked } })} />
-            {' '}Spring pass
-          </label>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
-          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+        <FormField label="Arc lead-in radius (mm)" htmlFor="oef-arc-lead-in">
+          <Input id="oef-arc-lead-in" className="h-7 text-xs" type="number" defaultValue={params.arcLeadInRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
-          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-out radius (mm)" htmlFor="oef-arc-lead-out">
+          <Input id="oef-arc-lead-out" className="h-7 text-xs" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
-          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+        </FormField>
+        <FormField label="Helical entry radius (mm)" htmlFor="oef-helical-radius">
+          <Input id="oef-helical-radius" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
-          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+        </FormField>
+        <FormField label="Helical entry pitch (mm)" htmlFor="oef-helical-pitch">
+          <Input id="oef-helical-pitch" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryPitch ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
-          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+        </FormField>
+        <FormField label="Ramp entry angle (\u00b0)" htmlFor="oef-ramp-angle">
+          <Input id="oef-ramp-angle" className="h-7 text-xs" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+        </FormField>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <p className="text-xs text-muted-foreground">
             {selectionMode
               ? `${selectedFps.length} face(s) selected`
               : (() => {
@@ -540,35 +513,41 @@ export function OperationEditorForm({ operationId }: Props) {
                   return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
                 })()
             }
+          </p>
+          <div className="flex gap-1.5">
+            {selectionMode ? (
+              <Button variant="outline" size="sm" onClick={() => void handleDoneSelecting()}>Done Selecting</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => void handleSelectFaces()}>Select Faces</Button>
+            )}
+            {!selectionMode && (operation.params as ZLevelFinishingParams).geometry?.length ? (
+              <Button variant="ghost" size="sm" onClick={() => void handleClearGeometry()}>Clear</Button>
+            ) : null}
           </div>
-          {selectionMode ? (
-            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
-          ) : (
-            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
-          )}
-          {!selectionMode && (operation.params as ZLevelFinishingParams).geometry?.length ? (
-            <button onClick={() => void handleClearGeometry()}>Clear</button>
-          ) : null}
         </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <label>
-            <input type="checkbox" checked={params.restMachining}
-              onChange={(e) => void save({ params: { ...params, restMachining: e.target.checked, ...(!e.target.checked ? { restMachiningReferenceId: undefined } : {}) } })} />
-            {' '}Rest machining
-          </label>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="oef-rest-machining"
+              checked={params.restMachining}
+              onCheckedChange={(checked) => void save({ params: { ...params, restMachining: checked === true, ...(!checked ? { restMachiningReferenceId: undefined } : {}) } })}
+              className="h-3.5 w-3.5"
+            />
+            <label htmlFor="oef-rest-machining" className="text-xs text-muted-foreground">Rest machining</label>
+          </div>
           {params.restMachining && (
-            <div style={{ marginTop: '0.25rem' }}>
-              <label htmlFor="oef-rest-ref">Reference operation</label>
-              <select id="oef-rest-ref" value={params.restMachiningReferenceId ?? ''}
+            <FormField label="Reference operation" htmlFor="oef-rest-ref">
+              <select id="oef-rest-ref" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={params.restMachiningReferenceId ?? ''}
                 onChange={(e) => void save({ params: { ...params, restMachiningReferenceId: e.target.value || undefined } })}>
                 <option value="">— Select —</option>
                 {roughingOps.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
-            </div>
+            </FormField>
           )}
         </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
       </div>
     )
@@ -577,72 +556,61 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'adaptive_clearing') {
     const params = operation.params as AdaptiveClearingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-depth">Depth (mm)</label>
-          <input id="oef-depth" type="number" defaultValue={params.depth}
+        </FormField>
+        <FormField label="Depth (mm)" htmlFor="oef-depth">
+          <Input id="oef-depth" className="h-7 text-xs" type="number" defaultValue={params.depth}
             onBlur={(e) => void save({ params: { ...params, depth: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepdown">Stepdown (mm)</label>
-          <input id="oef-stepdown" type="number" defaultValue={params.stepdown}
+        </FormField>
+        <FormField label="Stepdown (mm)" htmlFor="oef-stepdown">
+          <Input id="oef-stepdown" className="h-7 text-xs" type="number" defaultValue={params.stepdown}
             onBlur={(e) => void save({ params: { ...params, stepdown: Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          {/* optimalLoad stored as fraction 0–1; displayed and edited as percentage */}
-          <label htmlFor="oef-optimal-load">Optimal load (%)</label>
-          <input id="oef-optimal-load" type="number" defaultValue={params.optimalLoad * 100}
+        </FormField>
+        <FormField label="Optimal load (%)" htmlFor="oef-optimal-load">
+          {/* optimalLoad stored as fraction 0-1; displayed and edited as percentage */}
+          <Input id="oef-optimal-load" className="h-7 text-xs" type="number" defaultValue={params.optimalLoad * 100}
             onBlur={(e) => void save({ params: { ...params, optimalLoad: Number(e.target.value) / 100 } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-stepover">Stepover (%)</label>
-          <input id="oef-stepover" type="number" defaultValue={params.stepoverPercent}
+        </FormField>
+        <FormField label="Stepover (%)" htmlFor="oef-stepover">
+          <Input id="oef-stepover" className="h-7 text-xs" type="number" defaultValue={params.stepoverPercent}
             onBlur={(e) => void save({ params: { ...params, stepoverPercent: parseFloat(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-in">Arc lead-in radius (mm)</label>
-          <input id="oef-arc-lead-in" type="number" defaultValue={params.arcLeadInRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-in radius (mm)" htmlFor="oef-arc-lead-in">
+          <Input id="oef-arc-lead-in" className="h-7 text-xs" type="number" defaultValue={params.arcLeadInRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadInRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-arc-lead-out">Arc lead-out radius (mm)</label>
-          <input id="oef-arc-lead-out" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
+        </FormField>
+        <FormField label="Arc lead-out radius (mm)" htmlFor="oef-arc-lead-out">
+          <Input id="oef-arc-lead-out" className="h-7 text-xs" type="number" defaultValue={params.arcLeadOutRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, arcLeadOutRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-radius">Helical entry radius (mm)</label>
-          <input id="oef-helical-radius" type="number" defaultValue={params.helicalEntryRadius ?? ''}
+        </FormField>
+        <FormField label="Helical entry radius (mm)" htmlFor="oef-helical-radius">
+          <Input id="oef-helical-radius" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryRadius ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryRadius: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-helical-pitch">Helical entry pitch (mm)</label>
-          <input id="oef-helical-pitch" type="number" defaultValue={params.helicalEntryPitch ?? ''}
+        </FormField>
+        <FormField label="Helical entry pitch (mm)" htmlFor="oef-helical-pitch">
+          <Input id="oef-helical-pitch" className="h-7 text-xs" type="number" defaultValue={params.helicalEntryPitch ?? ''}
             onBlur={(e) => void save({ params: { ...params, helicalEntryPitch: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-ramp-angle">Ramp entry angle (°)</label>
-          <input id="oef-ramp-angle" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
+        </FormField>
+        <FormField label="Ramp entry angle (\u00b0)" htmlFor="oef-ramp-angle">
+          <Input id="oef-ramp-angle" className="h-7 text-xs" type="number" defaultValue={params.rampEntryAngleDeg ?? ''}
             onBlur={(e) => void save({ params: { ...params, rampEntryAngleDeg: e.target.value === '' ? null : Number(e.target.value) } })} />
-        </div>
+        </FormField>
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem', borderTop: '1px solid #eee', paddingTop: '0.25rem' }}>
-          <div style={{ fontSize: '0.8em', color: '#555', marginBottom: '0.25rem' }}>
+        </FormField>
+        <div className="mt-2 space-y-1.5">
+          <Separator />
+          <p className="text-xs text-muted-foreground">
             {selectionMode
               ? `${selectedFps.length} face(s) selected`
               : (() => {
@@ -650,18 +618,20 @@ export function OperationEditorForm({ operationId }: Props) {
                   return g?.length ? `${g.length} face(s) selected` : 'Stock boundary (default)'
                 })()
             }
+          </p>
+          <div className="flex gap-1.5">
+            {selectionMode ? (
+              <Button variant="outline" size="sm" onClick={() => void handleDoneSelecting()}>Done Selecting</Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => void handleSelectFaces()}>Select Faces</Button>
+            )}
+            {!selectionMode && (operation.params as AdaptiveClearingParams).geometry?.length ? (
+              <Button variant="ghost" size="sm" onClick={() => void handleClearGeometry()}>Clear</Button>
+            ) : null}
           </div>
-          {selectionMode ? (
-            <button onClick={() => void handleDoneSelecting()}>Done Selecting</button>
-          ) : (
-            <button onClick={() => void handleSelectFaces()}>Select Faces</button>
-          )}
-          {!selectionMode && (operation.params as AdaptiveClearingParams).geometry?.length ? (
-            <button onClick={() => void handleClearGeometry()}>Clear</button>
-          ) : null}
         </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
       </div>
     )
@@ -670,30 +640,27 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'parallelFinishing') {
     const params = operation.params as ParallelFinishingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
+        </FormField>
         <ParallelFinishingEditor
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        </FormField>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
         {toolpathGeometry && (
           <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
@@ -705,30 +672,27 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'scallopFinishing') {
     const params = operation.params as ScallopFinishingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
+        </FormField>
         <ScallopFinishingEditor
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        </FormField>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
         {toolpathGeometry && (
           <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
@@ -740,30 +704,27 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'flowlineFinishing') {
     const params = operation.params as FlowlineFinishingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
+        </FormField>
         <FlowlineFinishingEditor
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        </FormField>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
         {toolpathGeometry && (
           <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
@@ -775,30 +736,27 @@ export function OperationEditorForm({ operationId }: Props) {
   if (operation.type === 'pencilMilling') {
     const params = operation.params as PencilMillingParams
     return (
-      <div key={operation.id} style={{ padding: '0.5rem', borderTop: '1px solid #ccc' }}>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-tool">Tool</label>
-          <select id="oef-tool" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
+      <div key={operation.id} className="border-t border-border p-2">
+        <FormField label="Tool" htmlFor="oef-tool">
+          <select id="oef-tool" className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground" value={operation.toolId} onChange={(e) => void save({ toolId: e.target.value })}>
             {tools.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
+        </FormField>
         <PencilMillingEditor
           params={params}
           onSave={(partial) => void save({ params: { ...params, ...partial } })}
         />
         {materialSelectorField()}
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-spindle-override">Spindle speed override (RPM)</label>
-          <input id="oef-spindle-override" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
+        <FormField label="Spindle speed override (RPM)" htmlFor="oef-spindle-override">
+          <Input id="oef-spindle-override" className="h-7 text-xs" type="number" defaultValue={operation.spindleSpeedOverride ?? ''}
             onBlur={(e) => void save({ spindleSpeedOverride: e.target.value === '' ? null : parseInt(e.target.value, 10) })} />
-        </div>
-        <div style={{ marginBottom: '0.25rem' }}>
-          <label htmlFor="oef-feed-override">Feed rate override (mm/min)</label>
-          <input id="oef-feed-override" type="number" defaultValue={operation.feedRateOverride ?? ''}
+        </FormField>
+        <FormField label="Feed rate override (mm/min)" htmlFor="oef-feed-override">
+          <Input id="oef-feed-override" className="h-7 text-xs" type="number" defaultValue={operation.feedRateOverride ?? ''}
             onBlur={(e) => void save({ feedRateOverride: e.target.value === '' ? null : parseFloat(e.target.value) })} />
-        </div>
-        <div style={{ marginTop: '0.5rem' }}>
-          <button disabled={stock === null}>Calculate</button>
+        </FormField>
+        <div className="mt-2">
+          <Button variant="outline" size="sm" disabled={stock === null}>Calculate</Button>
         </div>
         {toolpathGeometry && (
           <GougeCheckPanel operationId={operation.id} toolpathVersion={toolpathVersion} />
@@ -807,5 +765,5 @@ export function OperationEditorForm({ operationId }: Props) {
     )
   }
 
-  return <div style={{ padding: '0.5rem', color: '#888' }}>Parameters coming soon</div>
+  return <div className="p-2 text-sm text-muted-foreground">Parameters coming soon</div>
 }

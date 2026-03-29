@@ -3,6 +3,9 @@ import { useStock, usePushNotification, useProjectStore } from '../../store/proj
 import { setStock } from '../../api/stock'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { FormField } from '@/components/ui/form-field'
 import type { BoxStock } from '../../api/types'
 
 export function StockPanel() {
@@ -43,7 +46,9 @@ export function StockPanel() {
       await setStock(payload)
       const snap = await getProjectSnapshot()
       setSnapshot(snap)
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   async function handleClearStock() {
@@ -51,73 +56,99 @@ export function StockPanel() {
       await setStock(null)
       const snap = await getProjectSnapshot()
       setSnapshot(snap)
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   return (
-    <div>
+    <div className="space-y-2">
       {stock == null ? (
-        <p>No stock defined</p>
+        <p className="text-xs text-muted-foreground">No stock defined</p>
       ) : (
-        <div>
-          <p>Origin: ({stock.origin.x}, {stock.origin.y}, {stock.origin.z})</p>
-          <p>Width: {stock.width} mm, Depth: {stock.depth} mm, Height: {stock.height} mm</p>
+        <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
+          <p>
+            Origin: ({stock.origin.x}, {stock.origin.y}, {stock.origin.z})
+          </p>
+          <p>
+            {stock.width} x {stock.depth} x {stock.height} mm
+          </p>
         </div>
       )}
       <div>
-        <label>
-          Origin X (mm)
-          <input
-            type="number"
-            value={originX}
-            onChange={(e) => setOriginX(parseFloat(e.target.value) || 0)}
-          />
-        </label>
-        <label>
-          Origin Y (mm)
-          <input
-            type="number"
-            value={originY}
-            onChange={(e) => setOriginY(parseFloat(e.target.value) || 0)}
-          />
-        </label>
-        <label>
-          Origin Z (mm)
-          <input
-            type="number"
-            value={originZ}
-            onChange={(e) => setOriginZ(parseFloat(e.target.value) || 0)}
-          />
-        </label>
-        <label>
-          Width (X, mm)
-          <input
-            type="number"
-            value={width}
-            onChange={(e) => setWidth(parseFloat(e.target.value) || 0)}
-          />
-        </label>
-        <label>
-          Depth (Y, mm)
-          <input
-            type="number"
-            value={depth}
-            onChange={(e) => setDepth(parseFloat(e.target.value) || 0)}
-          />
-        </label>
-        <label>
-          Height (Z, mm)
-          <input
-            type="number"
-            value={height}
-            onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
-          />
-        </label>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Origin</p>
+        <div className="grid grid-cols-3 gap-2">
+          <FormField label="X (mm)" htmlFor="stock-ox">
+            <Input
+              id="stock-ox"
+              type="number"
+              value={originX}
+              onChange={(e) => setOriginX(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+          <FormField label="Y (mm)" htmlFor="stock-oy">
+            <Input
+              id="stock-oy"
+              type="number"
+              value={originY}
+              onChange={(e) => setOriginY(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+          <FormField label="Z (mm)" htmlFor="stock-oz">
+            <Input
+              id="stock-oz"
+              type="number"
+              value={originZ}
+              onChange={(e) => setOriginZ(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+        </div>
       </div>
-      <button onClick={() => void handleSetStock()}>Set Stock</button>
-      {stock != null && (
-        <button onClick={() => void handleClearStock()}>Clear Stock</button>
-      )}
+      <div>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Dimensions</p>
+        <div className="grid grid-cols-3 gap-2">
+          <FormField label="Width (X)" htmlFor="stock-w">
+            <Input
+              id="stock-w"
+              type="number"
+              value={width}
+              onChange={(e) => setWidth(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+          <FormField label="Depth (Y)" htmlFor="stock-d">
+            <Input
+              id="stock-d"
+              type="number"
+              value={depth}
+              onChange={(e) => setDepth(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+          <FormField label="Height (Z)" htmlFor="stock-h">
+            <Input
+              id="stock-h"
+              type="number"
+              value={height}
+              onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
+              className="h-7 text-xs"
+            />
+          </FormField>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => void handleSetStock()}>
+          Set Stock
+        </Button>
+        {stock != null && (
+          <Button variant="ghost" size="sm" onClick={() => void handleClearStock()}>
+            Clear
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

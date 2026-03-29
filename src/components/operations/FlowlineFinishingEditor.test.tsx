@@ -63,7 +63,7 @@ describe('FlowlineFinishingEditor — rendering', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (deg)')).toBeInTheDocument()
   })
 
   it('shows correct default values for required fields', () => {
@@ -82,7 +82,7 @@ describe('FlowlineFinishingEditor — rendering', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toHaveValue(null)
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toHaveValue(null)
+    expect(screen.getByLabelText('Ramp entry angle (deg)')).toHaveValue(null)
   })
 
   it('renders Select Faces button initially', () => {
@@ -237,7 +237,7 @@ describe('FlowlineFinishingEditor — entry motion field blur saves', () => {
     const onSave = vi.fn()
     render(<FlowlineFinishingEditor params={BASE_PARAMS} onSave={onSave} />)
 
-    fireEvent.blur(screen.getByLabelText('Ramp entry angle (°)'), { target: { value: '3' } })
+    fireEvent.blur(screen.getByLabelText('Ramp entry angle (deg)'), { target: { value: '3' } })
 
     expect(onSave).toHaveBeenCalledWith({ rampEntryAngleDeg: 3 })
   })
@@ -246,7 +246,7 @@ describe('FlowlineFinishingEditor — entry motion field blur saves', () => {
     const onSave = vi.fn()
     render(<FlowlineFinishingEditor params={BASE_PARAMS} onSave={onSave} />)
 
-    fireEvent.blur(screen.getByLabelText('Ramp entry angle (°)'), { target: { value: '' } })
+    fireEvent.blur(screen.getByLabelText('Ramp entry angle (deg)'), { target: { value: '' } })
 
     expect(onSave).toHaveBeenCalledWith({ rampEntryAngleDeg: null })
   })

@@ -3,6 +3,9 @@ import { useWcs, usePushNotification, useProjectStore } from '../../store/projec
 import { setWcs } from '../../api/stock'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { FormField } from '@/components/ui/form-field'
 import type { WorkCoordinateSystem } from '../../api/types'
 
 export function WCSPanel() {
@@ -39,7 +42,9 @@ export function WCSPanel() {
       await setWcs([payload])
       const snap = await getProjectSnapshot()
       setSnapshot(snap)
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   async function handleClearWcs() {
@@ -47,48 +52,59 @@ export function WCSPanel() {
       await setWcs([])
       const snap = await getProjectSnapshot()
       setSnapshot(snap)
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   return (
-    <div>
+    <div className="space-y-2">
       {wcs.length === 0 ? (
-        <p>No WCS defined</p>
+        <p className="text-xs text-muted-foreground">No WCS defined</p>
       ) : (
-        <div>
-          <p>Origin: ({wcs[0].origin.x}, {wcs[0].origin.y}, {wcs[0].origin.z})</p>
-        </div>
+        <p className="font-mono text-xs text-muted-foreground">
+          Origin: ({wcs[0].origin.x}, {wcs[0].origin.y}, {wcs[0].origin.z})
+        </p>
       )}
-      <div>
-        <label>
-          Origin X (mm)
-          <input
+      <div className="grid grid-cols-3 gap-2">
+        <FormField label="X (mm)" htmlFor="wcs-x">
+          <Input
+            id="wcs-x"
             type="number"
             value={originX}
             onChange={(e) => setOriginX(parseFloat(e.target.value) || 0)}
+            className="h-7 text-xs"
           />
-        </label>
-        <label>
-          Origin Y (mm)
-          <input
+        </FormField>
+        <FormField label="Y (mm)" htmlFor="wcs-y">
+          <Input
+            id="wcs-y"
             type="number"
             value={originY}
             onChange={(e) => setOriginY(parseFloat(e.target.value) || 0)}
+            className="h-7 text-xs"
           />
-        </label>
-        <label>
-          Origin Z (mm)
-          <input
+        </FormField>
+        <FormField label="Z (mm)" htmlFor="wcs-z">
+          <Input
+            id="wcs-z"
             type="number"
             value={originZ}
             onChange={(e) => setOriginZ(parseFloat(e.target.value) || 0)}
+            className="h-7 text-xs"
           />
-        </label>
+        </FormField>
       </div>
-      <button onClick={() => void handleSetWcs()}>Set WCS</button>
-      {wcs.length > 0 && (
-        <button onClick={() => void handleClearWcs()}>Clear WCS</button>
-      )}
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => void handleSetWcs()}>
+          Set WCS
+        </Button>
+        {wcs.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => void handleClearWcs()}>
+            Clear
+          </Button>
+        )}
+      </div>
     </div>
   )
 }

@@ -13,6 +13,8 @@ import * as api from '../../api/file'
 import { getToolpathGeometry } from '../../api/toolpath'
 import { useProjectStore } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
+import { Button } from '@/components/ui/button'
+import { FolderOpen, FilePlus, Save, FolderInput, X, AlertTriangle } from 'lucide-react'
 import type { AppError, ProjectSnapshot } from '../../api/types'
 
 // ── Window title helper ────────────────────────────────────────────────────────
@@ -126,19 +128,32 @@ export function Toolbar() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0.5rem', borderBottom: '1px solid #ccc' }}>
+    <div className="flex items-center gap-1.5 border-b border-border bg-card px-2 py-1">
       {errorMsg && (
-        <div role="alert" style={{ color: 'red', marginRight: '0.5rem' }}>
+        <div role="alert" className="flex items-center gap-1.5 rounded-sm bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5" />
           <span>{errorMsg}</span>
-          <button onClick={dismissError} aria-label="Dismiss error" style={{ marginLeft: '0.25rem' }}>
-            ✕
+          <button onClick={dismissError} aria-label="Dismiss error" className="ml-1 rounded-sm p-0.5 hover:bg-destructive/20">
+            <X className="h-3 w-3" />
           </button>
         </div>
       )}
-      <button onClick={() => void handleOpenModel()}>Open Model</button>
-      <button onClick={() => void handleNewProject()}>New Project</button>
-      <button onClick={() => void handleSaveProject()}>Save Project</button>
-      <button onClick={() => void handleOpenProject()}>Open Project</button>
+      <Button variant="ghost" size="sm" onClick={() => void handleOpenModel()}>
+        <FolderOpen className="mr-1 h-3.5 w-3.5" />
+        Open Model
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => void handleNewProject()}>
+        <FilePlus className="mr-1 h-3.5 w-3.5" />
+        New Project
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => void handleSaveProject()}>
+        <Save className="mr-1 h-3.5 w-3.5" />
+        Save Project
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => void handleOpenProject()}>
+        <FolderInput className="mr-1 h-3.5 w-3.5" />
+        Open Project
+      </Button>
     </div>
   )
 }

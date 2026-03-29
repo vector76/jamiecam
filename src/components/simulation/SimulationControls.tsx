@@ -1,5 +1,7 @@
 import { useViewportStore } from '../../store/viewportStore'
 import { extractSimPoints } from '../../viewport/simulationPoints'
+import { Button } from '@/components/ui/button'
+import { Play, Pause, Square } from 'lucide-react'
 
 export function SimulationControls() {
   const toolpathGeometry = useViewportStore((s) => s.toolpathGeometry)
@@ -18,31 +20,32 @@ export function SimulationControls() {
   const playLabel = simulationPaused ? 'Resume' : 'Play'
 
   return (
-    <div style={{ position: 'absolute', bottom: 8, left: 8, display: 'flex', gap: 4, alignItems: 'center' }}>
+    <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
       {showPlay && (
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => startSimulation(extractSimPoints(toolpathGeometry!))}
           disabled={toolpathGeometry === null}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+          title={playLabel}
         >
-          {playLabel}
-        </button>
+          <Play className="h-3.5 w-3.5" />
+        </Button>
       )}
       {simulationActive && !simulationPaused && (
-        <button
-          onClick={pauseSimulation}
-          style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
-        >
-          Pause
-        </button>
+        <Button variant="secondary" size="sm" onClick={pauseSimulation} title="Pause">
+          <Pause className="h-3.5 w-3.5" />
+        </Button>
       )}
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={stopSimulation}
         disabled={!simulationActive}
-        style={{ padding: '2px 8px', fontSize: 12, cursor: 'pointer' }}
+        title="Stop"
       >
-        Stop
-      </button>
+        <Square className="h-3.5 w-3.5" />
+      </Button>
       <input
         type="range"
         min={0}
@@ -50,17 +53,18 @@ export function SimulationControls() {
         value={simulationPointIndex}
         onChange={(e) => setSimulationPointIndex(Number(e.target.value))}
         disabled={!simulationActive}
+        className="h-1.5 w-24 accent-primary"
       />
       <select
         value={simulationPlaybackSpeed}
         onChange={(e) => setSimulationPlaybackSpeed(Number(e.target.value))}
         disabled={toolpathGeometry === null}
-        style={{ padding: '2px 4px', fontSize: 12, cursor: 'pointer' }}
+        className="h-7 rounded-sm border border-border bg-secondary px-1 text-xs text-secondary-foreground"
       >
-        <option value={1}>1×</option>
-        <option value={5}>5×</option>
-        <option value={10}>10×</option>
-        <option value={20}>20×</option>
+        <option value={1}>1x</option>
+        <option value={5}>5x</option>
+        <option value={10}>10x</option>
+        <option value={20}>20x</option>
       </select>
     </div>
   )

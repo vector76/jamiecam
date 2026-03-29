@@ -44,7 +44,7 @@ describe('ParallelFinishingEditor — rendering', () => {
     render(<ParallelFinishingEditor params={BASE_PARAMS} onSave={vi.fn()} />)
 
     expect(screen.getByLabelText('Stepover (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Direction (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Direction (deg)')).toBeInTheDocument()
     expect(screen.getByLabelText('Allowance (mm)')).toBeInTheDocument()
   })
 
@@ -55,14 +55,14 @@ describe('ParallelFinishingEditor — rendering', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry radius (mm)')).toBeInTheDocument()
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ramp entry angle (deg)')).toBeInTheDocument()
   })
 
   it('shows correct default values for required fields', () => {
     render(<ParallelFinishingEditor params={BASE_PARAMS} onSave={vi.fn()} />)
 
     expect(screen.getByLabelText('Stepover (mm)')).toHaveValue(1.0)
-    expect(screen.getByLabelText('Direction (°)')).toHaveValue(0)
+    expect(screen.getByLabelText('Direction (deg)')).toHaveValue(0)
     expect(screen.getByLabelText('Allowance (mm)')).toHaveValue(0.1)
   })
 
@@ -73,7 +73,7 @@ describe('ParallelFinishingEditor — rendering', () => {
     expect(screen.getByLabelText('Arc lead-out radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry radius (mm)')).toHaveValue(null)
     expect(screen.getByLabelText('Helical entry pitch (mm)')).toHaveValue(null)
-    expect(screen.getByLabelText('Ramp entry angle (°)')).toHaveValue(null)
+    expect(screen.getByLabelText('Ramp entry angle (deg)')).toHaveValue(null)
   })
 
   it('renders Select Faces button initially', () => {
@@ -125,7 +125,7 @@ describe('ParallelFinishingEditor — required field blur saves', () => {
     const onSave = vi.fn()
     render(<ParallelFinishingEditor params={BASE_PARAMS} onSave={onSave} />)
 
-    fireEvent.blur(screen.getByLabelText('Direction (°)'), { target: { value: '45' } })
+    fireEvent.blur(screen.getByLabelText('Direction (deg)'), { target: { value: '45' } })
 
     expect(onSave).toHaveBeenCalledWith({ directionAngleDeg: 45 })
   })
@@ -201,7 +201,7 @@ describe('ParallelFinishingEditor — entry motion field blur saves', () => {
     const onSave = vi.fn()
     render(<ParallelFinishingEditor params={BASE_PARAMS} onSave={onSave} />)
 
-    fireEvent.blur(screen.getByLabelText('Ramp entry angle (°)'), { target: { value: '3' } })
+    fireEvent.blur(screen.getByLabelText('Ramp entry angle (deg)'), { target: { value: '3' } })
 
     expect(onSave).toHaveBeenCalledWith({ rampEntryAngleDeg: 3 })
   })

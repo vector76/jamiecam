@@ -90,7 +90,7 @@ it('when lookupFeeds rejects with NotFound, onFeedsNotFound is called and a noti
 
   await waitFor(() => {
     expect(onFeedsNotFound).toHaveBeenCalled()
-    expect(document.querySelector('.material-not-found-notice')).toBeTruthy()
+    expect(document.querySelector('.text-warning')).toBeTruthy()
   })
   expect(onFeedsFetched).not.toHaveBeenCalled()
 })

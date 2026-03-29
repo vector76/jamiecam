@@ -12,6 +12,10 @@ import { useTools, usePushNotification, useProjectStore } from '../../store/proj
 import { addTool, editTool, deleteTool, listTools } from '../../api/tools'
 import { getProjectSnapshot } from '../../api/file'
 import { toAppError } from '../../api/errors'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { FormField } from '@/components/ui/form-field'
+import { Pencil, Trash2, Plus } from 'lucide-react'
 import type { Tool, ToolInput } from '../../api/types'
 
 type Mode = { tag: 'list' } | { tag: 'add' } | { tag: 'edit'; tool: Tool }
@@ -46,7 +50,9 @@ export function ToolLibraryPanel() {
       await deleteTool(id)
       const snap = await getProjectSnapshot()
       setSnapshot(snap)
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   async function handleEditClick(id: string) {
@@ -55,7 +61,9 @@ export function ToolLibraryPanel() {
       const tool = all.find((t) => t.id === id)
       if (!tool) return
       setMode({ tag: 'edit', tool })
-    } catch (e) { handleError(e) }
+    } catch (e) {
+      handleError(e)
+    }
   }
 
   if (mode.tag === 'add' || mode.tag === 'edit') {
@@ -74,7 +82,9 @@ export function ToolLibraryPanel() {
             const snap = await getProjectSnapshot()
             setSnapshot(snap)
             setMode({ tag: 'list' })
-          } catch (e) { handleError(e) }
+          } catch (e) {
+            handleError(e)
+          }
         }}
         onCancel={() => setMode({ tag: 'list' })}
       />
@@ -82,26 +92,38 @@ export function ToolLibraryPanel() {
   }
 
   return (
-    <div>
+    <div className="space-y-1">
       {tools.map((t) => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem' }}>
-          <span style={{ flex: 1 }}>{t.name}</span>
-          <span style={{ fontSize: '0.75em', color: '#666' }}>{t.toolType}</span>
-          <button
+        <div
+          key={t.id}
+          className="flex items-center gap-1.5 rounded-sm px-1 py-0.5 hover:bg-accent"
+        >
+          <span className="flex-1 truncate text-sm" title={t.name}>{t.name}</span>
+          <span className="text-xs text-muted-foreground">{t.toolType}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
             onClick={() => void handleEditClick(t.id)}
             aria-label={`Edit ${t.name}`}
           >
-            Edit
-          </button>
-          <button
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive"
             onClick={() => void handleDelete(t.id)}
             aria-label={`Delete ${t.name}`}
           >
-            ✕
-          </button>
+            <Trash2 className="h-3 w-3" />
+          </Button>
         </div>
       ))}
-      <button onClick={() => setMode({ tag: 'add' })}>Add Tool</button>
+      <Button variant="outline" size="sm" onClick={() => setMode({ tag: 'add' })} className="w-full">
+        <Plus className="mr-1 h-3.5 w-3.5" />
+        Add Tool
+      </Button>
     </div>
   )
 }
@@ -138,55 +160,87 @@ function ToolForm({ initial, onSubmit, onCancel }: ToolFormProps) {
   }
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)}>
-      <div>
-        <label>
-          Name
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
+    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-0.5">
+      <FormField label="Name" htmlFor="tool-name">
+        <Input
+          id="tool-name"
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <FormField label="Type" htmlFor="tool-type">
+        <select
+          id="tool-type"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground"
+        >
+          {TOOL_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </FormField>
+      <FormField label="Material" htmlFor="tool-material">
+        <Input
+          id="tool-material"
+          type="text"
+          value={material}
+          onChange={(e) => setMaterial(e.target.value)}
+          required
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <FormField label="Diameter (mm)" htmlFor="tool-diameter">
+        <Input
+          id="tool-diameter"
+          type="number"
+          value={diameter}
+          onChange={(e) => setDiameter(e.target.value)}
+          required
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <FormField label="Flute count" htmlFor="tool-flutes">
+        <Input
+          id="tool-flutes"
+          type="number"
+          value={fluteCount}
+          onChange={(e) => setFluteCount(e.target.value)}
+          required
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <FormField label="Spindle speed (RPM)" htmlFor="tool-spindle">
+        <Input
+          id="tool-spindle"
+          type="number"
+          value={spindleSpeed}
+          onChange={(e) => setSpindleSpeed(e.target.value)}
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <FormField label="Feed rate (mm/min)" htmlFor="tool-feed">
+        <Input
+          id="tool-feed"
+          type="number"
+          value={feedRate}
+          onChange={(e) => setFeedRate(e.target.value)}
+          className="h-7 text-xs"
+        />
+      </FormField>
+      <div className="flex gap-2 pt-2">
+        <Button type="submit" size="sm">
+          {initial ? 'Save' : 'Add'}
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
       </div>
-      <div>
-        <label>
-          Type
-          <select value={type} onChange={(e) => setType(e.target.value)}>
-            {TOOL_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <div>
-        <label>
-          Material
-          <input type="text" value={material} onChange={(e) => setMaterial(e.target.value)} required />
-        </label>
-      </div>
-      <div>
-        <label>
-          Diameter
-          <input type="number" value={diameter} onChange={(e) => setDiameter(e.target.value)} required />
-        </label>
-      </div>
-      <div>
-        <label>
-          Flute Count
-          <input type="number" value={fluteCount} onChange={(e) => setFluteCount(e.target.value)} required />
-        </label>
-      </div>
-      <div>
-        <label>
-          Default Spindle Speed
-          <input type="number" value={spindleSpeed} onChange={(e) => setSpindleSpeed(e.target.value)} />
-        </label>
-      </div>
-      <div>
-        <label>
-          Default Feed Rate
-          <input type="number" value={feedRate} onChange={(e) => setFeedRate(e.target.value)} />
-        </label>
-      </div>
-      <button type="submit">{initial ? 'Save' : 'Add'}</button>
-      <button type="button" onClick={onCancel}>Cancel</button>
     </form>
   )
 }

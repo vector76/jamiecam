@@ -71,8 +71,12 @@ export function MaterialSelectorField({
   }
 
   return (
-    <div>
-      <select value={currentMaterialId ?? ''} onChange={handleChange}>
+    <div className="space-y-1">
+      <select
+        value={currentMaterialId ?? ''}
+        onChange={handleChange}
+        className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground"
+      >
         <option value="">-- Select material --</option>
         {materials.map((m) => (
           <option key={m.id} value={m.id}>
@@ -81,9 +85,7 @@ export function MaterialSelectorField({
         ))}
       </select>
       {notFound && (
-        <span className="material-not-found-notice">
-          No feeds/speeds found for this combination.
-        </span>
+        <span className="text-xs text-warning">No feeds/speeds found for this combination.</span>
       )}
     </div>
   )
