@@ -2,6 +2,7 @@
 
 pub(crate) mod modal;
 pub(crate) mod state;
+pub(crate) mod tokenizer;
 pub mod types;
 
 pub use types::{
