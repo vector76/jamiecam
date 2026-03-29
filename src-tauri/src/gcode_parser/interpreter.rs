@@ -5,6 +5,7 @@
 
 use crate::models::Vec3;
 
+use super::cycles::expand_cycle;
 use super::modal::{classify_gcode, classify_mcode, MCodeAction, ModalGroup};
 use super::state::{CycleMode, DistanceMode, ModalState, MotionMode, RetractMode};
 use super::tokenizer::GcodeWord;
@@ -306,6 +307,29 @@ pub(crate) fn interpret_line(
         }
     }
 
+    // Modal cycle execution: cycle is active, X/Y present, no cycle or motion G-code
+    if canned_cycle_code.is_none()
+        && state.cycle_active.is_some()
+        && (x_word.is_some() || y_word.is_some())
+        && motion_code.is_none()
+    {
+        let hole_pos = state.resolve_position(x_word, y_word, None);
+        state.position = hole_pos;
+
+        let l_count = l_word.map(|l| l as u32).unwrap_or(1);
+        let (cycle_segments, cycle_warnings) =
+            expand_cycle(state, x_word, y_word, l_count, source_line);
+        segments.extend(cycle_segments);
+        warnings.extend(cycle_warnings);
+
+        return LineResult {
+            segments,
+            warnings,
+            tool_change,
+            program_end,
+        };
+    }
+
     // Motion mode update from this line's G-code
     if let Some(code) = motion_code {
         let mode = match code.round() as i32 {
@@ -421,17 +445,6 @@ fn resolve_arc(
             message: "arc interpolation not yet implemented".to_string(),
         }],
     )
-}
-
-/// Canned cycle expansion stub — replaced by the canned cycle bead.
-fn expand_cycle(
-    _state: &mut ModalState,
-    _x: Option<f64>,
-    _y: Option<f64>,
-    _l_count: u32,
-    _source_line: usize,
-) -> (Vec<MotionSegment>, Vec<ParseWarning>) {
-    (Vec::new(), Vec::new())
 }
 
 #[cfg(test)]
