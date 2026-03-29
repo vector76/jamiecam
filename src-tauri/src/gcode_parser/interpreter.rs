@@ -3,15 +3,12 @@
 
 #![allow(dead_code)]
 
-use crate::models::Vec3;
-
+use super::arcs::resolve_arc;
 use super::cycles::expand_cycle;
 use super::modal::{classify_gcode, classify_mcode, MCodeAction, ModalGroup};
 use super::state::{CycleMode, DistanceMode, ModalState, MotionMode, RetractMode};
 use super::tokenizer::GcodeWord;
-use super::types::{
-    FeedMode, MotionSegment, ParseWarning, Plane, SegmentMetadata, SpindleDir, ToolChange, Units,
-};
+use super::types::{FeedMode, MotionSegment, ParseWarning, Plane, SpindleDir, ToolChange, Units};
 
 /// Result of interpreting a single G-code line.
 #[derive(Debug, Clone)]
@@ -423,34 +420,11 @@ pub(crate) fn interpret_line(
     }
 }
 
-/// Arc resolution stub — replaced by the arc resolution bead.
-#[allow(clippy::too_many_arguments)]
-fn resolve_arc(
-    _start: &Vec3,
-    _end: &Vec3,
-    _i: Option<f64>,
-    _j: Option<f64>,
-    _k: Option<f64>,
-    _r: Option<f64>,
-    _clockwise: bool,
-    _plane: &Plane,
-    _feed_rate: f64,
-    metadata: SegmentMetadata,
-) -> (Option<MotionSegment>, Vec<ParseWarning>) {
-    let line = metadata.source_line;
-    (
-        None,
-        vec![ParseWarning {
-            line,
-            message: "arc interpolation not yet implemented".to_string(),
-        }],
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::tokenizer::tokenize_line;
     use super::*;
+    use crate::models::Vec3;
 
     fn v(x: f64, y: f64, z: f64) -> Vec3 {
         Vec3 { x, y, z }
@@ -803,17 +777,104 @@ mod tests {
         assert_eq!(state.position.z, 5.0);
     }
 
-    // --- Arc stub returns warning ---
+    // --- Arc resolution ---
 
     #[test]
-    fn arc_stub_warning() {
+    fn g2_ijk_produces_arc() {
         let mut state = ModalState::default();
         let result = interp("G2 X10 Y0 I5 J0 F300", &mut state, 1);
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            MotionSegment::Arc {
+                start,
+                end,
+                center,
+                clockwise,
+                plane,
+                feed_rate,
+                ..
+            } => {
+                assert_eq!(*start, v(0.0, 0.0, 0.0));
+                assert_eq!(*end, v(10.0, 0.0, 0.0));
+                assert_eq!(*center, v(5.0, 0.0, 0.0));
+                assert!(*clockwise);
+                assert_eq!(*plane, Plane::Xy);
+                assert_eq!(*feed_rate, 300.0);
+            }
+            other => panic!("expected Arc, got {:?}", other),
+        }
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn g3_ijk_produces_ccw_arc() {
+        let mut state = ModalState::default();
+        let result = interp("G3 X10 Y0 I5 J0 F300", &mut state, 1);
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            MotionSegment::Arc { clockwise, .. } => {
+                assert!(!*clockwise);
+            }
+            other => panic!("expected Arc, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn g2_r_format_produces_arc() {
+        let mut state = ModalState::default();
+        state.position = v(10.0, 0.0, 0.0);
+        let result = interp("G2 X0 Y10 R10 F300", &mut state, 1);
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            MotionSegment::Arc { center, .. } => {
+                assert!((center.x - 10.0).abs() < 1e-9);
+                assert!((center.y - 10.0).abs() < 1e-9);
+            }
+            other => panic!("expected Arc, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn g2_ijk_precedence_over_r() {
+        let mut state = ModalState::default();
+        let result = interp("G2 X10 Y0 I5 J0 R999 F300", &mut state, 1);
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            MotionSegment::Arc { center, .. } => {
+                assert_eq!(*center, v(5.0, 0.0, 0.0));
+            }
+            other => panic!("expected Arc, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn g2_no_center_warning() {
+        let mut state = ModalState::default();
+        let result = interp("G2 X10 Y0 F300", &mut state, 1);
+        assert!(result.segments.is_empty());
         assert!(result
             .warnings
             .iter()
-            .any(|w| w.message.contains("arc interpolation not yet implemented")));
-        assert!(result.segments.is_empty());
+            .any(|w| w.message.contains("no center specified")));
+    }
+
+    #[test]
+    fn helical_arc_g17_with_z() {
+        let mut state = ModalState::default();
+        state.position = v(10.0, 0.0, 0.0);
+        let result = interp("G2 X0 Y10 Z5 I-10 J0 F300", &mut state, 1);
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            MotionSegment::Arc {
+                start, end, center, ..
+            } => {
+                assert_eq!(*start, v(10.0, 0.0, 0.0));
+                assert_eq!(*end, v(0.0, 10.0, 5.0));
+                assert_eq!(center.z, 0.0);
+            }
+            other => panic!("expected Arc, got {:?}", other),
+        }
+        assert_eq!(state.position, v(0.0, 10.0, 5.0));
     }
 
     // --- Empty line produces no segments ---
