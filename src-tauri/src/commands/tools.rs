@@ -54,6 +54,14 @@ pub(crate) fn add_tool_inner(
         cutting_length: 0.0,
         shank_diameter: 0.0,
         overall_length: 0.0,
+        corner_radius: None,
+        included_angle: None,
+        point_angle: None,
+        pilot_diameter: None,
+        pilot_length: None,
+        thread_pitch: None,
+        min_bore_diameter: None,
+        taper_half_angle: None,
     };
     tool.resolve_defaults();
     let mut project = write_project(project_lock)?;

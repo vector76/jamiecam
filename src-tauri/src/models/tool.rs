@@ -67,14 +67,46 @@ pub struct Tool {
     /// A value of 0.0 is a sentinel meaning "not yet set".
     #[serde(default)]
     pub overall_length: f64,
+
+    // -- Type-specific geometry fields --
+    // Each is meaningful only for certain ToolType variants.
+    // Fields irrelevant to a tool's type remain `None`.
+    /// BullNose: radius of the corner rounding (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corner_radius: Option<f64>,
+    /// VBit: full angle between cutting edges (degrees).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub included_angle: Option<f64>,
+    /// Drill / CenterDrill: full cone angle at the tip (degrees).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_angle: Option<f64>,
+    /// CenterDrill: diameter of the pilot section (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pilot_diameter: Option<f64>,
+    /// CenterDrill: total length of the pilot portion including cone (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pilot_length: Option<f64>,
+    /// Tap / ThreadMill: distance between threads (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_pitch: Option<f64>,
+    /// BoringBar: minimum bore the bar fits into (mm).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_bore_diameter: Option<f64>,
+    /// FlatEndmill / BullNose: half-angle of taper (degrees).
+    /// `None` means straight (no taper). Not defaulted by resolve_defaults().
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taper_half_angle: Option<f64>,
 }
 
 impl Tool {
     /// Replace sentinel (zero) geometry values with heuristic defaults.
     ///
-    /// Resolution order matters: `overall_length` depends on the resolved
-    /// `cutting_length`, not the raw value.
+    /// Resolution order matters: universal fields are resolved first because
+    /// type-specific defaults (e.g. `pilot_length`) may depend on them.
+    /// `taper_half_angle` is truly optional — `None` means no taper, so it
+    /// is never defaulted.
     pub fn resolve_defaults(&mut self) {
+        // --- Universal fields (must come first) ---
         if self.cutting_length == 0.0 {
             self.cutting_length = self.diameter * 3.0;
         }
@@ -83,6 +115,49 @@ impl Tool {
         }
         if self.overall_length == 0.0 {
             self.overall_length = self.cutting_length * 3.0;
+        }
+
+        // --- Type-specific fields ---
+        match self.tool_type {
+            ToolType::BullNose => {
+                if self.corner_radius.is_none() {
+                    self.corner_radius = Some(self.diameter * 0.1);
+                }
+            }
+            ToolType::VBit => {
+                if self.included_angle.is_none() {
+                    self.included_angle = Some(90.0);
+                }
+            }
+            ToolType::Drill => {
+                if self.point_angle.is_none() {
+                    self.point_angle = Some(118.0);
+                }
+            }
+            ToolType::CenterDrill => {
+                if self.point_angle.is_none() {
+                    self.point_angle = Some(60.0);
+                }
+                if self.pilot_diameter.is_none() {
+                    self.pilot_diameter = Some(self.diameter * 0.3);
+                }
+                if self.pilot_length.is_none() {
+                    self.pilot_length = Some(self.cutting_length / 3.0);
+                }
+            }
+            ToolType::Tap | ToolType::ThreadMill => {
+                if self.thread_pitch.is_none() {
+                    self.thread_pitch = Some(1.0);
+                }
+            }
+            ToolType::BoringBar => {
+                if self.min_bore_diameter.is_none() {
+                    self.min_bore_diameter = Some(self.diameter * 1.5);
+                }
+            }
+            // FlatEndmill, BallNose, Reamer: no type-specific defaults
+            // (taper_half_angle is never defaulted)
+            _ => {}
         }
     }
 }
@@ -104,6 +179,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         }
     }
 
@@ -150,6 +233,14 @@ mod tests {
             cutting_length: 18.0,
             shank_diameter: 6.0,
             overall_length: 54.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
         let value = serde_json::to_value(&tool).expect("to_value");
         assert!(value.get("defaultSpindleSpeed").is_none());
@@ -204,6 +295,14 @@ mod tests {
             cutting_length: 20.0, // explicit, non-zero
             shank_diameter: 0.0,
             overall_length: 0.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
         tool.resolve_defaults();
         // cutting_length kept as-is (already non-zero)
@@ -233,5 +332,209 @@ mod tests {
             let recovered: ToolType = serde_json::from_str(&json).expect("deserialize ToolType");
             assert_eq!(tt, &recovered);
         }
+    }
+
+    // ---- Type-specific geometry tests ----
+
+    /// Helper: build a minimal old-format JSON string (no type-specific fields)
+    /// for any tool type.
+    fn old_format_json(tool_type_str: &str, diameter: f64) -> String {
+        format!(
+            r#"{{
+                "id": "7f3c1a00-0000-0000-0000-000000000001",
+                "name": "test",
+                "type": "{}",
+                "material": "carbide",
+                "diameter": {},
+                "fluteCount": 2
+            }}"#,
+            tool_type_str, diameter
+        )
+    }
+
+    #[test]
+    fn backward_compat_flat_endmill_defaults() {
+        let json = old_format_json("flat_endmill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        // No type-specific fields should be set for FlatEndmill.
+        assert_eq!(tool.corner_radius, None);
+        assert_eq!(tool.included_angle, None);
+        assert_eq!(tool.point_angle, None);
+        assert_eq!(tool.pilot_diameter, None);
+        assert_eq!(tool.pilot_length, None);
+        assert_eq!(tool.thread_pitch, None);
+        assert_eq!(tool.min_bore_diameter, None);
+        assert_eq!(tool.taper_half_angle, None);
+    }
+
+    #[test]
+    fn backward_compat_ball_nose_defaults() {
+        let json = old_format_json("ball_nose", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        // BallNose has no type-specific defaults.
+        assert_eq!(tool.corner_radius, None);
+        assert_eq!(tool.included_angle, None);
+        assert_eq!(tool.point_angle, None);
+    }
+
+    #[test]
+    fn backward_compat_bull_nose_defaults() {
+        let json = old_format_json("bull_nose", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.corner_radius, Some(1.0)); // diameter * 0.1
+        assert_eq!(tool.taper_half_angle, None); // truly optional
+    }
+
+    #[test]
+    fn backward_compat_vbit_defaults() {
+        let json = old_format_json("v_bit", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.included_angle, Some(90.0));
+    }
+
+    #[test]
+    fn backward_compat_drill_defaults() {
+        let json = old_format_json("drill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.point_angle, Some(118.0));
+    }
+
+    #[test]
+    fn backward_compat_center_drill_defaults() {
+        let json = old_format_json("center_drill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.point_angle, Some(60.0));
+        assert_eq!(tool.pilot_diameter, Some(3.0)); // diameter * 0.3
+        assert_eq!(tool.pilot_length, Some(10.0)); // cutting_length(30) / 3
+    }
+
+    #[test]
+    fn backward_compat_tap_defaults() {
+        let json = old_format_json("tap", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.thread_pitch, Some(1.0));
+    }
+
+    #[test]
+    fn backward_compat_reamer_defaults() {
+        let json = old_format_json("reamer", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        // Reamer has no type-specific defaults.
+        assert_eq!(tool.corner_radius, None);
+        assert_eq!(tool.thread_pitch, None);
+    }
+
+    #[test]
+    fn backward_compat_boring_bar_defaults() {
+        let json = old_format_json("boring_bar", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.min_bore_diameter, Some(15.0)); // diameter * 1.5
+    }
+
+    #[test]
+    fn backward_compat_thread_mill_defaults() {
+        let json = old_format_json("thread_mill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.thread_pitch, Some(1.0));
+    }
+
+    #[test]
+    fn bull_nose_corner_radius_round_trip() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::BullNose;
+        tool.corner_radius = Some(2.5);
+        let json = serde_json::to_string(&tool).expect("serialize");
+        let recovered: Tool = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(recovered.corner_radius, Some(2.5));
+    }
+
+    #[test]
+    fn taper_half_angle_absent_is_none() {
+        let json = old_format_json("flat_endmill", 10.0);
+        let tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(tool.taper_half_angle, None);
+    }
+
+    #[test]
+    fn taper_half_angle_present_round_trips() {
+        let mut tool = make_tool();
+        tool.taper_half_angle = Some(3.0);
+        let json = serde_json::to_string(&tool).expect("serialize");
+        let recovered: Tool = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(recovered.taper_half_angle, Some(3.0));
+    }
+
+    #[test]
+    fn taper_half_angle_not_defaulted_by_resolve() {
+        let json = old_format_json("flat_endmill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.taper_half_angle, None);
+
+        let json = old_format_json("bull_nose", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.taper_half_angle, None);
+    }
+
+    #[test]
+    fn cross_type_irrelevance_flat_endmill() {
+        let json = old_format_json("flat_endmill", 10.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        tool.resolve_defaults();
+        assert_eq!(tool.corner_radius, None);
+        assert_eq!(tool.included_angle, None);
+        assert_eq!(tool.point_angle, None);
+        assert_eq!(tool.pilot_diameter, None);
+        assert_eq!(tool.pilot_length, None);
+        assert_eq!(tool.thread_pitch, None);
+        assert_eq!(tool.min_bore_diameter, None);
+        assert_eq!(tool.taper_half_angle, None);
+    }
+
+    #[test]
+    fn center_drill_pilot_length_uses_resolved_cutting_length() {
+        // Verify that pilot_length depends on *resolved* cutting_length.
+        let json = old_format_json("center_drill", 6.0);
+        let mut tool: Tool = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(tool.cutting_length, 0.0); // sentinel
+        tool.resolve_defaults();
+        // cutting_length resolved to 6.0 * 3 = 18.0
+        assert_eq!(tool.cutting_length, 18.0);
+        // pilot_length = cutting_length / 3 = 6.0
+        assert_eq!(tool.pilot_length, Some(6.0));
+    }
+
+    #[test]
+    fn explicit_type_specific_values_preserved_by_resolve() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::BullNose;
+        tool.corner_radius = Some(5.0); // explicit, not the default
+        tool.resolve_defaults();
+        assert_eq!(tool.corner_radius, Some(5.0)); // preserved, not overwritten
+    }
+
+    #[test]
+    fn type_specific_fields_absent_in_json_when_none() {
+        let tool = make_tool(); // FlatEndmill, all type-specific = None
+        let value = serde_json::to_value(&tool).expect("to_value");
+        assert!(value.get("cornerRadius").is_none());
+        assert!(value.get("includedAngle").is_none());
+        assert!(value.get("pointAngle").is_none());
+        assert!(value.get("pilotDiameter").is_none());
+        assert!(value.get("pilotLength").is_none());
+        assert!(value.get("threadPitch").is_none());
+        assert!(value.get("minBoreDiameter").is_none());
+        assert!(value.get("taperHalfAngle").is_none());
     }
 }

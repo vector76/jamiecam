@@ -34,6 +34,14 @@ fn profile_algorithm_golden_matches() {
         default_feed_rate: Some(500.0),
         cutting_length: 18.0,
         shank_diameter: 6.0,
+        corner_radius: None,
+        included_angle: None,
+        point_angle: None,
+        pilot_diameter: None,
+        pilot_length: None,
+        thread_pitch: None,
+        min_bore_diameter: None,
+        taper_half_angle: None,
         overall_length: 54.0,
     };
 

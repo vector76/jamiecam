@@ -774,6 +774,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
 
         let operation = Operation {
@@ -889,6 +897,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
 
         let operation = Operation {
@@ -1017,6 +1033,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
 
         let operation = Operation {
@@ -1136,6 +1160,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
 
         // "deadbeef" repeated 8 times = 64 hex chars (not a valid face fingerprint).
@@ -1199,6 +1231,14 @@ mod tests {
             default_spindle_speed: None,
             default_feed_rate: None,
             cutting_length: 30.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
             shank_diameter: 10.0,
             overall_length: 90.0,
         };
@@ -1324,6 +1364,14 @@ mod tests {
             cutting_length: 30.0,
             shank_diameter: 10.0,
             overall_length: 90.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         }
     }
 

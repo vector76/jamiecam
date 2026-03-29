@@ -24,6 +24,14 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
         default_feed_rate: Some(150.0),
         cutting_length: 15.0,
         shank_diameter: 5.0,
+        corner_radius: None,
+        included_angle: None,
+        point_angle: None,
+        pilot_diameter: None,
+        pilot_length: None,
+        thread_pitch: None,
+        min_bore_diameter: None,
+        taper_half_angle: None,
         overall_length: 45.0,
     });
 

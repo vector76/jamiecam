@@ -289,6 +289,14 @@ mod tests {
                 cutting_length: 30.0,
                 shank_diameter: 10.0,
                 overall_length: 90.0,
+                corner_radius: None,
+                included_angle: None,
+                point_angle: None,
+                pilot_diameter: None,
+                pilot_length: None,
+                thread_pitch: None,
+                min_bore_diameter: None,
+                taper_half_angle: None,
             });
         }
 
@@ -469,6 +477,14 @@ mod tests {
             cutting_length: 18.0,
             shank_diameter: 6.0,
             overall_length: 54.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
         let stock = StockDefinition::Box(BoxDimensions {
             origin: Vec3 {
@@ -544,6 +560,14 @@ mod tests {
             cutting_length: 18.0,
             shank_diameter: 6.0,
             overall_length: 54.0,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         };
         let stock = StockDefinition::Box(BoxDimensions {
             origin: Vec3 {
