@@ -22,7 +22,7 @@ export function AppShell() {
       <Toolbar />
       <div className="flex flex-1 overflow-hidden">
         <Viewport className="flex-1" />
-        <aside className="w-[280px] border-l border-border">
+        <aside className="w-[280px] shrink-0 border-l border-border">
           <ScrollArea className="h-full">
             <SidebarSection title="Tools" defaultOpen={false}>
               <ToolLibraryPanel />

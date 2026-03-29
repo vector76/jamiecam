@@ -341,8 +341,8 @@ describe('SceneManager — OrbitControls', () => {
     }>(m, 'controls')
   }
 
-  it('enables damping', () => {
-    expect(controls(mgr).enableDamping).toBe(true)
+  it('disables damping for direct control feel', () => {
+    expect(controls(mgr).enableDamping).toBe(false)
   })
 
   it('sets screenSpacePanning to false', () => {

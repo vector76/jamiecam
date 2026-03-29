@@ -81,7 +81,7 @@ export class SceneManager {
 
     // ── Orbit controls — Z-up (non-default, must be set explicitly) ───────
     this.controls = new OrbitControls(this.perspectiveCamera, this.renderer.domElement)
-    this.controls.enableDamping = true
+    this.controls.enableDamping = false
     this.controls.enablePan = true
     this.controls.screenSpacePanning = false // keeps pan on XY plane
     this.controls.target.set(0, 0, 0)
