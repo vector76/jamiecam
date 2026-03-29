@@ -11,6 +11,11 @@ export default defineConfig({
   // prevent vite from obscuring rust errors
   clearScreen: false,
 
+  // Tauri loads assets from the local filesystem, so large chunks are fine.
+  build: {
+    chunkSizeWarningLimit: 1500,
+  },
+
   server: {
     port: 1420,
     strictPort: true,
