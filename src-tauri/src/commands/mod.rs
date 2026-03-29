@@ -1,16 +1,19 @@
 //! Tauri IPC command handlers.
 //!
 //! Sub-modules are grouped by concern:
-//! - [`file`]       — open model, save / load / new project, export G-code
-//! - [`geometry`]   — face enumeration for loaded B-rep models
-//! - [`operations`] — machining operation CRUD and reorder
-//! - [`project`]    — lightweight project state queries
-//! - [`stock`]      — stock definition and WCS get/set
-//! - [`toolpath`]   — toolpath queries and post-processor management
-//! - [`tools`]      — tool library CRUD
+//! - [`feeds`]        — material and feed rate lookups
+//! - [`file`]         — open model, save / load / new project, export G-code
+//! - [`gcode_parser`] — G-code text parsing
+//! - [`geometry`]     — face enumeration for loaded B-rep models
+//! - [`operations`]   — machining operation CRUD and reorder
+//! - [`project`]      — lightweight project state queries
+//! - [`stock`]        — stock definition and WCS get/set
+//! - [`toolpath`]     — toolpath queries and post-processor management
+//! - [`tools`]        — tool library CRUD
 
 pub mod feeds;
 pub mod file;
+pub mod gcode_parser;
 pub mod geometry;
 pub mod operations;
 pub mod project;
