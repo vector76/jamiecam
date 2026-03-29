@@ -99,6 +99,116 @@ pub struct Tool {
 }
 
 impl Tool {
+    /// Returns the Z clearance at radial distance `r` from the tool axis.
+    ///
+    /// Returns `None` if `r` is outside the tool's cutting envelope.
+    /// This is a closed-form function giving exact results per tool type.
+    /// Only describes the cutting portion — not the shank.
+    ///
+    /// All angles stored in degrees; converted internally with `.to_radians()`.
+    pub fn z_clearance(&self, r: f64) -> Option<f64> {
+        const EPS: f64 = 1e-10;
+        let big_r = self.diameter / 2.0;
+
+        match self.tool_type {
+            ToolType::FlatEndmill
+            | ToolType::Tap
+            | ToolType::Reamer
+            | ToolType::BoringBar
+            | ToolType::ThreadMill => match self.taper_half_angle {
+                Some(angle) => {
+                    let tan_a = angle.to_radians().tan();
+                    let r_top = big_r + self.cutting_length * tan_a;
+                    if r <= big_r + EPS {
+                        Some(0.0)
+                    } else if r <= r_top + EPS {
+                        Some((r - big_r) / tan_a)
+                    } else {
+                        None
+                    }
+                }
+                None => {
+                    if r <= big_r + EPS {
+                        Some(0.0)
+                    } else {
+                        None
+                    }
+                }
+            },
+
+            ToolType::BallNose => {
+                if r <= big_r + EPS {
+                    let r_clamped = r.min(big_r);
+                    Some(big_r - (big_r * big_r - r_clamped * r_clamped).sqrt())
+                } else {
+                    None
+                }
+            }
+
+            ToolType::BullNose => {
+                let cr = self.corner_radius.unwrap_or(0.0);
+                let flat_r = big_r - cr;
+
+                match self.taper_half_angle {
+                    Some(angle) => {
+                        let tan_a = angle.to_radians().tan();
+                        let r_top = big_r + (self.cutting_length - cr) * tan_a;
+                        if r <= flat_r + EPS {
+                            Some(0.0)
+                        } else if r <= big_r + EPS {
+                            let r_clamped = r.min(big_r).max(flat_r);
+                            let dr = r_clamped - flat_r;
+                            Some(cr - (cr * cr - dr * dr).sqrt())
+                        } else if r <= r_top + EPS {
+                            Some(cr + (r - big_r) / tan_a)
+                        } else {
+                            None
+                        }
+                    }
+                    None => {
+                        if r <= flat_r + EPS {
+                            Some(0.0)
+                        } else if r <= big_r + EPS {
+                            let r_clamped = r.min(big_r).max(flat_r);
+                            let dr = r_clamped - flat_r;
+                            Some(cr - (cr * cr - dr * dr).sqrt())
+                        } else {
+                            None
+                        }
+                    }
+                }
+            }
+
+            ToolType::VBit => {
+                if r <= big_r + EPS {
+                    let half_angle = (self.included_angle.unwrap_or(90.0) / 2.0).to_radians();
+                    Some(r / half_angle.tan())
+                } else {
+                    None
+                }
+            }
+
+            ToolType::Drill => {
+                if r <= big_r + EPS {
+                    let half_angle = (self.point_angle.unwrap_or(118.0) / 2.0).to_radians();
+                    Some(r / half_angle.tan())
+                } else {
+                    None
+                }
+            }
+
+            ToolType::CenterDrill => {
+                let pilot_r = self.pilot_diameter.unwrap_or(self.diameter * 0.3) / 2.0;
+                if r <= pilot_r + EPS {
+                    let half_angle = (self.point_angle.unwrap_or(60.0) / 2.0).to_radians();
+                    Some(r / half_angle.tan())
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     /// Replace sentinel (zero) geometry values with heuristic defaults.
     ///
     /// Resolution order matters: universal fields are resolved first because
@@ -536,5 +646,315 @@ mod tests {
         assert!(value.get("threadPitch").is_none());
         assert!(value.get("minBoreDiameter").is_none());
         assert!(value.get("taperHalfAngle").is_none());
+    }
+
+    // ---- z_clearance tests ----
+
+    /// Helper: build a resolved tool of the given type with diameter 10.0.
+    fn make_resolved_tool(tool_type: ToolType) -> Tool {
+        let mut tool = make_tool();
+        tool.tool_type = tool_type;
+        tool.resolve_defaults();
+        tool
+    }
+
+    fn assert_approx(actual: f64, expected: f64, tol: f64, msg: &str) {
+        assert!(
+            (actual - expected).abs() < tol,
+            "{}: expected {}, got {} (diff {})",
+            msg,
+            expected,
+            actual,
+            (actual - expected).abs()
+        );
+    }
+
+    #[test]
+    fn z_clearance_zero_for_all_types() {
+        // Universal invariant: z_clearance(0.0) == Some(0.0) for all tool types.
+        let types = [
+            ToolType::FlatEndmill,
+            ToolType::BallNose,
+            ToolType::BullNose,
+            ToolType::VBit,
+            ToolType::Drill,
+            ToolType::CenterDrill,
+            ToolType::Tap,
+            ToolType::Reamer,
+            ToolType::BoringBar,
+            ToolType::ThreadMill,
+        ];
+        for tt in &types {
+            let tool = make_resolved_tool(tt.clone());
+            assert_eq!(
+                tool.z_clearance(0.0),
+                Some(0.0),
+                "z_clearance(0) should be Some(0.0) for {:?}",
+                tt
+            );
+        }
+    }
+
+    #[test]
+    fn z_clearance_flat_endmill_10mm() {
+        let tool = make_resolved_tool(ToolType::FlatEndmill);
+        // R = 5.0
+        assert_eq!(tool.z_clearance(5.0), Some(0.0));
+        assert_eq!(tool.z_clearance(5.0 + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_flat_endmill_boundary() {
+        let tool = make_resolved_tool(ToolType::FlatEndmill);
+        // Just inside boundary
+        assert_eq!(tool.z_clearance(4.999), Some(0.0));
+        // At boundary
+        assert_eq!(tool.z_clearance(5.0), Some(0.0));
+        // Just outside (beyond epsilon)
+        assert_eq!(tool.z_clearance(5.001), None);
+    }
+
+    #[test]
+    fn z_clearance_tapered_flat_endmill() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::FlatEndmill;
+        tool.taper_half_angle = Some(5.0); // 5 degrees
+        tool.cutting_length = 30.0;
+        tool.resolve_defaults();
+
+        let big_r = 5.0;
+        let tan_a = 5.0_f64.to_radians().tan();
+        let r_top = big_r + 30.0 * tan_a;
+
+        // At R: z = 0
+        assert_eq!(tool.z_clearance(big_r), Some(0.0));
+
+        // At R + delta
+        let delta = 1.0;
+        let r = big_r + delta;
+        let expected = delta / tan_a;
+        let result = tool.z_clearance(r).unwrap();
+        assert_approx(result, expected, 1e-10, "tapered flat endmill at R+1");
+
+        // At R_top: still within domain
+        assert!(tool.z_clearance(r_top).is_some());
+
+        // Beyond R_top: None
+        assert_eq!(tool.z_clearance(r_top + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_ball_nose() {
+        let tool = make_resolved_tool(ToolType::BallNose);
+        let big_r = 5.0;
+
+        // r = 0
+        assert_eq!(tool.z_clearance(0.0), Some(0.0));
+
+        // r = R/2 = 2.5
+        let r: f64 = big_r / 2.0;
+        let expected = big_r - (big_r * big_r - r * r).sqrt();
+        let result = tool.z_clearance(r).unwrap();
+        assert_approx(result, expected, 1e-10, "ball nose at R/2");
+
+        // r = R = 5.0
+        let expected_at_r = big_r - (big_r * big_r - big_r * big_r).sqrt(); // = R
+        let result = tool.z_clearance(big_r).unwrap();
+        assert_approx(result, expected_at_r, 1e-10, "ball nose at R");
+        assert_approx(result, big_r, 1e-10, "ball nose at R equals R");
+
+        // Outside
+        assert_eq!(tool.z_clearance(big_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_bull_nose_boundary() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::BullNose;
+        tool.corner_radius = Some(2.0);
+        tool.resolve_defaults();
+
+        let big_r = 5.0;
+        let cr = 2.0;
+
+        // r = R - cr = 3.0: flat region boundary → Some(0.0)
+        assert_eq!(tool.z_clearance(big_r - cr), Some(0.0));
+
+        // Just inside arc at r approaching R:
+        // z = cr - sqrt(cr² - (r - (R - cr))²)
+        // At r = R = 5.0: z = cr - sqrt(cr² - cr²) = cr = 2.0
+        let result = tool.z_clearance(big_r).unwrap();
+        assert_approx(result, cr, 1e-10, "bull nose at R");
+
+        // At r = R - cr + cr/2 = 3.0 + 1.0 = 4.0:
+        let r = big_r - cr + cr / 2.0;
+        let dr = r - (big_r - cr);
+        let expected = cr - (cr * cr - dr * dr).sqrt();
+        let result = tool.z_clearance(r).unwrap();
+        assert_approx(result, expected, 1e-10, "bull nose mid-arc");
+
+        // Outside
+        assert_eq!(tool.z_clearance(big_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_bull_nose_tapered() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::BullNose;
+        tool.corner_radius = Some(2.0);
+        tool.taper_half_angle = Some(5.0);
+        tool.cutting_length = 30.0;
+        tool.resolve_defaults();
+
+        let big_r = 5.0;
+        let cr = 2.0;
+        let tan_a = 5.0_f64.to_radians().tan();
+        let r_top = big_r + (30.0 - cr) * tan_a;
+
+        // Flat region
+        assert_eq!(tool.z_clearance(big_r - cr), Some(0.0));
+
+        // Arc region at R
+        let result = tool.z_clearance(big_r).unwrap();
+        assert_approx(result, cr, 1e-10, "tapered bull nose at R");
+
+        // Taper region: r = R + 1.0
+        let r = big_r + 1.0;
+        let expected = cr + (r - big_r) / tan_a;
+        let result = tool.z_clearance(r).unwrap();
+        assert_approx(result, expected, 1e-10, "tapered bull nose taper region");
+
+        // At R_top: still valid
+        assert!(tool.z_clearance(r_top).is_some());
+
+        // Beyond R_top
+        assert_eq!(tool.z_clearance(r_top + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_vbit() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::VBit;
+        tool.included_angle = Some(90.0);
+        tool.resolve_defaults();
+
+        let big_r = 5.0;
+        let half_angle = (90.0_f64 / 2.0).to_radians();
+
+        // r = 0
+        assert_eq!(tool.z_clearance(0.0), Some(0.0));
+
+        // r = 3.0
+        let r = 3.0;
+        let expected = r / half_angle.tan();
+        let result = tool.z_clearance(r).unwrap();
+        assert_approx(result, expected, 1e-10, "vbit at r=3");
+
+        // r = R: z = R / tan(45°) = R
+        let result = tool.z_clearance(big_r).unwrap();
+        assert_approx(result, big_r, 1e-10, "90° vbit at R: z = R");
+
+        // Outside
+        assert_eq!(tool.z_clearance(big_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_drill() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::Drill;
+        tool.point_angle = Some(118.0);
+        tool.resolve_defaults();
+
+        let big_r = 5.0;
+        let half_angle = (118.0_f64 / 2.0).to_radians();
+
+        // r = 0
+        assert_eq!(tool.z_clearance(0.0), Some(0.0));
+
+        // r = R
+        let expected = big_r / half_angle.tan();
+        let result = tool.z_clearance(big_r).unwrap();
+        assert_approx(result, expected, 1e-10, "drill at R");
+
+        // Outside
+        assert_eq!(tool.z_clearance(big_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_center_drill_domain() {
+        let mut tool = make_tool();
+        tool.tool_type = ToolType::CenterDrill;
+        tool.point_angle = Some(60.0);
+        tool.pilot_diameter = Some(3.0);
+        tool.resolve_defaults();
+
+        let pilot_r = 1.5;
+        let half_angle = (60.0_f64 / 2.0).to_radians();
+
+        // At pilot_R
+        let expected = pilot_r / half_angle.tan();
+        let result = tool.z_clearance(pilot_r).unwrap();
+        assert_approx(result, expected, 1e-10, "center drill at pilot_R");
+
+        // Beyond pilot_R → None
+        assert_eq!(tool.z_clearance(pilot_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_outside_returns_none_all_non_tapered() {
+        let types = [
+            ToolType::FlatEndmill,
+            ToolType::BallNose,
+            ToolType::BullNose,
+            ToolType::VBit,
+            ToolType::Drill,
+            ToolType::Tap,
+            ToolType::Reamer,
+            ToolType::BoringBar,
+            ToolType::ThreadMill,
+        ];
+        for tt in &types {
+            let tool = make_resolved_tool(tt.clone());
+            let big_r = tool.diameter / 2.0;
+            assert_eq!(
+                tool.z_clearance(big_r + 1.0),
+                None,
+                "z_clearance outside R should be None for {:?}",
+                tt
+            );
+        }
+    }
+
+    #[test]
+    fn z_clearance_center_drill_outside_pilot_returns_none() {
+        let tool = make_resolved_tool(ToolType::CenterDrill);
+        let pilot_r = tool.pilot_diameter.unwrap() / 2.0;
+        // Even within the full tool radius, beyond pilot_R → None
+        assert_eq!(tool.z_clearance(pilot_r + 1.0), None);
+    }
+
+    #[test]
+    fn z_clearance_cylindrical_types_match_flat_endmill() {
+        // Tap, Reamer, BoringBar, ThreadMill behave identically to straight FlatEndmill
+        let flat = make_resolved_tool(ToolType::FlatEndmill);
+        let cylindrical_types = [
+            ToolType::Tap,
+            ToolType::Reamer,
+            ToolType::BoringBar,
+            ToolType::ThreadMill,
+        ];
+        let test_radii = [0.0, 2.5, 5.0, 5.001];
+        for tt in &cylindrical_types {
+            let tool = make_resolved_tool(tt.clone());
+            for &r in &test_radii {
+                assert_eq!(
+                    tool.z_clearance(r),
+                    flat.z_clearance(r),
+                    "{:?} at r={} should match FlatEndmill",
+                    tt,
+                    r
+                );
+            }
+        }
     }
 }
