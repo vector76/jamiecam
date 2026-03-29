@@ -37,6 +37,9 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(cam_geometry_bindings)");
 
     // Incremental rebuild triggers.
+    println!("cargo:rerun-if-changed=icons/icon.ico");
+    println!("cargo:rerun-if-changed=icons/icon.png");
+    println!("cargo:rerun-if-changed=tauri.conf.json");
     println!("cargo:rerun-if-changed=cpp/cam_geometry.h");
     println!("cargo:rerun-if-changed=cpp/cam_geometry.cpp");
     println!("cargo:rerun-if-changed=cpp/handle_registry.cpp");
