@@ -58,6 +58,14 @@ export interface Tool {
   cuttingLength: number
   shankDiameter: number
   overallLength: number
+  cornerRadius?: number
+  includedAngle?: number
+  pointAngle?: number
+  pilotDiameter?: number
+  pilotLength?: number
+  threadPitch?: number
+  minBoreDiameter?: number
+  taperHalfAngle?: number
 }
 
 /**
@@ -73,6 +81,17 @@ export interface ToolInput {
   fluteCount: number
   defaultSpindleSpeed?: number
   defaultFeedRate?: number
+  cuttingLength?: number
+  shankDiameter?: number
+  overallLength?: number
+  cornerRadius?: number
+  includedAngle?: number
+  pointAngle?: number
+  pilotDiameter?: number
+  pilotLength?: number
+  threadPitch?: number
+  minBoreDiameter?: number
+  taperHalfAngle?: number
 }
 
 /** A compact tool summary included in ProjectSnapshot. */

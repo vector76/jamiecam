@@ -32,6 +32,19 @@ pub fn compute_cache_key(
         "type",
         serde_json::to_value(&tool.tool_type).expect("serialize ToolType"),
     );
+    // Universal geometry
+    tool_map.insert("cuttingLength", serde_json::json!(tool.cutting_length));
+    tool_map.insert("shankDiameter", serde_json::json!(tool.shank_diameter));
+    tool_map.insert("overallLength", serde_json::json!(tool.overall_length));
+    // Type-specific geometry
+    tool_map.insert("cornerRadius", serde_json::json!(tool.corner_radius));
+    tool_map.insert("includedAngle", serde_json::json!(tool.included_angle));
+    tool_map.insert("pointAngle", serde_json::json!(tool.point_angle));
+    tool_map.insert("pilotDiameter", serde_json::json!(tool.pilot_diameter));
+    tool_map.insert("pilotLength", serde_json::json!(tool.pilot_length));
+    tool_map.insert("threadPitch", serde_json::json!(tool.thread_pitch));
+    tool_map.insert("minBoreDiameter", serde_json::json!(tool.min_bore_diameter));
+    tool_map.insert("taperHalfAngle", serde_json::json!(tool.taper_half_angle));
 
     // Operation value: serialize then strip override and future cache fields.
     let mut op_val = serde_json::to_value(operation).expect("serialize Operation");
@@ -180,5 +193,29 @@ mod tests {
         let k1 = compute_cache_key(&op, &tool, &stock, None, "v1");
         let k2 = compute_cache_key(&op, &tool, &stock, Some("deadbeef1234"), "v1");
         assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn changed_cutting_length_changes_key() {
+        let op = make_operation();
+        let stock = make_stock();
+        let tool1 = make_tool();
+        let mut tool2 = make_tool();
+        tool2.cutting_length = 50.0;
+        let k1 = compute_cache_key(&op, &tool1, &stock, Some("abc123"), "v1");
+        let k2 = compute_cache_key(&op, &tool2, &stock, Some("abc123"), "v1");
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn changed_name_does_not_change_key() {
+        let op = make_operation();
+        let stock = make_stock();
+        let tool1 = make_tool();
+        let mut tool2 = make_tool();
+        tool2.name = "Completely Different Name".to_string();
+        let k1 = compute_cache_key(&op, &tool1, &stock, Some("abc123"), "v1");
+        let k2 = compute_cache_key(&op, &tool2, &stock, Some("abc123"), "v1");
+        assert_eq!(k1, k2);
     }
 }

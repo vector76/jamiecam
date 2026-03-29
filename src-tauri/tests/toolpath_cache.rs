@@ -13,7 +13,7 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
     let mut project = Project::default();
 
     let tool_id = Uuid::new_v4();
-    project.tools.push(Tool {
+    let mut tool = Tool {
         id: tool_id,
         name: "5mm Drill".to_string(),
         tool_type: ToolType::Drill,
@@ -24,6 +24,7 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
         default_feed_rate: Some(150.0),
         cutting_length: 15.0,
         shank_diameter: 5.0,
+        overall_length: 45.0,
         corner_radius: None,
         included_angle: None,
         point_angle: None,
@@ -32,8 +33,11 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
         thread_pitch: None,
         min_bore_diameter: None,
         taper_half_angle: None,
-        overall_length: 45.0,
-    });
+    };
+    // Pre-resolve so that the in-memory tool matches what load() would
+    // produce after deserializing and calling resolve_defaults().
+    tool.resolve_defaults();
+    project.tools.push(tool);
 
     let op_id = Uuid::new_v4();
     project.operations.push(Operation {

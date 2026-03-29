@@ -30,6 +30,123 @@ pub struct ToolInput {
     pub flute_count: u32,
     pub default_spindle_speed: Option<u32>,
     pub default_feed_rate: Option<f64>,
+    // Universal geometry
+    pub cutting_length: Option<f64>,
+    pub shank_diameter: Option<f64>,
+    pub overall_length: Option<f64>,
+    // Type-specific geometry
+    pub corner_radius: Option<f64>,
+    pub included_angle: Option<f64>,
+    pub point_angle: Option<f64>,
+    pub pilot_diameter: Option<f64>,
+    pub pilot_length: Option<f64>,
+    pub thread_pitch: Option<f64>,
+    pub min_bore_diameter: Option<f64>,
+    pub taper_half_angle: Option<f64>,
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+/// Basic sanity checks on geometry values before inserting/updating a tool.
+fn validate_tool_geometry(input: &ToolInput) -> Result<(), AppError> {
+    if input.diameter < 0.0 {
+        return Err(AppError::InvalidInput(
+            "diameter must not be negative".into(),
+        ));
+    }
+    if let Some(cl) = input.cutting_length {
+        if cl < 0.0 {
+            return Err(AppError::InvalidInput(
+                "cutting_length must not be negative".into(),
+            ));
+        }
+    }
+    if let Some(sd) = input.shank_diameter {
+        if sd < 0.0 {
+            return Err(AppError::InvalidInput(
+                "shank_diameter must not be negative".into(),
+            ));
+        }
+    }
+    if let Some(ol) = input.overall_length {
+        if ol < 0.0 {
+            return Err(AppError::InvalidInput(
+                "overall_length must not be negative".into(),
+            ));
+        }
+        if let Some(cl) = input.cutting_length {
+            if ol < cl {
+                return Err(AppError::InvalidInput(
+                    "overall_length must not be less than cutting_length".into(),
+                ));
+            }
+        }
+    }
+    if let Some(cr) = input.corner_radius {
+        if cr < 0.0 {
+            return Err(AppError::InvalidInput(
+                "corner_radius must not be negative".into(),
+            ));
+        }
+        if cr > input.diameter / 2.0 {
+            return Err(AppError::InvalidInput(
+                "corner_radius must not exceed diameter / 2".into(),
+            ));
+        }
+    }
+    if let Some(a) = input.included_angle {
+        if a < 0.0 {
+            return Err(AppError::InvalidInput(
+                "included_angle must not be negative".into(),
+            ));
+        }
+    }
+    if let Some(a) = input.point_angle {
+        if a < 0.0 {
+            return Err(AppError::InvalidInput(
+                "point_angle must not be negative".into(),
+            ));
+        }
+    }
+    if let Some(a) = input.taper_half_angle {
+        if a < 0.0 {
+            return Err(AppError::InvalidInput(
+                "taper_half_angle must not be negative".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+// ── Helper: build Tool from ToolInput ────────────────────────────────────────
+
+/// Map [`ToolInput`] fields onto a [`Tool`], using `0.0` for absent universal
+/// fields and `None` for absent type-specific fields, then apply heuristic
+/// defaults.
+fn tool_from_input(id: Uuid, input: ToolInput) -> Tool {
+    let mut tool = Tool {
+        id,
+        name: input.name,
+        tool_type: input.tool_type,
+        material: input.material,
+        diameter: input.diameter,
+        flute_count: input.flute_count,
+        default_spindle_speed: input.default_spindle_speed,
+        default_feed_rate: input.default_feed_rate,
+        cutting_length: input.cutting_length.unwrap_or(0.0),
+        shank_diameter: input.shank_diameter.unwrap_or(0.0),
+        overall_length: input.overall_length.unwrap_or(0.0),
+        corner_radius: input.corner_radius,
+        included_angle: input.included_angle,
+        point_angle: input.point_angle,
+        pilot_diameter: input.pilot_diameter,
+        pilot_length: input.pilot_length,
+        thread_pitch: input.thread_pitch,
+        min_bore_diameter: input.min_bore_diameter,
+        taper_half_angle: input.taper_half_angle,
+    };
+    tool.resolve_defaults();
+    tool
 }
 
 // ── add_tool ──────────────────────────────────────────────────────────────────
@@ -42,28 +159,8 @@ pub(crate) fn add_tool_inner(
     input: ToolInput,
     project_lock: &RwLock<Project>,
 ) -> Result<Tool, AppError> {
-    let mut tool = Tool {
-        id: Uuid::new_v4(),
-        name: input.name,
-        tool_type: input.tool_type,
-        material: input.material,
-        diameter: input.diameter,
-        flute_count: input.flute_count,
-        default_spindle_speed: input.default_spindle_speed,
-        default_feed_rate: input.default_feed_rate,
-        cutting_length: 0.0,
-        shank_diameter: 0.0,
-        overall_length: 0.0,
-        corner_radius: None,
-        included_angle: None,
-        point_angle: None,
-        pilot_diameter: None,
-        pilot_length: None,
-        thread_pitch: None,
-        min_bore_diameter: None,
-        taper_half_angle: None,
-    };
-    tool.resolve_defaults();
+    validate_tool_geometry(&input)?;
+    let tool = tool_from_input(Uuid::new_v4(), input);
     let mut project = write_project(project_lock)?;
     project.tools.push(tool.clone());
     Ok(tool)
@@ -82,6 +179,7 @@ pub(crate) fn edit_tool_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<Tool, AppError> {
     let uuid = parse_entity_id(id, "tool")?;
+    validate_tool_geometry(&input)?;
 
     let mut project = write_project(project_lock)?;
 
@@ -91,13 +189,8 @@ pub(crate) fn edit_tool_inner(
         .find(|t| t.id == uuid)
         .ok_or_else(|| AppError::NotFound(format!("tool {id} not found")))?;
 
-    entry.name = input.name;
-    entry.tool_type = input.tool_type;
-    entry.material = input.material;
-    entry.diameter = input.diameter;
-    entry.flute_count = input.flute_count;
-    entry.default_spindle_speed = input.default_spindle_speed;
-    entry.default_feed_rate = input.default_feed_rate;
+    // Replace with a fresh Tool built from the input, preserving the ID.
+    *entry = tool_from_input(uuid, input);
 
     Ok(entry.clone())
 }
@@ -189,6 +282,17 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: Some(15000),
             default_feed_rate: Some(2400.0),
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
         }
     }
 
@@ -220,6 +324,17 @@ mod tests {
                 flute_count: 2,
                 default_spindle_speed: None,
                 default_feed_rate: None,
+                cutting_length: None,
+                shank_diameter: None,
+                overall_length: None,
+                corner_radius: None,
+                included_angle: None,
+                point_angle: None,
+                pilot_diameter: None,
+                pilot_length: None,
+                thread_pitch: None,
+                min_bore_diameter: None,
+                taper_half_angle: None,
             },
             &state.project,
         )
@@ -293,5 +408,143 @@ mod tests {
         let state = AppState::default();
         let result = delete_tool_inner("not-a-valid-uuid", &state.project);
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ── Geometry IPC tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn add_tool_with_explicit_geometry_values() {
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "Bull Nose".to_string(),
+            tool_type: ToolType::BullNose,
+            material: "carbide".to_string(),
+            diameter: 10.0,
+            flute_count: 4,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: Some(25.0),
+            shank_diameter: Some(10.0),
+            overall_length: Some(80.0),
+            corner_radius: Some(2.0),
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: Some(1.5),
+        };
+        let tool = add_tool_inner(input, &state.project).expect("add should succeed");
+        assert_eq!(tool.cutting_length, 25.0);
+        assert_eq!(tool.shank_diameter, 10.0);
+        assert_eq!(tool.overall_length, 80.0);
+        assert_eq!(tool.corner_radius, Some(2.0));
+        assert_eq!(tool.taper_half_angle, Some(1.5));
+    }
+
+    #[test]
+    fn add_tool_omitted_geometry_gets_heuristic_defaults() {
+        let state = AppState::default();
+        let tool =
+            add_tool_inner(make_input("Defaulted"), &state.project).expect("add should succeed");
+        // Universal: resolve_defaults fills these from diameter.
+        assert_eq!(tool.cutting_length, 30.0);
+        assert_eq!(tool.shank_diameter, 10.0);
+        assert_eq!(tool.overall_length, 90.0);
+        // FlatEndmill has no type-specific defaults.
+        assert_eq!(tool.corner_radius, None);
+    }
+
+    #[test]
+    fn edit_tool_preserves_geometry() {
+        let state = AppState::default();
+        let tool =
+            add_tool_inner(make_input("Before"), &state.project).expect("add should succeed");
+        let updated = edit_tool_inner(
+            &tool.id.to_string(),
+            ToolInput {
+                name: "After".to_string(),
+                tool_type: ToolType::Drill,
+                material: "hss".to_string(),
+                diameter: 8.0,
+                flute_count: 2,
+                default_spindle_speed: None,
+                default_feed_rate: None,
+                cutting_length: Some(20.0),
+                shank_diameter: Some(8.0),
+                overall_length: Some(60.0),
+                corner_radius: None,
+                included_angle: None,
+                point_angle: Some(135.0),
+                pilot_diameter: None,
+                pilot_length: None,
+                thread_pitch: None,
+                min_bore_diameter: None,
+                taper_half_angle: None,
+            },
+            &state.project,
+        )
+        .expect("edit should succeed");
+        assert_eq!(updated.cutting_length, 20.0);
+        assert_eq!(updated.shank_diameter, 8.0);
+        assert_eq!(updated.overall_length, 60.0);
+        assert_eq!(updated.point_angle, Some(135.0));
+    }
+
+    #[test]
+    fn validation_rejects_negative_cutting_length() {
+        let state = AppState::default();
+        let mut input = make_input("Bad");
+        input.cutting_length = Some(-5.0);
+        let result = add_tool_inner(input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn validation_rejects_negative_diameter() {
+        let state = AppState::default();
+        let mut input = make_input("Bad");
+        input.diameter = -1.0;
+        let result = add_tool_inner(input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn validation_rejects_overall_less_than_cutting() {
+        let state = AppState::default();
+        let mut input = make_input("Bad");
+        input.cutting_length = Some(50.0);
+        input.overall_length = Some(30.0);
+        let result = add_tool_inner(input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn validation_rejects_corner_radius_exceeding_half_diameter() {
+        let state = AppState::default();
+        let mut input = make_input("Bad");
+        input.corner_radius = Some(6.0); // diameter = 10, so max = 5
+        let result = add_tool_inner(input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn validation_rejects_negative_angles() {
+        let state = AppState::default();
+        let mut input = make_input("Bad");
+        input.included_angle = Some(-10.0);
+        let result = add_tool_inner(input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn edit_validation_rejects_invalid_input() {
+        let state = AppState::default();
+        let tool = add_tool_inner(make_input("Good"), &state.project).expect("add should succeed");
+        let mut bad_input = make_input("Bad Edit");
+        bad_input.cutting_length = Some(-1.0);
+        let result = edit_tool_inner(&tool.id.to_string(), bad_input, &state.project);
+        assert!(matches!(result, Err(AppError::InvalidInput(_))));
     }
 }
