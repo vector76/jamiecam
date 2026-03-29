@@ -56,9 +56,9 @@ jobs:
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
 
       # ── Windows: system dependencies ───────────────────────────────────────
-      - name: Install LLVM (Windows)
+      - name: Install LLVM and UPX (Windows)
         if: runner.os == 'Windows'
-        run: choco install llvm --yes
+        run: choco install llvm upx --yes
         shell: powershell
 
       - name: Set up vcpkg (Windows)
@@ -119,6 +119,12 @@ jobs:
       # ── Tauri release build ─────────────────────────────────────────────────
       - name: Build Tauri application
         run: pnpm tauri build
+
+      # ── UPX compression (Windows) ────────────────────────────────────────────
+      - name: Compress binary with UPX (Windows)
+        if: runner.os == 'Windows'
+        run: upx --best --lzma src-tauri\target\release\JamieCam.exe
+        shell: powershell
 
       # ── Upload installer artifacts ──────────────────────────────────────────
       - name: Upload release artifacts (Linux)

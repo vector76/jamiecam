@@ -59,3 +59,5 @@ coverage/
 fullspec_latest.md
 beads_latest.md
 plan_latst.md
+/.raymond
+/.vscode
