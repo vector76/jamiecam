@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod dexel;
 pub mod error;
 pub mod feed_library;
 pub mod gcode_parser;
