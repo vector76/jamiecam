@@ -1,6 +1,7 @@
 pub mod operation;
 pub mod stock;
 pub mod tool;
+pub mod tool_geometry;
 pub mod wcs;
 
 pub use operation::Operation;
