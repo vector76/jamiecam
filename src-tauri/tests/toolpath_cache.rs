@@ -22,6 +22,9 @@ fn make_drill_project() -> (RwLock<Project>, Uuid) {
         flute_count: 2,
         default_spindle_speed: Some(1200),
         default_feed_rate: Some(150.0),
+        cutting_length: 15.0,
+        shank_diameter: 5.0,
+        overall_length: 45.0,
     });
 
     let op_id = Uuid::new_v4();

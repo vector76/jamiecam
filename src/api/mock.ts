@@ -79,6 +79,9 @@ export async function addTool(_input: ToolInput): Promise<Tool> {
     material: _input.material,
     diameter: _input.diameter,
     fluteCount: _input.fluteCount,
+    cuttingLength: _input.diameter * 3,
+    shankDiameter: _input.diameter,
+    overallLength: _input.diameter * 9,
   }
 }
 
@@ -91,6 +94,9 @@ export async function editTool(id: string, _input: ToolInput): Promise<Tool> {
     material: _input.material,
     diameter: _input.diameter,
     fluteCount: _input.fluteCount,
+    cuttingLength: _input.diameter * 3,
+    shankDiameter: _input.diameter,
+    overallLength: _input.diameter * 9,
   }
 }
 

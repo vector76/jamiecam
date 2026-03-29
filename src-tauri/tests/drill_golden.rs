@@ -28,6 +28,9 @@ fn drill_algorithm_golden_matches() {
         flute_count: 2,
         default_spindle_speed: Some(1200),
         default_feed_rate: Some(150.0),
+        cutting_length: 15.0,
+        shank_diameter: 5.0,
+        overall_length: 45.0,
     };
 
     let operation = Operation {

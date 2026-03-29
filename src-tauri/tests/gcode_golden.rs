@@ -49,6 +49,9 @@ fn pocket_toolpath() -> Toolpath {
         flute_count: 4,
         default_spindle_speed: Some(8000),
         default_feed_rate: Some(500.0),
+        cutting_length: 30.0,
+        shank_diameter: 10.0,
+        overall_length: 90.0,
     };
     let arc_lead_in_radius = Some(5.0);
     let arc_lead_out_radius = Some(5.0);
@@ -476,6 +479,9 @@ fn finishing_toolpath() -> Toolpath {
         flute_count: 4,
         default_spindle_speed: Some(10000),
         default_feed_rate: Some(400.0),
+        cutting_length: 18.0,
+        shank_diameter: 6.0,
+        overall_length: 54.0,
     };
     let arc_lead_in_radius = Some(3.0);
     let arc_lead_out_radius = Some(3.0);

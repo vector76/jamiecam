@@ -55,6 +55,9 @@ export interface Tool {
   fluteCount: number
   defaultSpindleSpeed?: number
   defaultFeedRate?: number
+  cuttingLength: number
+  shankDiameter: number
+  overallLength: number
 }
 
 /**

@@ -51,6 +51,9 @@ fn make_tool() -> jamiecam_lib::models::Tool {
         flute_count: 4,
         default_spindle_speed: Some(10000),
         default_feed_rate: Some(500.0),
+        cutting_length: 18.0,
+        shank_diameter: 6.0,
+        overall_length: 54.0,
     }
 }
 

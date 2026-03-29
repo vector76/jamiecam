@@ -42,7 +42,7 @@ pub(crate) fn add_tool_inner(
     input: ToolInput,
     project_lock: &RwLock<Project>,
 ) -> Result<Tool, AppError> {
-    let tool = Tool {
+    let mut tool = Tool {
         id: Uuid::new_v4(),
         name: input.name,
         tool_type: input.tool_type,
@@ -51,7 +51,11 @@ pub(crate) fn add_tool_inner(
         flute_count: input.flute_count,
         default_spindle_speed: input.default_spindle_speed,
         default_feed_rate: input.default_feed_rate,
+        cutting_length: 0.0,
+        shank_diameter: 0.0,
+        overall_length: 0.0,
     };
+    tool.resolve_defaults();
     let mut project = write_project(project_lock)?;
     project.tools.push(tool.clone());
     Ok(tool)

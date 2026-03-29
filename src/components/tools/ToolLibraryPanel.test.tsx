@@ -52,6 +52,9 @@ const FULL_TOOL: Tool = {
   fluteCount: 4,
   defaultSpindleSpeed: 12000,
   defaultFeedRate: 1500,
+  cuttingLength: 18,
+  shankDiameter: 6,
+  overallLength: 54,
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

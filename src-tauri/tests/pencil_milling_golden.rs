@@ -103,6 +103,9 @@ fn pencil_milling_gcode_golden() {
         flute_count: 4,
         default_spindle_speed: Some(10000),
         default_feed_rate: Some(500.0),
+        cutting_length: 18.0,
+        shank_diameter: 6.0,
+        overall_length: 54.0,
     };
     let operation = Operation {
         id: Uuid::nil(),

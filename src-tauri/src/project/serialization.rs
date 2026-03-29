@@ -116,7 +116,14 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         source_model,
         stock: pf.stock,
         wcs: pf.wcs,
-        tools: pf.tools,
+        tools: pf
+            .tools
+            .into_iter()
+            .map(|mut t| {
+                t.resolve_defaults();
+                t
+            })
+            .collect(),
         operations: pf.operations,
         toolpaths: std::collections::HashMap::new(),
     };
@@ -268,6 +275,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: Some(15000),
             default_feed_rate: Some(2400.0),
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         }
     }
 

@@ -771,6 +771,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         };
 
         let operation = Operation {
@@ -883,6 +886,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         };
 
         let operation = Operation {
@@ -1008,6 +1014,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         };
 
         let operation = Operation {
@@ -1124,6 +1133,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         };
 
         // "deadbeef" repeated 8 times = 64 hex chars (not a valid face fingerprint).
@@ -1186,6 +1198,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         };
 
         let operation = Operation {
@@ -1306,6 +1321,9 @@ mod tests {
             flute_count: 4,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: 90.0,
         }
     }
 

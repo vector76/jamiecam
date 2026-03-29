@@ -286,6 +286,9 @@ mod tests {
                 flute_count: 4,
                 default_spindle_speed: None,
                 default_feed_rate: None,
+                cutting_length: 30.0,
+                shank_diameter: 10.0,
+                overall_length: 90.0,
             });
         }
 
@@ -463,6 +466,9 @@ mod tests {
             flute_count: 2,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 18.0,
+            shank_diameter: 6.0,
+            overall_length: 54.0,
         };
         let stock = StockDefinition::Box(BoxDimensions {
             origin: Vec3 {
@@ -535,6 +541,9 @@ mod tests {
             flute_count: 2,
             default_spindle_speed: None,
             default_feed_rate: None,
+            cutting_length: 18.0,
+            shank_diameter: 6.0,
+            overall_length: 54.0,
         };
         let stock = StockDefinition::Box(BoxDimensions {
             origin: Vec3 {
