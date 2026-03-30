@@ -2,14 +2,30 @@ import './index.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { ToolEditorWindow } from './components/tools/ToolEditorWindow'
 import { useProjectStore } from './store/projectStore'
+import { useGlobalToolStore } from './store/globalToolStore'
 import type { ProjectSnapshot } from './api/types'
 import { getProjectSnapshot } from './api/file'
+import { listGlobalTools } from './api/globalTools'
 import { listen } from '@tauri-apps/api/event'
 
 /**
- * Bootstrap the application: fetch initial project state and register backend
- * event listeners before the first render.
+ * Detect the current Tauri window label, falling back to 'main'
+ * when running outside of Tauri (tests, browser dev mode).
+ */
+export function getWindowLabel(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any).__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? 'main'
+  } catch {
+    return 'main'
+  }
+}
+
+/**
+ * Bootstrap the main application window: fetch initial project state and
+ * register backend event listeners before the first render.
  */
 async function bootstrap(): Promise<void> {
   const setSnapshot = useProjectStore.getState().setSnapshot
@@ -27,19 +43,47 @@ async function bootstrap(): Promise<void> {
 
   if (!useMock) {
     // Register a listener for backend-initiated project state changes.
-    // Phase 0: this event is never emitted by the backend; the listener is
-    // in place so future phases can push updates without changing main.tsx.
     await listen<ProjectSnapshot>('project:modified', (event) => {
       setSnapshot(event.payload)
     })
   }
 }
 
-// Run bootstrap; errors are logged but do not prevent the UI from rendering.
-bootstrap().catch(console.error)
+/**
+ * Bootstrap the tool editor window: fetch global tools and project state,
+ * then register event listeners.
+ */
+export async function bootstrapToolEditor(): Promise<void> {
+  const setSnapshot = useProjectStore.getState().setSnapshot
+  const setGlobalTools = useGlobalToolStore.getState().setGlobalTools
+
+  const [snapshot, globalTools] = await Promise.all([
+    getProjectSnapshot(),
+    listGlobalTools(),
+  ])
+
+  setSnapshot(snapshot)
+  setGlobalTools(globalTools)
+
+  await listen<ProjectSnapshot>('project:modified', (event) => {
+    setSnapshot(event.payload)
+  })
+}
+
+// ── Entry point ──────────────────────────────────────────────────────────────
+
+const label = getWindowLabel()
+const isToolEditor = label === 'tool-editor'
+
+// Run the appropriate bootstrap for this window.
+const init = isToolEditor
+  ? bootstrapToolEditor()
+  : bootstrap()
+
+init.catch(console.error)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {isToolEditor ? <ToolEditorWindow /> : <App />}
   </React.StrictMode>,
 )

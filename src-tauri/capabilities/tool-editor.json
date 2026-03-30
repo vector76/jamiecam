@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "tool-editor",
+  "description": "Capability for the tool editor window",
+  "windows": ["tool-editor"],
+  "permissions": ["core:default", "dialog:default", "fs:default"]
+}
