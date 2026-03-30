@@ -2,26 +2,30 @@
  * ToolEditorWindow — root component for the tool editor window.
  *
  * Provides a context selector (Global Library / Project Tools tabs),
- * a filterable tool list, and inline delete. The actual edit form
- * will be built in a subsequent bead — for now, edit clicks show a placeholder.
+ * a filterable tool list, inline delete, and add/edit forms for both
+ * global and project tool contexts.
  */
 
 import { useState, useEffect, useCallback } from 'react'
 import { listen } from '@tauri-apps/api/event'
+import { Plus } from 'lucide-react'
 import { useProjectStore, usePushNotification } from '../../store/projectStore'
 import { useGlobalToolStore, useGlobalTools } from '../../store/globalToolStore'
-import { listTools, deleteTool } from '../../api/tools'
-import { deleteGlobalTool, listGlobalTools } from '../../api/globalTools'
+import { listTools, deleteTool, addTool, editTool } from '../../api/tools'
+import { deleteGlobalTool, listGlobalTools, addGlobalTool, editGlobalTool } from '../../api/globalTools'
 import { toAppError } from '../../api/errors'
+import { Button } from '@/components/ui/button'
 import { ToolEditorList } from './ToolEditorList'
-import type { Tool, ProjectSnapshot } from '../../api/types'
+import { ToolEditorForm } from './ToolEditorForm'
+import type { Tool, ToolInput, ProjectSnapshot } from '../../api/types'
 
 type ActiveContext = 'global' | 'project'
+type EditorView = { tag: 'list' } | { tag: 'add' } | { tag: 'edit'; toolId: string }
 
 export function ToolEditorWindow() {
   const [activeContext, setActiveContext] = useState<ActiveContext>('global')
   const [projectTools, setProjectTools] = useState<Tool[]>([])
-  const [editingToolId, setEditingToolId] = useState<string | null>(null)
+  const [view, setView] = useState<EditorView>({ tag: 'list' })
 
   const snapshot = useProjectStore((s) => s.snapshot)
   const projectIsOpen = snapshot?.projectIsOpen ?? false
@@ -53,7 +57,7 @@ export function ToolEditorWindow() {
     if (!projectIsOpen && activeContext === 'project') {
       setActiveContext('global')
       setProjectTools([])
-      setEditingToolId(null)
+      setView({ tag: 'list' })
     }
   }, [projectIsOpen, activeContext])
 
@@ -69,7 +73,7 @@ export function ToolEditorWindow() {
 
   function handleTabClick(ctx: ActiveContext) {
     if (ctx === 'project' && !projectIsOpen) return
-    setEditingToolId(null)
+    setView({ tag: 'list' })
     setActiveContext(ctx)
   }
 
@@ -83,7 +87,7 @@ export function ToolEditorWindow() {
         await deleteTool(id)
         await fetchProjectTools()
       }
-      if (editingToolId === id) setEditingToolId(null)
+      if (view.tag === 'edit' && view.toolId === id) setView({ tag: 'list' })
     } catch (e) {
       const err = toAppError(e)
       pushNotification(err.message ?? err.kind ?? 'Delete failed')
@@ -91,10 +95,42 @@ export function ToolEditorWindow() {
   }
 
   function handleEdit(id: string) {
-    setEditingToolId(id)
+    setView({ tag: 'edit', toolId: id })
+  }
+
+  async function handleFormSubmit(input: ToolInput, editId?: string) {
+    try {
+      if (editId) {
+        if (activeContext === 'global') {
+          await editGlobalTool(editId, input)
+        } else {
+          await editTool(editId, input)
+        }
+      } else {
+        if (activeContext === 'global') {
+          await addGlobalTool(input)
+        } else {
+          await addTool(input)
+        }
+      }
+      // Refresh tool list
+      if (activeContext === 'global') {
+        const refreshed = await listGlobalTools()
+        setGlobalTools(refreshed)
+      } else {
+        await fetchProjectTools()
+      }
+      setView({ tag: 'list' })
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Save failed')
+    }
   }
 
   const tools = activeContext === 'global' ? globalTools : projectTools
+  const editingTool = view.tag === 'edit'
+    ? tools.find((t) => t.id === view.toolId)
+    : undefined
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -137,7 +173,7 @@ export function ToolEditorWindow() {
       >
         {/* Tool list sidebar */}
         <div className="flex w-72 shrink-0 flex-col border-r border-border p-2">
-          {!projectIsOpen && (
+          {!projectIsOpen && activeContext === 'global' && (
             <p className="mb-2 rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">
               Open a project to manage project tools.
             </p>
@@ -148,14 +184,32 @@ export function ToolEditorWindow() {
             onEdit={handleEdit}
             onDelete={(id) => void handleDelete(id)}
           />
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() => setView({ tag: 'add' })}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" />
+            Add Tool
+          </Button>
         </div>
 
         {/* Edit area */}
         <div className="flex-1 overflow-auto p-4">
-          {editingToolId ? (
-            <p className="text-sm text-muted-foreground">
-              Editing tool: {editingToolId}
-            </p>
+          {view.tag === 'add' ? (
+            <ToolEditorForm
+              onSubmit={(input) => handleFormSubmit(input)}
+              onCancel={() => setView({ tag: 'list' })}
+            />
+          ) : view.tag === 'edit' && editingTool ? (
+            <ToolEditorForm
+              key={editingTool.id}
+              initialTool={editingTool}
+              onSubmit={(input) => handleFormSubmit(input, editingTool.id)}
+              onCancel={() => setView({ tag: 'list' })}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">
               Select a tool to edit, or create a new one.

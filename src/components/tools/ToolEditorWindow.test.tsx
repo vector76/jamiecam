@@ -231,11 +231,13 @@ describe('ToolEditorWindow — project context', () => {
 // ── Edit selection ───────────────────────────────────────────────────────────
 
 describe('ToolEditorWindow — edit selection', () => {
-  it('shows editing placeholder when edit is clicked', async () => {
+  it('shows edit form pre-populated when edit is clicked', async () => {
     useGlobalToolStore.setState({ globalTools: GLOBAL_TOOLS })
     render(<ToolEditorWindow />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit 8mm Global Flat' }))
-    expect(screen.getByText(/editing tool/i)).toBeInTheDocument()
+    // Form should be visible with the tool's name pre-populated
+    expect(screen.getByLabelText(/^name$/i)).toHaveValue('8mm Global Flat')
+    expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument()
   })
 })
