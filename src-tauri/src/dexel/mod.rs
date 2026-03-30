@@ -1,5 +1,6 @@
 pub mod convert;
 pub mod grid;
+pub mod mesh;
 pub mod types;
 
 pub use convert::toolpath_to_segments;
