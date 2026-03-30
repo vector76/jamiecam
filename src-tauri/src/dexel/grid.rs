@@ -1,4 +1,5 @@
 use crate::dexel::types::{DexelColumn, MotionSegment, ZSpan};
+use crate::models::stock::Vec3;
 use crate::models::StockDefinition;
 
 /// A 2D grid of dexel columns representing a workpiece.
@@ -120,8 +121,63 @@ impl DexelGrid {
                     z_clearance,
                 );
             }
-            MotionSegment::Arc { .. } => {
-                todo!("arc support")
+            MotionSegment::Arc {
+                start,
+                end,
+                center,
+                clockwise,
+            } => {
+                let dx_s = start.x - center.x;
+                let dy_s = start.y - center.y;
+                let radius = (dx_s * dx_s + dy_s * dy_s).sqrt();
+
+                let start_angle = dy_s.atan2(dx_s);
+                let end_angle = (end.y - center.y).atan2(end.x - center.x);
+
+                // Compute angular sweep respecting direction.
+                // Using >= / <= so that sweep == 0 (start == end, i.e. full circle)
+                // is promoted to a full ±2π sweep rather than collapsing to nothing.
+                let mut sweep = end_angle - start_angle;
+                if *clockwise {
+                    if sweep >= 0.0 {
+                        sweep -= 2.0 * std::f64::consts::PI;
+                    }
+                } else if sweep <= 0.0 {
+                    sweep += 2.0 * std::f64::consts::PI;
+                }
+
+                // Number of sub-segments based on chord tolerance.
+                let chord_tolerance = self.resolution / 2.0;
+                let n = if radius <= chord_tolerance {
+                    1
+                } else {
+                    let step_angle = (1.0 - chord_tolerance / radius).acos();
+                    (sweep.abs() / step_angle).ceil().max(1.0) as usize
+                };
+
+                for i in 0..n {
+                    let t0 = i as f64 / n as f64;
+                    let t1 = (i + 1) as f64 / n as f64;
+
+                    let angle0 = start_angle + t0 * sweep;
+                    let angle1 = start_angle + t1 * sweep;
+                    let z0 = start.z + t0 * (end.z - start.z);
+                    let z1 = start.z + t1 * (end.z - start.z);
+
+                    let sub = MotionSegment::Linear {
+                        start: Vec3 {
+                            x: center.x + radius * angle0.cos(),
+                            y: center.y + radius * angle0.sin(),
+                            z: z0,
+                        },
+                        end: Vec3 {
+                            x: center.x + radius * angle1.cos(),
+                            y: center.y + radius * angle1.sin(),
+                            z: z1,
+                        },
+                    };
+                    self.apply_segment(&sub, tool_radius, z_clearance);
+                }
             }
         }
     }
@@ -576,5 +632,249 @@ mod tests {
         grid.apply_segment(&segment, 1.0, &tool);
 
         assert!((grid.removed_volume_since(&snap)).abs() < 1e-9);
+    }
+
+    // --- Arc segment tests ---
+
+    #[test]
+    fn full_circle_arc_removes_annular_region() {
+        // 40x40x10 stock, resolution=0.5, flat endmill radius=1.0.
+        // Full circle arc centered at (20,20) with arc radius 8.
+        // The tool sweeps an annular ring from r=7 to r=9 from center (20,20).
+        let stock = box_stock(40.0, 40.0, 10.0);
+        let mut grid = DexelGrid::from_stock(&stock, 0.5);
+        let snap = grid.snapshot();
+
+        let arc_radius = 8.0;
+        let cx = 20.0;
+        let cy = 20.0;
+        // Start and end at the same point (full circle), CCW.
+        let segment = MotionSegment::Arc {
+            start: Vec3 {
+                x: cx + arc_radius,
+                y: cy,
+                z: 5.0,
+            },
+            end: Vec3 {
+                x: cx + arc_radius,
+                y: cy,
+                z: 5.0,
+            },
+            center: Vec3 {
+                x: cx,
+                y: cy,
+                z: 0.0,
+            },
+            clockwise: false,
+        };
+        let tool_radius = 1.0;
+        let tool = flat_endmill(tool_radius);
+        grid.apply_segment(&segment, tool_radius, &tool);
+
+        // Verify material was removed (volume decreased).
+        let removed = grid.removed_volume_since(&snap);
+        assert!(
+            removed > 0.0,
+            "Full circle arc should remove material, got removed={removed}"
+        );
+
+        // Cells well inside the annular region (distance from center ≈ arc_radius)
+        // should be cut to z=5.0.
+        // Check a point at (cx + arc_radius, cy) — on the arc path.
+        let z = grid.height_at(cx + arc_radius, cy);
+        assert!(
+            z.is_some() && (z.unwrap() - 5.0).abs() < 0.5,
+            "Cell on arc path should be cut to ~5.0, got {z:?}"
+        );
+
+        // Check a point 90° around the arc (top of circle) — should also be cut.
+        let z_top = grid.height_at(cx, cy + arc_radius);
+        assert!(
+            z_top.is_some() && (z_top.unwrap() - 5.0).abs() < 0.5,
+            "Cell at 90° on arc should be cut to ~5.0, got {z_top:?}"
+        );
+
+        // Check a point 180° around the arc (left side) — should also be cut.
+        let z_left = grid.height_at(cx - arc_radius, cy);
+        assert!(
+            z_left.is_some() && (z_left.unwrap() - 5.0).abs() < 0.5,
+            "Cell at 180° on arc should be cut to ~5.0, got {z_left:?}"
+        );
+
+        // Check a point far from the arc (center of stock) — should be unchanged.
+        let z_center = grid.height_at(cx, cy);
+        assert!(
+            z_center.is_some() && (z_center.unwrap() - 10.0).abs() < 1e-9,
+            "Cell at center should be untouched at 10.0, got {z_center:?}"
+        );
+    }
+
+    #[test]
+    fn full_circle_arc_clockwise() {
+        // Same setup as the CCW test but with clockwise=true.
+        // Verifies the CW sweep path produces the same annular cut.
+        let stock = box_stock(40.0, 40.0, 10.0);
+        let mut grid = DexelGrid::from_stock(&stock, 0.5);
+
+        let arc_radius = 8.0;
+        let cx = 20.0;
+        let cy = 20.0;
+        let segment = MotionSegment::Arc {
+            start: Vec3 {
+                x: cx + arc_radius,
+                y: cy,
+                z: 5.0,
+            },
+            end: Vec3 {
+                x: cx + arc_radius,
+                y: cy,
+                z: 5.0,
+            },
+            center: Vec3 {
+                x: cx,
+                y: cy,
+                z: 0.0,
+            },
+            clockwise: true,
+        };
+        let tool_radius = 1.0;
+        let tool = flat_endmill(tool_radius);
+        grid.apply_segment(&segment, tool_radius, &tool);
+
+        // Check all four quadrants of the circle are cut.
+        for (px, py) in [
+            (cx + arc_radius, cy),
+            (cx, cy + arc_radius),
+            (cx - arc_radius, cy),
+            (cx, cy - arc_radius),
+        ] {
+            let z = grid.height_at(px, py);
+            assert!(
+                z.is_some() && (z.unwrap() - 5.0).abs() < 0.5,
+                "CW full circle: point ({px},{py}) should be cut to ~5.0, got {z:?}"
+            );
+        }
+
+        // Center should be untouched.
+        let z_center = grid.height_at(cx, cy).unwrap();
+        assert!(
+            (z_center - 10.0).abs() < 1e-9,
+            "Center should be untouched at 10.0, got {z_center}"
+        );
+    }
+
+    // --- Ball nose tests ---
+
+    fn ball_nose(radius: f64) -> impl Fn(f64) -> Option<f64> + Sync {
+        move |r: f64| {
+            if r <= radius {
+                Some(radius - (radius * radius - r * r).sqrt())
+            } else {
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn ball_nose_slot_profile() {
+        // 20x20x10 stock, resolution=0.25, ball nose radius=2.0.
+        // Linear move along Y=10.0 from X=2 to X=18 at Z=5.0.
+        // At the centerline (r=0), z_clearance=0, so floor_z = 5.0.
+        // At r=1.0, z_clearance = R - sqrt(R^2 - 1) = 2 - sqrt(3) ≈ 0.268.
+        let stock = box_stock(20.0, 20.0, 10.0);
+        let mut grid = DexelGrid::from_stock(&stock, 0.25);
+        let tool_radius = 2.0;
+        let segment = MotionSegment::Linear {
+            start: Vec3 {
+                x: 2.0,
+                y: 10.0,
+                z: 5.0,
+            },
+            end: Vec3 {
+                x: 18.0,
+                y: 10.0,
+                z: 5.0,
+            },
+        };
+        let tool = ball_nose(tool_radius);
+        grid.apply_segment(&segment, tool_radius, &tool);
+
+        // Check centerline: cell at (10.0, 10.0), r=0 → floor_z = 5.0
+        let z_center = grid.height_at(10.0, 10.0).unwrap();
+        assert!(
+            (z_center - 5.0).abs() < 0.1,
+            "Centerline should be at 5.0, got {z_center}"
+        );
+
+        // Check at radial distance 1.0 from centerline: (10.0, 11.0).
+        // Expected floor_z = 5.0 + (2.0 - sqrt(4.0 - 1.0)) = 5.0 + 0.268 = 5.268
+        let expected_at_r1 = 5.0 + (tool_radius - (tool_radius * tool_radius - 1.0).sqrt());
+        let z_at_r1 = grid.height_at(10.0, 11.0).unwrap();
+        assert!(
+            (z_at_r1 - expected_at_r1).abs() < 0.2,
+            "At r=1.0 expected ~{expected_at_r1:.3}, got {z_at_r1:.3}"
+        );
+
+        // Outside the tool radius (r=2.5 from centerline): should be unchanged at 10.0.
+        let z_outside = grid.height_at(10.0, 12.5).unwrap();
+        assert!(
+            (z_outside - 10.0).abs() < 1e-9,
+            "Outside tool reach should be 10.0, got {z_outside}"
+        );
+    }
+
+    // --- Volume accounting tests ---
+
+    #[test]
+    fn rectangular_pocket_volume() {
+        // Cut a rectangular pocket using multiple passes of a flat endmill.
+        // Stock: 20x20x10 at origin, resolution=0.5.
+        // Pocket: X in [5, 15], Y in [5, 15], depth of cut = 3.0 (floor at Z=7.0).
+        // Tool: flat endmill radius=1.0.
+        //
+        // Raster passes along X at Y = 5.0, 6.0, ..., 15.0 (spaced < 2*R).
+        let stock = box_stock(20.0, 20.0, 10.0);
+        let mut grid = DexelGrid::from_stock(&stock, 0.5);
+        let snap = grid.snapshot();
+
+        let tool_radius = 1.0;
+        let tool = flat_endmill(tool_radius);
+        let z_cut = 7.0;
+
+        // Raster at 1.0 spacing (= tool_radius) to get good coverage
+        let mut y = 5.0;
+        while y <= 15.0 {
+            let seg = MotionSegment::Linear {
+                start: Vec3 {
+                    x: 5.0,
+                    y,
+                    z: z_cut,
+                },
+                end: Vec3 {
+                    x: 15.0,
+                    y,
+                    z: z_cut,
+                },
+            };
+            grid.apply_segment(&seg, tool_radius, &tool);
+            y += 1.0;
+        }
+
+        let removed = grid.removed_volume_since(&snap);
+        // The tool envelope extends ~1.0 beyond 5..15 in both X and Y,
+        // so actual cut area is roughly 12 x 12, depth 3.0.
+        // But the test only checks that it's within a reasonable range of
+        // the pocket's nominal volume.
+        let nominal = 10.0 * 10.0 * 3.0; // 300.0
+                                         // With tool overhang the actual removed volume will be somewhat larger
+                                         // than nominal. Check within 50% tolerance (the key thing is order-of-magnitude).
+        assert!(
+            removed > nominal * 0.8,
+            "Removed volume {removed:.1} should be at least 80% of nominal {nominal:.1}"
+        );
+        assert!(
+            removed < nominal * 2.0,
+            "Removed volume {removed:.1} should be less than 2x nominal {nominal:.1}"
+        );
     }
 }
