@@ -30,7 +30,9 @@ module and no dependency on OCCT or the geometry kernel.
 ### Input
 
 A `&str` containing a complete G-code program. The parser handles:
-- Programs with or without `%` delimiters
+- Programs with or without `%` delimiters. When `%` delimiters are present,
+  only content between the first and second `%` is parsed; anything before
+  the first or after the second `%` is ignored.
 - Programs with or without program numbers (`O1234`)
 - Any line ending (`\n`, `\r\n`, `\r`)
 - Mixed case (`G01` and `g01` are equivalent)
@@ -65,6 +67,7 @@ Every segment carries metadata:
 | `tool_number` | `u32` | Active tool at the time of this motion |
 | `spindle_speed` | `f64` | Active spindle RPM |
 | `spindle_dir` | `SpindleDir` | `Cw` (M3), `Ccw` (M4), or `Off` (M5) |
+| `feed_mode` | `FeedMode` | `PerMinute` (G94), `InverseTime` (G93), or `PerRevolution` (G95) |
 
 **`ToolChange`** — marks where tool changes occur in the segment stream:
 
@@ -86,8 +89,15 @@ All positions in `MotionSegment` are **absolute machine coordinates in
 millimeters**. If the program uses inches (G20), the parser converts
 coordinates to mm (× 25.4) as they are parsed. This ensures all output
 segments use a single consistent unit regardless of what the G-code declares.
-Feed rates are similarly normalized to mm/min. If the program switches units
-mid-stream (G21 → G20 or vice versa), the conversion tracks the current mode.
+If the program switches units mid-stream (G21 → G20 or vice versa), the
+conversion tracks the current mode.
+
+**Feed rate normalization:** The stored `feed_rate` depends on the active feed
+mode. In G94 (feed per minute), feed rates are normalized to **mm/min** (×
+25.4 if the program is in inches). In G95 (feed per revolution), feed rates
+are normalized to **mm/rev**. In G93 (inverse time), the raw F-word value is
+stored as-is (it is unit-independent). The `feed_mode` field on each segment
+tells the consumer how to interpret the value.
 
 The parser does not apply work offsets (G54–G59) or tool length compensation
 (G43) — these are machine-specific transformations that the consumer can
@@ -140,13 +150,22 @@ apply if needed.
 
 Canned cycle parameters: `R` (retract plane Z), `Z` (final depth), `Q` (peck
 increment), `P` (dwell time in seconds — same convention as G4), `F` (feed
-rate), `L` (repeat count, default 1).
+rate), `L` (repeat count, default 1). When `L` > 1, the parser expands all
+repetitions into explicit motion segments.
 
 When a canned cycle is active, each subsequent block containing X and/or Y
 coordinates triggers the full cycle motion at that position. The parser
 **expands** canned cycles into explicit `MotionSegment` sequences (Rapid to R,
 Linear to depth, Rapid retract, etc.) so consumers never see canned cycle
 abstractions — only resolved motions.
+
+**G73 chip-break retract:** G73 uses a partial retract between pecks. The
+retract distance is normally a machine parameter not present in the G-code;
+the parser uses a fixed 1 mm chip-break retract distance.
+
+**Q ≤ 0 safety:** If `Q` is zero or negative on a peck cycle (G83/G73), the
+parser emits a warning and executes the cycle as a single plunge to depth
+(like G81) rather than attempting to peck.
 
 ### Feed Mode (Group 5 — modal)
 
@@ -156,10 +175,8 @@ abstractions — only resolved motions.
 | G94 | Feed per minute (default) |
 | G95 | Feed per revolution |
 
-The parser records the active feed mode but always stores `feed_rate` as the
-raw F-word value. Consumers that need mm/min must convert G93/G95 values
-themselves (they need spindle speed and segment length, which the parser
-provides).
+See the "Feed rate normalization" note in the Output section for how
+`feed_rate` values are stored per feed mode.
 
 ### Other G-codes (recognized, not geometrically interpreted)
 
@@ -181,8 +198,14 @@ provides).
 | M3 | Spindle CW | Updates `spindle_dir` to `Cw` |
 | M4 | Spindle CCW | Updates `spindle_dir` to `Ccw` |
 | M5 | Spindle stop | Updates `spindle_dir` to `Off` |
-| M6 | Tool change | Emits `ToolChange` record |
+| M6 | Tool change | Activates the staged tool (see T-word below); emits `ToolChange` record |
 | M8 / M9 | Coolant on/off | No motion effect |
+
+**T-word (tool staging):** A T-word (e.g., `T2`) stages the tool but does
+**not** change the active tool. The active `tool_number` in segment metadata
+only updates when M6 is executed, at which point it takes the value of the
+most recently staged T-word. `T2 M6` on the same line and `T2` / `M6` on
+separate lines both work the same way.
 
 ### Word Parsing
 
@@ -193,7 +216,9 @@ The parser must handle:
 - Negative values: `X-5.25`
 - Leading/trailing zeros: `X.5` (= 0.5), `X5.` (= 5.0), `X005.250`
 - Suppressed leading zeros: `.5` as a coordinate value
-- Multiple G-words on one line: `G90 G17 G21` (common in setup lines)
+- Multiple G-words on one line: `G90 G17 G21` (common in setup lines).
+  If two G-words from the **same** modal group appear on one line (e.g.,
+  `G0 G1 X5`), last one wins.
 - Multiple M-words on one line: `M3 M8`
 - Line numbers: `N10 G01 X5 Y3` — the N-word is metadata, not motion
 - Comments: `(text)` inline or `;text` to end of line

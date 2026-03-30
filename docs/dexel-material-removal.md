@@ -396,8 +396,19 @@ An IPC command exposes the engine's mesh to the frontend:
 
 ```rust
 #[tauri::command]
-async fn get_simulation_mesh(resolution: f64) -> Result<MeshData, AppError>
+async fn get_simulation_mesh(
+    resolution: f64,
+    operation_ids: Option<Vec<Uuid>>,
+    up_to_segment: Option<usize>,
+) -> Result<MeshData, AppError>
 ```
+
+- **resolution**: Grid cell size in mm.
+- **operation_ids**: Which operations to simulate, in order. `None` means all
+  enabled operations in project order. Each operation's tool profile is resolved
+  from its `tool_id`.
+- **up_to_segment**: Stop after this many total motion segments (across all
+  requested operations). `None` means apply all.
 
 The frontend renders this mesh alongside (or instead of) the source model mesh.
 The existing `MeshData` → `BufferGeometry` pipeline in `modelMesh.ts` can be
@@ -405,8 +416,10 @@ reused directly.
 
 ### Existing State
 
-The dexel grid lives in `AppState` alongside the project's toolpaths. It is
-recomputed when the user requests a cut simulation. It does not replace the
+The dexel grid is computed on-demand inside the IPC command — it is not
+persisted in `AppState`. The `snapshot()` and `removed_volume_since()` methods
+exist on `DexelGrid` for future interactive scrubbing but are not exposed via
+IPC initially. The dexel engine does not replace the
 existing `rest.rs` module (which uses 2D Clipper boolean ops per Z-layer for
 rest machining during toolpath generation) — the dexel engine is a separate,
 finer-grained model for visualization and physics simulation.

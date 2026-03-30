@@ -73,6 +73,7 @@ parallels the existing `ToolType` discriminant.
 | Drill | `point_angle` | `f64` | `118.0` | Full cone angle at the drill tip (degrees) |
 | CenterDrill | `point_angle` | `f64` | `60.0` | Tip angle (degrees) |
 | CenterDrill | `pilot_diameter` | `f64` | `diameter × 0.3` | Diameter of the pilot section (mm) |
+| CenterDrill | `pilot_length` | `f64` | `cutting_length / 3` | Total length of the pilot portion including cone (mm) |
 | Tap | `thread_pitch` | `f64` | `1.0` | Distance between threads (mm) |
 | ThreadMill | `thread_pitch` | `f64` | `1.0` | Distance between threads (mm) |
 | BoringBar | `min_bore_diameter` | `f64` | `diameter × 1.5` | Minimum bore the bar fits into (mm) |
@@ -132,6 +133,13 @@ with `segments_per_quarter` line segments.
 ```
 The arc from `(R-cr, 0)` to `(R, cr)` is a quarter-circle of the corner radius `cr`.
 
+**BullNose** (with taper):
+```
+(0, 0)  →  (R-cr, 0)  →  (arc...)  →  (R, cr)  →  (R_top, cutting_length)  →  (shank_R, cutting_length)  →  (shank_R, overall_length)
+```
+where `R_top = R + (cutting_length - cr) × tan(taper_half_angle)`. The taper applies
+to the straight wall above the corner radius. The corner arc itself is not tapered.
+
 **VBit**:
 ```
 (0, 0)  →  (R, R / tan(half_angle))  →  (shank_R, cutting_length)  →  (shank_R, overall_length)
@@ -144,8 +152,14 @@ where `half_angle = included_angle / 2` in radians.
 ```
 where `point_half_angle = point_angle / 2` in radians.
 
-**CenterDrill**: Two-stage point — pilot section then main body. Similar structure
-to Drill but with a diameter step at the pilot-to-body transition.
+**CenterDrill**:
+```
+(0, 0)  →  (pilot_R, pilot_R / tan(point_half_angle))  →  (pilot_R, pilot_length)  →  (R, pilot_length)  →  (R, cutting_length)  →  (shank_R, cutting_length)  →  (shank_R, overall_length)
+```
+where `pilot_R = pilot_diameter / 2`, `point_half_angle = point_angle / 2` in radians,
+and `pilot_length` = height of the pilot cone + a short cylindrical pilot section.
+The pilot-to-body transition is modeled as a vertical step (no countersink angle).
+`pilot_length` defaults to `cutting_length / 3`.
 
 **Tap, Reamer, BoringBar, ThreadMill**: Treat as cylindrical (same as FlatEndmill
 profile) for geometric purposes. Thread form detail is not modeled in the
@@ -178,9 +192,17 @@ of the tool — not the shank.
 | FlatEndmill (straight) | `0` | `r ≤ R` |
 | FlatEndmill (tapered) | `0` for `r ≤ R`; `(r - R) / tan(taper_half_angle)` for `R < r` | `r ≤ R_top` |
 | BallNose | `R - sqrt(R² - r²)` | `r ≤ R` |
-| BullNose | `0` for `r ≤ R-cr`; toroidal section for `R-cr < r ≤ R` | `r ≤ R` |
+| BullNose (straight) | `0` for `r ≤ R-cr`; toroidal section for `R-cr < r ≤ R` | `r ≤ R` |
+| BullNose (tapered) | `0` for `r ≤ R-cr`; toroidal for `R-cr < r ≤ R`; `cr + (r - R) / tan(taper_half_angle)` for `R < r` | `r ≤ R_top` |
 | VBit | `r / tan(half_angle)` | `r ≤ R` |
 | Drill | `r / tan(point_half_angle)` | `r ≤ R` |
+| CenterDrill | `r / tan(point_half_angle)` | `r ≤ pilot_R` (see note) |
+
+**CenterDrill note**: The z_clearance function only covers the pilot cone portion.
+For `r > pilot_R`, the center drill's geometry depends on the pilot-to-body
+transition (a vertical step in the profile model), so `z_clearance` returns `None`
+for `r > pilot_R`. In practice, center drills are used for shallow centering
+operations where only the pilot tip engages.
 
 For BullNose, the toroidal section:
 ```
