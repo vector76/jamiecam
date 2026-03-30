@@ -162,6 +162,8 @@ pub struct AppState {
     pub global_tool_library: RwLock<GlobalToolLibrary>,
     /// Resolved path to the global tool library JSON file (immutable after init).
     pub global_library_path: PathBuf,
+    /// Whether a project is actively open (set to true after load/new/open_model).
+    pub project_is_open: RwLock<bool>,
 }
 
 impl Default for AppState {
@@ -173,6 +175,7 @@ impl Default for AppState {
                 .expect("bundled feed library must parse"),
             global_tool_library: RwLock::new(GlobalToolLibrary::default()),
             global_library_path: PathBuf::new(),
+            project_is_open: RwLock::new(false),
         }
     }
 }

@@ -7,6 +7,7 @@
 
 use std::sync::RwLock;
 
+use tauri::Emitter;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -235,8 +236,18 @@ pub(crate) fn list_tools_inner(project_lock: &RwLock<Project>) -> Result<Vec<Too
 pub async fn add_tool(
     input: ToolInput,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Tool, AppError> {
-    add_tool_inner(input, &state.project)
+    let tool = add_tool_inner(input, &state.project)?;
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(tool)
 }
 
 /// Replace all fields of an existing tool.
@@ -248,16 +259,39 @@ pub async fn edit_tool(
     id: String,
     input: ToolInput,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Tool, AppError> {
-    edit_tool_inner(&id, input, &state.project)
+    let tool = edit_tool_inner(&id, input, &state.project)?;
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(tool)
 }
 
 /// Remove a tool from the project tool library.
 ///
 /// Returns [`AppError::NotFound`] if `id` does not match any tool.
 #[tauri::command]
-pub async fn delete_tool(id: String, state: tauri::State<'_, AppState>) -> Result<(), AppError> {
-    delete_tool_inner(&id, &state.project)
+pub async fn delete_tool(
+    id: String,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    delete_tool_inner(&id, &state.project)?;
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Return all tools in the project tool library.

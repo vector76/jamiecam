@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 
 use sha2::Digest as _;
+use tauri::Emitter;
 
 use crate::error::AppError;
 use crate::geometry::{MeshData, OcctShape};
@@ -103,7 +104,7 @@ pub(crate) fn load_project_inner(
 ) -> Result<ProjectSnapshot, AppError> {
     let path_buf = PathBuf::from(path_str);
     let new_project = crate::project::serialization::load(&path_buf)?;
-    let snapshot = ProjectSnapshot::from(&new_project);
+    let snapshot = ProjectSnapshot::build(&new_project, false);
     let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
@@ -119,7 +120,7 @@ pub(crate) fn new_project_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<ProjectSnapshot, AppError> {
     let new_project = Project::default();
-    let snapshot = ProjectSnapshot::from(&new_project);
+    let snapshot = ProjectSnapshot::build(&new_project, false);
     let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
@@ -136,8 +137,23 @@ pub(crate) fn new_project_inner(
 pub async fn open_model(
     path: String,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<MeshData, AppError> {
-    open_model_inner(&path, &state.project).await
+    let mesh = open_model_inner(&path, &state.project).await?;
+
+    {
+        let mut flag = state
+            .project_is_open
+            .write()
+            .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = true;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(mesh)
 }
 
 /// Serialize the active project to a `.jcam` file at `path`.
@@ -153,16 +169,46 @@ pub async fn save_project(path: String, state: tauri::State<'_, AppState>) -> Re
 pub async fn load_project(
     path: String,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<ProjectSnapshot, AppError> {
-    load_project_inner(&path, &state.project)
+    load_project_inner(&path, &state.project)?;
+
+    {
+        let mut flag = state
+            .project_is_open
+            .write()
+            .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(snapshot)
 }
 
 /// Reset the active project to a fresh default state.
 ///
 /// Returns a [`ProjectSnapshot`] for immediate display in the frontend.
 #[tauri::command]
-pub async fn new_project(state: tauri::State<'_, AppState>) -> Result<ProjectSnapshot, AppError> {
-    new_project_inner(&state.project)
+pub async fn new_project(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<ProjectSnapshot, AppError> {
+    new_project_inner(&state.project)?;
+
+    {
+        let mut flag = state
+            .project_is_open
+            .write()
+            .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(snapshot)
 }
 
 // ── export_gcode ──────────────────────────────────────────────────────────────
@@ -468,7 +514,7 @@ mod tests {
             let mut p = state.project.write().expect("write lock");
             p.name = "Snapshot Test".to_string();
         }
-        let snap = get_project_snapshot_inner(&state.project).expect("should succeed");
+        let snap = get_project_snapshot_inner(&state.project, false).expect("should succeed");
         assert_eq!(snap.project_name, "Snapshot Test");
     }
 

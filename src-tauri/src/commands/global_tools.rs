@@ -9,14 +9,15 @@
 use std::path::Path;
 use std::sync::RwLock;
 
+use tauri::Emitter;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::Tool;
-use crate::state::{AppState, GlobalToolLibrary};
+use crate::state::{AppState, GlobalToolLibrary, Project};
 
 use super::tools::{tool_from_input, validate_tool_geometry, ToolInput};
-use super::{parse_entity_id, read_library, write_library};
+use super::{parse_entity_id, read_library, read_project, write_library, write_project};
 
 // ── list_global_tools ────────────────────────────────────────────────────────
 
@@ -105,6 +106,70 @@ pub(crate) fn delete_global_tool_inner(
     Ok(())
 }
 
+// ── import_from_library ─────────────────────────────────────────────────────
+
+/// Testable inner logic for [`import_from_library`].
+///
+/// Finds the tool with the given `id` in the global library, clones it with a
+/// new UUID, and pushes it into the project tool list. Returns the newly
+/// created project tool.
+pub(crate) fn import_from_library_inner(
+    id: &str,
+    library_lock: &RwLock<GlobalToolLibrary>,
+    project_lock: &RwLock<Project>,
+) -> Result<Tool, AppError> {
+    let uuid = parse_entity_id(id, "global tool")?;
+
+    let library = read_library(library_lock)?;
+    let source = library
+        .tools
+        .iter()
+        .find(|t| t.id == uuid)
+        .ok_or_else(|| AppError::NotFound(format!("global tool {id} not found")))?;
+
+    let mut cloned = source.clone();
+    cloned.id = Uuid::new_v4();
+    drop(library);
+
+    let mut project = write_project(project_lock)?;
+    project.tools.push(cloned.clone());
+
+    Ok(cloned)
+}
+
+// ── export_to_library ───────────────────────────────────────────────────────
+
+/// Testable inner logic for [`export_to_library`].
+///
+/// Finds the tool with the given `id` in the project, clones it with a new
+/// UUID, pushes it into the global library, saves to disk, and returns the
+/// newly created global tool.
+pub(crate) fn export_to_library_inner(
+    id: &str,
+    project_lock: &RwLock<Project>,
+    library_lock: &RwLock<GlobalToolLibrary>,
+    save_path: &Path,
+) -> Result<Tool, AppError> {
+    let uuid = parse_entity_id(id, "project tool")?;
+
+    let project = read_project(project_lock)?;
+    let source = project
+        .tools
+        .iter()
+        .find(|t| t.id == uuid)
+        .ok_or_else(|| AppError::NotFound(format!("project tool {id} not found")))?;
+
+    let mut cloned = source.clone();
+    cloned.id = Uuid::new_v4();
+    drop(project);
+
+    let mut library = write_library(library_lock)?;
+    library.tools.push(cloned.clone());
+    library.save(save_path)?;
+
+    Ok(cloned)
+}
+
 // ── Tauri command wrappers ──────────────────────────────────────────────────
 
 /// Return all tools in the global tool library.
@@ -156,6 +221,45 @@ pub async fn delete_global_tool(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), AppError> {
     delete_global_tool_inner(&id, &state.global_tool_library, &state.global_library_path)
+}
+
+/// Import a tool from the global library into the current project.
+///
+/// Clones the global tool with a new UUID and adds it to the project.
+/// Returns the newly created project tool.
+#[tauri::command]
+pub async fn import_from_library(
+    id: String,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<Tool, AppError> {
+    let tool = import_from_library_inner(&id, &state.global_tool_library, &state.project)?;
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(tool)
+}
+
+/// Export a tool from the current project to the global library.
+///
+/// Clones the project tool with a new UUID and adds it to the global library.
+/// Returns the newly created global tool.
+#[tauri::command]
+pub async fn export_to_library(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Tool, AppError> {
+    export_to_library_inner(
+        &id,
+        &state.project,
+        &state.global_tool_library,
+        &state.global_library_path,
+    )
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -367,5 +471,166 @@ mod tests {
 
         let loaded = GlobalToolLibrary::load(&path);
         assert!(loaded.tools.is_empty());
+    }
+
+    // ── import_from_library tests ───────────────────────────────────────
+
+    #[test]
+    fn import_creates_project_tool_with_new_uuid() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        let global_tool = add_global_tool_inner(make_input("Endmill"), &library, &path)
+            .expect("add should succeed");
+
+        let imported = import_from_library_inner(&global_tool.id.to_string(), &library, &project)
+            .expect("import should succeed");
+
+        assert_ne!(
+            imported.id, global_tool.id,
+            "imported tool must have a new UUID"
+        );
+        assert_eq!(imported.name, global_tool.name);
+        assert_eq!(imported.tool_type, global_tool.tool_type);
+        assert_eq!(imported.material, global_tool.material);
+        assert_eq!(imported.diameter, global_tool.diameter);
+        assert_eq!(imported.flute_count, global_tool.flute_count);
+        assert_eq!(imported.cutting_length, global_tool.cutting_length);
+        assert_eq!(imported.shank_diameter, global_tool.shank_diameter);
+        assert_eq!(imported.overall_length, global_tool.overall_length);
+    }
+
+    #[test]
+    fn import_does_not_modify_source_global_tool() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        let global_tool = add_global_tool_inner(make_input("Source"), &library, &path)
+            .expect("add should succeed");
+        let original_id = global_tool.id;
+
+        import_from_library_inner(&global_tool.id.to_string(), &library, &project)
+            .expect("import should succeed");
+
+        let tools = list_global_tools_inner(&library).expect("list should succeed");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].id, original_id);
+        assert_eq!(tools[0].name, "Source");
+    }
+
+    #[test]
+    fn import_nonexistent_id_returns_not_found() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let fake_id = Uuid::new_v4().to_string();
+
+        let result = import_from_library_inner(&fake_id, &library, &project);
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[test]
+    fn import_same_tool_twice_creates_two_copies_with_different_uuids() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        let global_tool = add_global_tool_inner(make_input("Shared"), &library, &path)
+            .expect("add should succeed");
+
+        let imp1 = import_from_library_inner(&global_tool.id.to_string(), &library, &project)
+            .expect("first import");
+        let imp2 = import_from_library_inner(&global_tool.id.to_string(), &library, &project)
+            .expect("second import");
+
+        assert_ne!(imp1.id, imp2.id, "each import must have a unique UUID");
+        assert_ne!(imp1.id, global_tool.id);
+        assert_ne!(imp2.id, global_tool.id);
+        assert_eq!(imp1.name, imp2.name);
+
+        let proj = project.read().expect("read project");
+        assert_eq!(proj.tools.len(), 2);
+    }
+
+    // ── export_to_library tests ─────────────────────────────────────────
+
+    #[test]
+    fn export_creates_global_tool_with_new_uuid() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        // Add a tool to the project directly.
+        let project_tool = {
+            use crate::commands::tools::add_tool_inner;
+            add_tool_inner(make_input("Project Endmill"), &project).expect("add should succeed")
+        };
+
+        let exported =
+            export_to_library_inner(&project_tool.id.to_string(), &project, &library, &path)
+                .expect("export should succeed");
+
+        assert_ne!(
+            exported.id, project_tool.id,
+            "exported tool must have a new UUID"
+        );
+        assert_eq!(exported.name, project_tool.name);
+        assert_eq!(exported.tool_type, project_tool.tool_type);
+        assert_eq!(exported.material, project_tool.material);
+        assert_eq!(exported.diameter, project_tool.diameter);
+        assert_eq!(exported.flute_count, project_tool.flute_count);
+        assert_eq!(exported.cutting_length, project_tool.cutting_length);
+    }
+
+    #[test]
+    fn export_does_not_modify_source_project_tool() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        let project_tool = {
+            use crate::commands::tools::add_tool_inner;
+            add_tool_inner(make_input("Original"), &project).expect("add should succeed")
+        };
+        let original_id = project_tool.id;
+
+        export_to_library_inner(&project_tool.id.to_string(), &project, &library, &path)
+            .expect("export should succeed");
+
+        let proj = project.read().expect("read project");
+        assert_eq!(proj.tools.len(), 1);
+        assert_eq!(proj.tools[0].id, original_id);
+        assert_eq!(proj.tools[0].name, "Original");
+    }
+
+    #[test]
+    fn export_nonexistent_id_returns_not_found() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+        let fake_id = Uuid::new_v4().to_string();
+
+        let result = export_to_library_inner(&fake_id, &project, &library, &path);
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[test]
+    fn export_persists_to_disk() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        let project_tool = {
+            use crate::commands::tools::add_tool_inner;
+            add_tool_inner(make_input("Persisted Export"), &project).expect("add should succeed")
+        };
+
+        export_to_library_inner(&project_tool.id.to_string(), &project, &library, &path)
+            .expect("export should succeed");
+
+        let loaded = GlobalToolLibrary::load(&path);
+        assert_eq!(loaded.tools.len(), 1);
+        assert_eq!(loaded.tools[0].name, "Persisted Export");
     }
 }

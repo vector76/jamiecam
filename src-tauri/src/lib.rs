@@ -70,6 +70,7 @@ pub fn run() {
             commands::file::load_project,
             commands::file::new_project,
             commands::project::get_project_snapshot,
+            commands::project::is_project_open,
             commands::tools::add_tool,
             commands::tools::edit_tool,
             commands::tools::delete_tool,
@@ -100,6 +101,8 @@ pub fn run() {
             commands::global_tools::add_global_tool,
             commands::global_tools::edit_global_tool,
             commands::global_tools::delete_global_tool,
+            commands::global_tools::import_from_library,
+            commands::global_tools::export_to_library,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

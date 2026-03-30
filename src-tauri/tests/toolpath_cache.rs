@@ -105,7 +105,7 @@ fn round_trip_preserves_toolpath_and_not_stale() {
     );
 
     let loaded_lock = RwLock::new(loaded);
-    let snap = get_project_snapshot_inner(&loaded_lock).expect("snapshot ok");
+    let snap = get_project_snapshot_inner(&loaded_lock, false).expect("snapshot ok");
     let op_snap = snap.operations.iter().find(|o| o.id == op_id).unwrap();
     assert!(
         !op_snap.needs_recalculate,
@@ -130,7 +130,7 @@ fn stale_after_param_change() {
     let loaded_lock = RwLock::new(loaded);
 
     // Verify not stale before mutation
-    let snap = get_project_snapshot_inner(&loaded_lock).expect("snapshot ok");
+    let snap = get_project_snapshot_inner(&loaded_lock, false).expect("snapshot ok");
     assert!(
         !snap
             .operations
@@ -150,7 +150,7 @@ fn stale_after_param_change() {
         }
     }
 
-    let snap2 = get_project_snapshot_inner(&loaded_lock).expect("snapshot ok");
+    let snap2 = get_project_snapshot_inner(&loaded_lock, false).expect("snapshot ok");
     assert!(
         snap2
             .operations
