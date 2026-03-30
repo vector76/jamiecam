@@ -48,7 +48,7 @@ pub struct ToolInput {
 // ── Validation ───────────────────────────────────────────────────────────────
 
 /// Basic sanity checks on geometry values before inserting/updating a tool.
-fn validate_tool_geometry(input: &ToolInput) -> Result<(), AppError> {
+pub(crate) fn validate_tool_geometry(input: &ToolInput) -> Result<(), AppError> {
     if input.diameter < 0.0 {
         return Err(AppError::InvalidInput(
             "diameter must not be negative".into(),
@@ -123,7 +123,7 @@ fn validate_tool_geometry(input: &ToolInput) -> Result<(), AppError> {
 /// Map [`ToolInput`] fields onto a [`Tool`], using `0.0` for absent universal
 /// fields and `None` for absent type-specific fields, then apply heuristic
 /// defaults.
-fn tool_from_input(id: Uuid, input: ToolInput) -> Tool {
+pub(crate) fn tool_from_input(id: Uuid, input: ToolInput) -> Tool {
     let mut tool = Tool {
         id,
         name: input.name,

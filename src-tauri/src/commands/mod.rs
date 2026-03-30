@@ -5,6 +5,7 @@
 //! - [`file`]         — open model, save / load / new project, export G-code
 //! - [`gcode_parser`] — G-code text parsing
 //! - [`geometry`]     — face enumeration for loaded B-rep models
+//! - [`global_tools`] — global tool library CRUD (persisted across projects)
 //! - [`operations`]   — machining operation CRUD and reorder
 //! - [`project`]      — lightweight project state queries
 //! - [`stock`]        — stock definition and WCS get/set
@@ -16,6 +17,7 @@ pub mod feeds;
 pub mod file;
 pub mod gcode_parser;
 pub mod geometry;
+pub mod global_tools;
 pub mod operations;
 pub mod project;
 pub mod stock;
@@ -28,7 +30,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::postprocessor::ToolInfo;
-use crate::state::Project;
+use crate::state::{GlobalToolLibrary, Project};
 use crate::toolpath::Toolpath;
 
 /// Parse a UUID from a string, returning [`AppError::NotFound`] if the string
@@ -59,6 +61,26 @@ pub(super) fn read_project(
     project_lock
         .read()
         .map_err(|e| AppError::Io(format!("project lock poisoned: {e}")))
+}
+
+/// Acquire a write lock on `library_lock`, mapping a poisoned-lock failure to
+/// [`AppError::Io`].
+pub(super) fn write_library(
+    library_lock: &RwLock<GlobalToolLibrary>,
+) -> Result<RwLockWriteGuard<'_, GlobalToolLibrary>, AppError> {
+    library_lock
+        .write()
+        .map_err(|e| AppError::Io(format!("global tool library lock poisoned: {e}")))
+}
+
+/// Acquire a read lock on `library_lock`, mapping a poisoned-lock failure to
+/// [`AppError::Io`].
+pub(super) fn read_library(
+    library_lock: &RwLock<GlobalToolLibrary>,
+) -> Result<RwLockReadGuard<'_, GlobalToolLibrary>, AppError> {
+    library_lock
+        .read()
+        .map_err(|e| AppError::Io(format!("global tool library lock poisoned: {e}")))
 }
 
 /// Build [`ToolInfo`] entries for each toolpath by cross-referencing project
