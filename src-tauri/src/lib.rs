@@ -89,6 +89,7 @@ pub fn run() {
             commands::feeds::list_materials,
             commands::feeds::lookup_feeds,
             commands::gcode_parser::parse_gcode,
+            commands::dexel::get_simulation_mesh,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

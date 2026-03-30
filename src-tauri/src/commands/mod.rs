@@ -11,6 +11,7 @@
 //! - [`toolpath`]     — toolpath queries and post-processor management
 //! - [`tools`]        — tool library CRUD
 
+pub mod dexel;
 pub mod feeds;
 pub mod file;
 pub mod gcode_parser;
