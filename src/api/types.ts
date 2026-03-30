@@ -355,6 +355,8 @@ export interface ProjectSnapshot {
   wcs: WorkCoordinateSystem[]
   /** Machining operation summaries, in program order. */
   operations: OperationSummary[]
+  /** Whether a project file is currently open (has been saved/loaded). */
+  projectIsOpen: boolean
 }
 
 /**

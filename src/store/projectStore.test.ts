@@ -18,6 +18,7 @@ const SNAPSHOT: ProjectSnapshot = {
   stock: null,
   wcs: [],
   operations: [],
+  projectIsOpen: false,
 }
 
 beforeEach(() => {

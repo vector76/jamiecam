@@ -59,6 +59,7 @@ const SNAPSHOT_WITH_OPS: ProjectSnapshot = {
     { id: OP1_ID, name: 'Outer Profile', operationType: 'profile', enabled: true, needsRecalculate: true },
     { id: OP2_ID, name: 'Rough Pocket', operationType: 'pocket', enabled: false, needsRecalculate: true },
   ],
+  projectIsOpen: false,
 }
 
 const SNAPSHOT_NO_TOOLS: ProjectSnapshot = {

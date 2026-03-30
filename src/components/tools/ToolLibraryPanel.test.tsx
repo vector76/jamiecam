@@ -41,6 +41,7 @@ const SNAPSHOT_WITH_TOOLS: ProjectSnapshot = {
   modelPath: null,
   modelChecksum: null,
   modifiedAt: '',
+  projectIsOpen: false,
 }
 
 const FULL_TOOL: Tool = {

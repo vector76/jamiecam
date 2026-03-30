@@ -43,12 +43,12 @@ const toolpathApi = await import('../../api/toolpath')
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2], faceGroups: [] }
-const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
-const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [] }
+const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false }
+const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false }
 const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 0, 0], colours: [1, 0, 0, 1, 0, 0], types: [1] }
 const OP_ID = 'op-1'
-const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }] }
-const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }] }
+const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }], projectIsOpen: false }
+const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }], projectIsOpen: false }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 

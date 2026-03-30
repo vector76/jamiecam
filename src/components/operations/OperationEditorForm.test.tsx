@@ -94,6 +94,7 @@ const SNAPSHOT_BASE: ProjectSnapshot = {
   stock: null,
   wcs: [],
   operations: [],
+  projectIsOpen: false,
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
