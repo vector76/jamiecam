@@ -8,19 +8,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { listen } from '@tauri-apps/api/event'
-import { Plus } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
 import { useProjectStore, usePushNotification } from '../../store/projectStore'
 import { useGlobalToolStore, useGlobalTools } from '../../store/globalToolStore'
 import { listTools, deleteTool, addTool, editTool } from '../../api/tools'
-import { deleteGlobalTool, listGlobalTools, addGlobalTool, editGlobalTool } from '../../api/globalTools'
+import { deleteGlobalTool, listGlobalTools, addGlobalTool, editGlobalTool, importFromLibrary, exportToLibrary } from '../../api/globalTools'
 import { toAppError } from '../../api/errors'
 import { Button } from '@/components/ui/button'
 import { ToolEditorList } from './ToolEditorList'
 import { ToolEditorForm } from './ToolEditorForm'
+import { ImportFromLibraryPicker } from './ImportFromLibraryPicker'
 import type { Tool, ToolInput, ProjectSnapshot } from '../../api/types'
 
 type ActiveContext = 'global' | 'project'
-type EditorView = { tag: 'list' } | { tag: 'add' } | { tag: 'edit'; toolId: string }
+type EditorView = { tag: 'list' } | { tag: 'add' } | { tag: 'edit'; toolId: string } | { tag: 'import' }
 
 export function ToolEditorWindow() {
   const [activeContext, setActiveContext] = useState<ActiveContext>('global')
@@ -61,15 +62,17 @@ export function ToolEditorWindow() {
     }
   }, [projectIsOpen, activeContext])
 
-  // Listen for project:modified events — refresh project tools if in project context
+  // Listen for project:modified events — always re-fetch full project tools
+  // since the event payload only carries ToolSummary[], but the editor needs
+  // full Tool[] for the list and form.
   useEffect(() => {
-    const unlistenPromise = listen<ProjectSnapshot>('project:modified', () => {
-      if (activeContext === 'project') {
+    const unlistenPromise = listen<ProjectSnapshot>('project:modified', (event) => {
+      if (event.payload.projectIsOpen) {
         void fetchProjectTools()
       }
     })
     return () => { void unlistenPromise.then((fn) => fn()) }
-  }, [activeContext, fetchProjectTools])
+  }, [fetchProjectTools])
 
   function handleTabClick(ctx: ActiveContext) {
     if (ctx === 'project' && !projectIsOpen) return
@@ -124,6 +127,31 @@ export function ToolEditorWindow() {
     } catch (e) {
       const err = toAppError(e)
       pushNotification(err.message ?? err.kind ?? 'Save failed')
+    }
+  }
+
+  async function handleImport(ids: string[]) {
+    try {
+      await Promise.all(ids.map((id) => importFromLibrary(id)))
+      await fetchProjectTools()
+      pushNotification(`Imported ${ids.length} tool${ids.length > 1 ? 's' : ''} from library`)
+      setView({ tag: 'list' })
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Import failed')
+    }
+  }
+
+  async function handleExport(id: string) {
+    try {
+      await exportToLibrary(id)
+      const refreshed = await listGlobalTools()
+      setGlobalTools(refreshed)
+      const tool = projectTools.find((t) => t.id === id)
+      pushNotification(`Exported "${tool?.name ?? id}" to global library`)
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Export failed')
     }
   }
 
@@ -183,6 +211,7 @@ export function ToolEditorWindow() {
             tools={tools}
             onEdit={handleEdit}
             onDelete={(id) => void handleDelete(id)}
+            onExport={activeContext === 'project' ? (id) => void handleExport(id) : undefined}
           />
 
           <Button
@@ -194,11 +223,29 @@ export function ToolEditorWindow() {
             <Plus className="mr-1 h-3.5 w-3.5" />
             Add Tool
           </Button>
+
+          {activeContext === 'project' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-1 w-full"
+              onClick={() => setView({ tag: 'import' })}
+            >
+              <Download className="mr-1 h-3.5 w-3.5" />
+              Import from Library
+            </Button>
+          )}
         </div>
 
         {/* Edit area */}
         <div className="flex-1 overflow-auto p-4">
-          {view.tag === 'add' ? (
+          {view.tag === 'import' ? (
+            <ImportFromLibraryPicker
+              tools={globalTools}
+              onImport={(ids) => void handleImport(ids)}
+              onCancel={() => setView({ tag: 'list' })}
+            />
+          ) : view.tag === 'add' ? (
             <ToolEditorForm
               onSubmit={(input) => handleFormSubmit(input)}
               onCancel={() => setView({ tag: 'list' })}

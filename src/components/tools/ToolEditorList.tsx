@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { Pencil, Trash2, Search } from 'lucide-react'
+import { Pencil, Trash2, Search, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Tool } from '../../api/types'
@@ -23,9 +23,10 @@ interface ToolEditorListProps {
   tools: Tool[]
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  onExport?: (id: string) => void
 }
 
-export function ToolEditorList({ tools, onEdit, onDelete }: ToolEditorListProps) {
+export function ToolEditorList({ tools, onEdit, onDelete, onExport }: ToolEditorListProps) {
   const [search, setSearch] = useState('')
 
   const filtered = search
@@ -63,6 +64,17 @@ export function ToolEditorList({ tools, onEdit, onDelete }: ToolEditorListProps)
                 <span className="shrink-0 text-xs text-muted-foreground">
                   ⌀{tool.diameter} mm
                 </span>
+                {onExport && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => onExport(tool.id)}
+                    aria-label={`Export ${tool.name}`}
+                  >
+                    <Upload className="h-3 w-3" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
