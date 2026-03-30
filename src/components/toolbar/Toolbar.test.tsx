@@ -30,6 +30,10 @@ vi.mock('../../api/toolpath', () => ({
   getToolpathGeometry: vi.fn(),
 }))
 
+vi.mock('../../api/window', () => ({
+  openToolEditor: vi.fn(),
+}))
+
 // Dynamic import inside updateWindowTitle — mock the whole module.
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: vi.fn(() => ({ setTitle: vi.fn() })),
@@ -39,6 +43,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 const { open, save } = await import('@tauri-apps/plugin-dialog')
 const api = await import('../../api/file')
 const toolpathApi = await import('../../api/toolpath')
+const windowApi = await import('../../api/window')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -281,5 +286,23 @@ describe('Toolbar — Open Project', () => {
 
     await waitFor(() => expect(api.loadProject).toHaveBeenCalled())
     expect(toolpathApi.getToolpathGeometry).not.toHaveBeenCalled()
+  })
+})
+
+// ── Tool Editor ──────────────────────────────────────────────────────────────
+
+describe('Toolbar — Tool Editor', () => {
+  it('renders a Tool Editor button', () => {
+    render(<Toolbar />)
+    expect(screen.getByRole('button', { name: /tool editor/i })).toBeInTheDocument()
+  })
+
+  it('calls openToolEditor when clicked', async () => {
+    vi.mocked(windowApi.openToolEditor).mockResolvedValue(undefined)
+
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /tool editor/i }))
+
+    await waitFor(() => expect(windowApi.openToolEditor).toHaveBeenCalled())
   })
 })

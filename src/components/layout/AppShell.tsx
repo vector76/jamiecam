@@ -10,7 +10,6 @@ import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
 import { Notifications } from '../common/Notifications'
 import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
-import { ToolLibraryPanel } from '../tools/ToolLibraryPanel'
 import { StockPanel } from '../stock/StockPanel'
 import { WCSPanel } from '../wcs/WCSPanel'
 import { SidebarSection } from '@/components/ui/sidebar-section'
@@ -24,9 +23,6 @@ export function AppShell() {
         <Viewport className="flex-1" />
         <aside className="w-[280px] shrink-0 border-l border-border">
           <ScrollArea className="h-full">
-            <SidebarSection title="Tools" defaultOpen={false}>
-              <ToolLibraryPanel />
-            </SidebarSection>
             <SidebarSection title="Stock">
               <StockPanel />
             </SidebarSection>

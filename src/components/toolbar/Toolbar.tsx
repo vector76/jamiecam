@@ -14,7 +14,8 @@ import { getToolpathGeometry } from '../../api/toolpath'
 import { useProjectStore } from '../../store/projectStore'
 import { useViewportStore } from '../../store/viewportStore'
 import { Button } from '@/components/ui/button'
-import { FolderOpen, FilePlus, Save, FolderInput, X, AlertTriangle } from 'lucide-react'
+import { openToolEditor } from '../../api/window'
+import { FolderOpen, FilePlus, Save, FolderInput, Wrench, X, AlertTriangle } from 'lucide-react'
 import type { AppError, ProjectSnapshot } from '../../api/types'
 
 // ── Window title helper ────────────────────────────────────────────────────────
@@ -153,6 +154,10 @@ export function Toolbar() {
       <Button variant="ghost" size="sm" onClick={() => void handleOpenProject()}>
         <FolderInput className="mr-1 h-3.5 w-3.5" />
         Open Project
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => void openToolEditor()}>
+        <Wrench className="mr-1 h-3.5 w-3.5" />
+        Tool Editor
       </Button>
     </div>
   )

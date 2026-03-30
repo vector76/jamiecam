@@ -12,6 +12,9 @@ pub mod toolpath;
 
 use state::AppState;
 
+/// Menu item ID for the "Tool Editor..." entry.
+const MENU_TOOL_EDITOR: &str = "tool-editor";
+
 /// JamieCam Tauri application library entry point.
 ///
 /// All Tauri builder setup lives here so it can be tested and referenced
@@ -64,6 +67,20 @@ pub fn run() {
         .manage(state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .menu(|handle| {
+            use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+            let tool_editor_item =
+                MenuItemBuilder::with_id(MENU_TOOL_EDITOR, "Tool Editor...").build(handle)?;
+            let tools_submenu = SubmenuBuilder::new(handle, "Tools")
+                .item(&tool_editor_item)
+                .build()?;
+            MenuBuilder::new(handle).item(&tools_submenu).build()
+        })
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == MENU_TOOL_EDITOR {
+                open_tool_editor_window(app);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::file::open_model,
             commands::file::save_project,
@@ -106,6 +123,32 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Open the tool editor window, or focus it if it already exists.
+///
+/// Window creation is dispatched to a new thread to avoid a deadlock on
+/// Windows where WebviewWindowBuilder::build() blocks inside synchronous
+/// event handlers (Webview2 limitation).
+fn open_tool_editor_window(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    if let Some(win) = app.get_webview_window("tool-editor") {
+        let _ = win.set_focus();
+        return;
+    }
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let _ = tauri::WebviewWindowBuilder::new(
+            &handle,
+            "tool-editor",
+            tauri::WebviewUrl::App("/".into()),
+        )
+        .title("Tool Editor")
+        .inner_size(900.0, 650.0)
+        .build();
+    });
 }
 
 #[cfg(test)]
