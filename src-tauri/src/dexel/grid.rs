@@ -823,6 +823,69 @@ mod tests {
         );
     }
 
+    // --- Resolution convergence tests ---
+
+    #[test]
+    fn resolution_convergence_toward_analytical_volume() {
+        // Verify that the dexel simulation converges as resolution improves:
+        // the difference in removed volume between successive resolutions
+        // shrinks, and the finest resolution is close to the analytical value.
+        //
+        // Setup: flat endmill (radius=5) raster-cutting a pocket on a large
+        // stock (100×100×10). Raster passes at Y=25,30,...,75 along X=[25,75].
+        // Tool reach extends ±5 beyond path, giving a 60×60 cut area at Z=5
+        // (depth=5). All well within stock bounds to avoid boundary effects.
+        let resolutions = [2.0, 1.0, 0.5];
+        let tool_radius = 5.0;
+        let z_cut = 5.0;
+        let stock_height = 10.0;
+        let clearance = flat_endmill(tool_radius);
+
+        let mut volumes: Vec<f64> = Vec::new();
+
+        for &res in &resolutions {
+            let stock = box_stock(100.0, 100.0, stock_height);
+            let mut grid = DexelGrid::from_stock(&stock, res);
+            let initial_volume = grid.volume();
+
+            let mut y = 25.0;
+            let mut forward = true;
+            while y <= 75.0 {
+                let (xs, xe) = if forward { (25.0, 75.0) } else { (75.0, 25.0) };
+                let seg = MotionSegment::Linear {
+                    start: Vec3 { x: xs, y, z: z_cut },
+                    end: Vec3 { x: xe, y, z: z_cut },
+                };
+                grid.apply_segment(&seg, tool_radius, &clearance);
+                y += tool_radius; // step = radius for full coverage
+                forward = !forward;
+            }
+
+            let removed = initial_volume - grid.volume();
+            volumes.push(removed);
+        }
+
+        // Differences between successive resolutions should shrink
+        // (volumes converge).
+        let diff_01 = (volumes[0] - volumes[1]).abs();
+        let diff_12 = (volumes[1] - volumes[2]).abs();
+        assert!(
+            diff_12 < diff_01 + 1e-6,
+            "convergence: |V1-V2|={diff_12:.2} should be < |V0-V1|={diff_01:.2}"
+        );
+
+        // The finest resolution should be close to the analytical value.
+        // Cut region: X=[20,80], Y=[20,80] = 60×60 area, depth 5 → 18000 mm³.
+        let analytical_removed = 60.0 * 60.0 * (stock_height - z_cut);
+        let finest_error_pct =
+            (volumes.last().unwrap() - analytical_removed).abs() / analytical_removed * 100.0;
+        assert!(
+            finest_error_pct < 5.0,
+            "finest resolution error {finest_error_pct:.1}% should be < 5% (removed={:.1}, analytical={analytical_removed:.1})",
+            volumes.last().unwrap()
+        );
+    }
+
     // --- Volume accounting tests ---
 
     #[test]
