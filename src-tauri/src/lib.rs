@@ -51,7 +51,13 @@ pub fn run() {
     tracing::info!("JamieCam starting");
 
     // ── Application state ────────────────────────────────────────────────────
-    let state = AppState::default();
+    let mut state = AppState::default();
+
+    // Load the global tool library from the user's data directory.
+    let global_library_path = log_dir.join("tools.json");
+    let global_library = state::GlobalToolLibrary::load(&global_library_path);
+    state.global_tool_library = std::sync::RwLock::new(global_library);
+    state.global_library_path = global_library_path;
 
     // ── Tauri builder ────────────────────────────────────────────────────────
     tauri::Builder::default()
