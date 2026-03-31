@@ -1,18 +1,3 @@
-# Issue Tracking
-We use `bs` in client mode to track issues ("beads server").
-
-Typical workflow:
-- `bs add "title" --description "description here"` -- create a bead (see `bs add --help` for more detail)
-- `bs mine` -- show items that are in progress and assigned to me (in case aborted and left in progress)
-- `bs list --ready` -- get list of items that are unblocked
-- `bs claim <id>` -- mark item as in-progress and assigned to us
-- `bs show <id>` -- show full detail about bead including full description and comments
-- work on item
-- `bs comment <id> "text"` -- add comment to item (optional, potentially helpful progress)
-- `bs close <id>` -- item is closed (usually after commit and merge)
-
-More about issue management options is available through `bs --help`.
-
 # Test-Driven Development (TDD)
 
 This project follows Test-Driven Development principles, where **tests are central to the validation of the application**. 
