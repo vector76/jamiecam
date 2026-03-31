@@ -1,3 +1,4 @@
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { ProjectSnapshot } from '../api/types'
 
 /**
@@ -25,7 +26,6 @@ export function computeWindowTitle(filePath: string | null, dirty: boolean): str
 export async function updateWindowTitle(snapshot: ProjectSnapshot): Promise<void> {
   const title = computeWindowTitle(snapshot.filePath, snapshot.dirty)
   try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
     await getCurrentWindow().setTitle(title)
   } catch {
     // Not running inside Tauri (tests, browser dev mode) — safe to ignore.
