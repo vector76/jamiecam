@@ -43,6 +43,7 @@ import {
   handleSave,
   handleSaveAs,
   handleOpenProject,
+  menuActionDispatch,
 } from './menuActions'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -264,5 +265,29 @@ describe('handleOpenProject', () => {
     await handleOpenProject()
 
     expect(useProjectStore.getState().notifications).toEqual(['File not found'])
+  })
+})
+
+// ── menuActionDispatch ──────────────────────────────────────────────────────
+
+describe('menuActionDispatch', () => {
+  it('maps every expected menu ID to a handler function', () => {
+    const expectedIds = ['new-project', 'open-project', 'open-model', 'save', 'save-as']
+    for (const id of expectedIds) {
+      expect(menuActionDispatch[id], `missing handler for "${id}"`).toBeTypeOf('function')
+    }
+  })
+
+  it('maps to the correct handler for each menu ID', () => {
+    expect(menuActionDispatch['new-project']).toBe(handleNewProject)
+    expect(menuActionDispatch['open-project']).toBe(handleOpenProject)
+    expect(menuActionDispatch['open-model']).toBe(handleOpenModel)
+    expect(menuActionDispatch['save']).toBe(handleSave)
+    expect(menuActionDispatch['save-as']).toBe(handleSaveAs)
+  })
+
+  it('contains no extra entries beyond the expected menu IDs', () => {
+    const expectedIds = ['new-project', 'open-project', 'open-model', 'save', 'save-as']
+    expect(Object.keys(menuActionDispatch).sort()).toEqual(expectedIds.sort())
   })
 })

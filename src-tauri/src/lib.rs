@@ -11,6 +11,7 @@ pub mod state;
 pub mod toolpath;
 
 use state::AppState;
+use tauri::Emitter;
 
 /// Menu item ID constants.
 const MENU_NEW_PROJECT: &str = "new-project";
@@ -115,8 +116,12 @@ pub fn run() {
                 .build()
         })
         .on_menu_event(|app, event| {
-            if event.id().as_ref() == MENU_TOOL_EDITOR {
-                open_tool_editor_window(app);
+            let id = event.id().as_ref();
+            match id {
+                MENU_TOOL_EDITOR => open_tool_editor_window(app),
+                _ => {
+                    let _ = app.emit("menu:action", id);
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![

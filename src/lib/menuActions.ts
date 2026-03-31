@@ -103,3 +103,15 @@ export async function handleOpenProject(): Promise<void> {
     notify(e)
   }
 }
+
+/**
+ * Menu-action dispatch table: maps native menu item IDs to handler functions.
+ * Used by the bootstrap listener for `menu:action` events.
+ */
+export const menuActionDispatch: Record<string, () => Promise<void>> = {
+  'new-project': handleNewProject,
+  'open-project': handleOpenProject,
+  'open-model': handleOpenModel,
+  'save': handleSave,
+  'save-as': handleSaveAs,
+}

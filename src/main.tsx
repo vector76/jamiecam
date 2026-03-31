@@ -10,6 +10,7 @@ import { getProjectSnapshot } from './api/file'
 import { listGlobalTools } from './api/globalTools'
 import { listen } from '@tauri-apps/api/event'
 import { updateWindowTitle } from './lib/windowTitle'
+import { menuActionDispatch } from './lib/menuActions'
 
 /**
  * Detect the current Tauri window label, falling back to 'main'
@@ -48,6 +49,12 @@ async function bootstrap(): Promise<void> {
     await listen<ProjectSnapshot>('project:modified', (event) => {
       setSnapshot(event.payload)
       updateWindowTitle(event.payload)
+    })
+
+    // Dispatch native menu actions to the shared handler functions.
+    await listen<string>('menu:action', (event) => {
+      const handler = menuActionDispatch[event.payload]
+      if (handler) handler()
     })
   }
 }
