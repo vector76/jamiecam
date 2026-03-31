@@ -12,7 +12,12 @@ pub mod toolpath;
 
 use state::AppState;
 
-/// Menu item ID for the "Tool Editor..." entry.
+/// Menu item ID constants.
+const MENU_NEW_PROJECT: &str = "new-project";
+const MENU_OPEN_PROJECT: &str = "open-project";
+const MENU_OPEN_MODEL: &str = "open-model";
+const MENU_SAVE: &str = "save";
+const MENU_SAVE_AS: &str = "save-as";
 const MENU_TOOL_EDITOR: &str = "tool-editor";
 
 /// JamieCam Tauri application library entry point.
@@ -69,12 +74,45 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .menu(|handle| {
             use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+
+            // ── File submenu ────────────────────────────────────────────
+            let new_project = MenuItemBuilder::with_id(MENU_NEW_PROJECT, "New Project")
+                .accelerator("CmdOrCtrl+N")
+                .build(handle)?;
+            let open_project = MenuItemBuilder::with_id(MENU_OPEN_PROJECT, "Open Project")
+                .accelerator("CmdOrCtrl+O")
+                .build(handle)?;
+            let open_model = MenuItemBuilder::with_id(MENU_OPEN_MODEL, "Open Model")
+                .accelerator("CmdOrCtrl+Shift+O")
+                .build(handle)?;
+            let save = MenuItemBuilder::with_id(MENU_SAVE, "Save")
+                .accelerator("CmdOrCtrl+S")
+                .enabled(false)
+                .build(handle)?;
+            let save_as = MenuItemBuilder::with_id(MENU_SAVE_AS, "Save As...")
+                .accelerator("CmdOrCtrl+Shift+S")
+                .build(handle)?;
+
+            let file_submenu = SubmenuBuilder::new(handle, "File")
+                .item(&new_project)
+                .item(&open_project)
+                .item(&open_model)
+                .separator()
+                .item(&save)
+                .item(&save_as)
+                .build()?;
+
+            // ── Tools submenu ───────────────────────────────────────────
             let tool_editor_item =
                 MenuItemBuilder::with_id(MENU_TOOL_EDITOR, "Tool Editor...").build(handle)?;
             let tools_submenu = SubmenuBuilder::new(handle, "Tools")
                 .item(&tool_editor_item)
                 .build()?;
-            MenuBuilder::new(handle).item(&tools_submenu).build()
+
+            MenuBuilder::new(handle)
+                .item(&file_submenu)
+                .item(&tools_submenu)
+                .build()
         })
         .on_menu_event(|app, event| {
             if event.id().as_ref() == MENU_TOOL_EDITOR {
