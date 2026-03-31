@@ -16,20 +16,8 @@ import { useViewportStore } from '../../store/viewportStore'
 import { Button } from '@/components/ui/button'
 import { openToolEditor } from '../../api/window'
 import { FolderOpen, FilePlus, Save, FolderInput, Wrench, X, AlertTriangle } from 'lucide-react'
-import type { AppError, ProjectSnapshot } from '../../api/types'
-
-// ── Window title helper ────────────────────────────────────────────────────────
-
-async function updateWindowTitle(snapshot: ProjectSnapshot): Promise<void> {
-  const filename = snapshot.modelPath?.split('/').pop() ?? snapshot.modelPath
-  const title = snapshot.projectName || filename || 'JamieCam'
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().setTitle(title)
-  } catch {
-    // Not running inside Tauri (tests, browser dev mode) — safe to ignore.
-  }
-}
+import type { AppError } from '../../api/types'
+import { updateWindowTitle } from '../../lib/windowTitle'
 
 // ── Component ─────────────────────────────────────────────────────────────────
 

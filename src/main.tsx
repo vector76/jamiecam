@@ -9,6 +9,7 @@ import type { ProjectSnapshot } from './api/types'
 import { getProjectSnapshot } from './api/file'
 import { listGlobalTools } from './api/globalTools'
 import { listen } from '@tauri-apps/api/event'
+import { updateWindowTitle } from './lib/windowTitle'
 
 /**
  * Detect the current Tauri window label, falling back to 'main'
@@ -40,11 +41,13 @@ async function bootstrap(): Promise<void> {
   // Populate the project store with the current backend state on startup.
   const snapshot = await getSnapshot()
   setSnapshot(snapshot)
+  updateWindowTitle(snapshot)
 
   if (!useMock) {
     // Register a listener for backend-initiated project state changes.
     await listen<ProjectSnapshot>('project:modified', (event) => {
       setSnapshot(event.payload)
+      updateWindowTitle(event.payload)
     })
   }
 }
