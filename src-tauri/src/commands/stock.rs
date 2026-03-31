@@ -7,6 +7,8 @@
 
 use std::sync::RwLock;
 
+use tauri::Emitter;
+
 use crate::error::AppError;
 use crate::models::{StockDefinition, WorkCoordinateSystem};
 use crate::state::{AppState, Project};
@@ -74,8 +76,26 @@ pub(crate) fn get_wcs_inner(
 pub async fn set_stock(
     stock: Option<StockDefinition>,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), AppError> {
-    set_stock_inner(stock, &state.project)
+    set_stock_inner(stock, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Return the current project stock definition, or `null` if none is set.
@@ -91,8 +111,26 @@ pub async fn get_stock(
 pub async fn set_wcs(
     wcs: Vec<WorkCoordinateSystem>,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), AppError> {
-    set_wcs_inner(wcs, &state.project)
+    set_wcs_inner(wcs, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Return the project's WCS list.
@@ -190,6 +228,40 @@ mod tests {
         assert_eq!(retrieved.len(), 2);
         assert_eq!(retrieved[0].name, wcs_list[0].name);
         assert_eq!(retrieved[1].name, wcs_list[1].name);
+    }
+
+    // ── Dirty-flag tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn set_stock_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        set_stock_inner(Some(make_box_stock()), &state.project).expect("set_stock should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn set_wcs_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        set_wcs_inner(vec![make_wcs()], &state.project).expect("set_wcs should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
     }
 
     #[test]

@@ -235,15 +235,19 @@ pub async fn import_from_library(
 ) -> Result<Tool, AppError> {
     let tool = import_from_library_inner(&id, &state.global_tool_library, &state.project)?;
 
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
     let is_open = *state
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(tool)
@@ -768,6 +772,31 @@ mod tests {
         assert!(exported.material.is_none());
         assert!(exported.flute_count.is_none());
         assert!(exported.overall_length.is_none());
+    }
+
+    // ── Dirty-flag tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn import_from_library_then_dirty_snapshot_shows_dirty() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let state = crate::state::AppState::default();
+        let path = temp_path();
+
+        let global_tool = add_global_tool_inner(make_input("Endmill"), &library, &path)
+            .expect("add should succeed");
+
+        import_from_library_inner(&global_tool.id.to_string(), &library, &state.project)
+            .expect("import should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            crate::commands::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
     }
 
     #[test]

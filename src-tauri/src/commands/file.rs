@@ -179,12 +179,15 @@ pub async fn open_model(
         *flag = true;
     }
 
-    let is_open = true;
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(mesh)
@@ -672,6 +675,156 @@ mod tests {
             dirty,
             "new_project_inner must not clear dirty (wrapper does)"
         );
+    }
+
+    // ── Dirty flag: save/new/load clear dirty after mutations ──────────
+
+    #[test]
+    fn save_clears_dirty_after_mutation() {
+        use crate::commands::tools::{add_tool_inner, ToolInput};
+        use crate::models::ToolType;
+
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "T".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        add_tool_inner(input, &state.project).expect("add tool");
+
+        // Simulate wrapper setting dirty.
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let tmp = std::env::temp_dir().join("jcam_test_save_clears_dirty.jcam");
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save");
+
+        // Simulate wrapper clearing dirty.
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = false;
+        }
+        let _ = std::fs::remove_file(&tmp);
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, false)
+                .expect("snapshot");
+        assert!(!snapshot.dirty, "dirty must be false after save");
+    }
+
+    #[test]
+    fn new_project_clears_dirty_after_mutation() {
+        use crate::commands::tools::{add_tool_inner, ToolInput};
+        use crate::models::ToolType;
+
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "T".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        add_tool_inner(input, &state.project).expect("add tool");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        new_project_inner(&state.project).expect("new_project");
+
+        // Simulate wrapper clearing dirty.
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = false;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, false)
+                .expect("snapshot");
+        assert!(!snapshot.dirty, "dirty must be false after new_project");
+    }
+
+    #[test]
+    fn load_clears_dirty_after_mutation() {
+        use crate::commands::tools::{add_tool_inner, ToolInput};
+        use crate::models::ToolType;
+
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_test_load_clears_dirty.jcam");
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save");
+
+        let input = ToolInput {
+            name: "T".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        add_tool_inner(input, &state.project).expect("add tool");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        load_project_inner(&tmp.to_string_lossy(), &state.project).expect("load");
+        let _ = std::fs::remove_file(&tmp);
+
+        // Simulate wrapper clearing dirty.
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = false;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, false)
+                .expect("snapshot");
+        assert!(!snapshot.dirty, "dirty must be false after load");
     }
 
     // ── open_model ────────────────────────────────────────────────────────

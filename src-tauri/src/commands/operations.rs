@@ -12,6 +12,7 @@
 
 use std::sync::RwLock;
 
+use tauri::Emitter;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -231,8 +232,26 @@ pub(crate) fn list_operations_inner(
 pub async fn add_operation(
     input: OperationInput,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Operation, AppError> {
-    add_operation_inner(input, &state.project)
+    let op = add_operation_inner(input, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(op)
 }
 
 /// Replace all fields of an existing operation.
@@ -244,8 +263,26 @@ pub async fn edit_operation(
     id: String,
     input: OperationInput,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Operation, AppError> {
-    edit_operation_inner(&id, input, &state.project)
+    let op = edit_operation_inner(&id, input, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(op)
 }
 
 /// Remove an operation from the project.
@@ -255,8 +292,26 @@ pub async fn edit_operation(
 pub async fn delete_operation(
     id: String,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), AppError> {
-    delete_operation_inner(&id, &state.project)
+    delete_operation_inner(&id, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Reorder the project's operation list.
@@ -267,8 +322,26 @@ pub async fn delete_operation(
 pub async fn reorder_operations(
     ids: Vec<String>,
     state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<(), AppError> {
-    reorder_operations_inner(ids, &state.project)
+    reorder_operations_inner(ids, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Return all operations in the project in their current order.
@@ -557,6 +630,93 @@ mod tests {
         assert_eq!(loaded.operations[0].id, op3.id, "Gamma first");
         assert_eq!(loaded.operations[1].id, op1.id, "Alpha second");
         assert_eq!(loaded.operations[2].id, op2.id, "Beta third");
+    }
+
+    // ── Dirty-flag tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn add_operation_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        add_operation_inner(profile_input("Op", &tid), &state.project).expect("add should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn edit_operation_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        let op = add_operation_inner(profile_input("Op", &tid), &state.project)
+            .expect("add should succeed");
+        edit_operation_inner(
+            &op.id.to_string(),
+            pocket_input("Edited", &tid),
+            &state.project,
+        )
+        .expect("edit should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn delete_operation_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        let op = add_operation_inner(profile_input("Op", &tid), &state.project)
+            .expect("add should succeed");
+        delete_operation_inner(&op.id.to_string(), &state.project).expect("delete should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn reorder_operations_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        let op1 = add_operation_inner(profile_input("A", &tid), &state.project).expect("add");
+        let op2 = add_operation_inner(pocket_input("B", &tid), &state.project).expect("add");
+
+        reorder_operations_inner(vec![op2.id.to_string(), op1.id.to_string()], &state.project)
+            .expect("reorder should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
     }
 
     // ── Tool ID validation ────────────────────────────────────────────────────

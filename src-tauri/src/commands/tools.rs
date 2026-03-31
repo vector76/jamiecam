@@ -243,15 +243,19 @@ pub async fn add_tool(
 ) -> Result<Tool, AppError> {
     let tool = add_tool_inner(input, &state.project)?;
 
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
     let is_open = *state
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(tool)
@@ -270,15 +274,19 @@ pub async fn edit_tool(
 ) -> Result<Tool, AppError> {
     let tool = edit_tool_inner(&id, input, &state.project)?;
 
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
     let is_open = *state
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(tool)
@@ -295,15 +303,19 @@ pub async fn delete_tool(
 ) -> Result<(), AppError> {
     delete_tool_inner(&id, &state.project)?;
 
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
     let is_open = *state
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(())
@@ -720,6 +732,64 @@ mod tests {
             .expect("should succeed — OAL >= CL check is skipped when OAL is None");
         assert_eq!(tool.cutting_length, 50.0);
         assert!(tool.overall_length.is_none());
+    }
+
+    // ── Dirty-flag tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_tool_inner_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        add_tool_inner(make_input("Dirty Tool"), &state.project).expect("add should succeed");
+
+        // Simulate what the wrapper does: set dirty to true.
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn edit_tool_inner_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tool =
+            add_tool_inner(make_input("Original"), &state.project).expect("add should succeed");
+
+        edit_tool_inner(&tool.id.to_string(), make_input("Edited"), &state.project)
+            .expect("edit should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
+    }
+
+    #[test]
+    fn delete_tool_inner_then_dirty_snapshot_shows_dirty() {
+        let state = AppState::default();
+        let tool =
+            add_tool_inner(make_input("To Delete"), &state.project).expect("add should succeed");
+
+        delete_tool_inner(&tool.id.to_string(), &state.project).expect("delete should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, true, true)
+                .expect("snapshot should succeed");
+        assert!(snapshot.dirty, "snapshot must reflect dirty = true");
     }
 
     #[test]
