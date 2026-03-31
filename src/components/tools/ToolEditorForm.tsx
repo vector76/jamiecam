@@ -6,10 +6,12 @@
  * and an onSubmit callback that receives a ToolInput.
  */
 
-import { useState } from 'react'
+import { useState, useId } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { FormField } from '@/components/ui/form-field'
+import { cn } from '@/lib/utils'
 import type { Tool, ToolInput } from '../../api/types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -87,6 +89,9 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
   const [threadPitch, setThreadPitch] = useState(numStr(initialTool?.threadPitch))
   const [minBoreDiameter, setMinBoreDiameter] = useState(numStr(initialTool?.minBoreDiameter))
 
+  const [cuttingParamsOpen, setCuttingParamsOpen] = useState(false)
+  const cuttingParamsId = useId()
+
   const activeSpecific = TYPE_SPECIFIC_FIELDS[type] ?? []
 
   function handleTypeChange(newType: string) {
@@ -143,44 +148,39 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
 
   return (
     <form role="form" onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-      {/* ── Core fields (always visible) ─────────────────────────────── */}
+      {/* ── Group 1: Tool Identity (always visible) ───────────────────── */}
+      <div className="space-y-1">
+        <FormField label="Name" htmlFor="tool-name">
+          <Input
+            id="tool-name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="h-7 text-xs"
+          />
+        </FormField>
+        <FormField label="Type" htmlFor="tool-type">
+          <select
+            id="tool-type"
+            aria-label="Type"
+            value={type}
+            onChange={(e) => handleTypeChange(e.target.value)}
+            className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground"
+          >
+            {TOOL_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {TOOL_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </FormField>
+      </div>
+
+      {/* ── Group 2: Geometry (always visible) ───────────────────────── */}
       <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">General</h3>
+        <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Geometry</h3>
         <div className="space-y-1">
-          <FormField label="Name" htmlFor="tool-name">
-            <Input
-              id="tool-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="h-7 text-xs"
-            />
-          </FormField>
-          <FormField label="Type" htmlFor="tool-type">
-            <select
-              id="tool-type"
-              aria-label="Type"
-              value={type}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              className="h-7 w-full rounded-sm border border-border bg-input px-2 text-xs text-foreground"
-            >
-              {TOOL_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TOOL_TYPE_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Material" htmlFor="tool-material">
-            <Input
-              id="tool-material"
-              type="text"
-              value={material}
-              onChange={(e) => setMaterial(e.target.value)}
-              className="h-7 text-xs"
-            />
-          </FormField>
           <FormField label="Diameter (mm)" htmlFor="tool-diameter">
             <Input
               id="tool-diameter"
@@ -192,43 +192,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               className="h-7 text-xs"
             />
           </FormField>
-          <FormField label="Flute Count" htmlFor="tool-flutes">
-            <Input
-              id="tool-flutes"
-              type="number"
-              step="1"
-              value={fluteCount}
-              onChange={(e) => setFluteCount(e.target.value)}
-              className="h-7 text-xs"
-            />
-          </FormField>
-          <FormField label="Spindle Speed (RPM)" htmlFor="tool-spindle">
-            <Input
-              id="tool-spindle"
-              type="number"
-              step="any"
-              value={spindleSpeed}
-              onChange={(e) => setSpindleSpeed(e.target.value)}
-              className="h-7 text-xs"
-            />
-          </FormField>
-          <FormField label="Feed Rate (mm/min)" htmlFor="tool-feed">
-            <Input
-              id="tool-feed"
-              type="number"
-              step="any"
-              value={feedRate}
-              onChange={(e) => setFeedRate(e.target.value)}
-              className="h-7 text-xs"
-            />
-          </FormField>
-        </div>
-      </section>
-
-      {/* ── Universal geometry (always visible, optional) ─────────────── */}
-      <section>
-        <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Geometry</h3>
-        <div className="space-y-1">
           <FormField label="Cutting Length (mm)" htmlFor="tool-cutting-length">
             <Input
               id="tool-cutting-length"
@@ -239,6 +202,109 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               className="h-7 text-xs"
             />
           </FormField>
+          {activeSpecific.includes('taperHalfAngle') && (
+            <FormField label="Taper Half Angle (°)" htmlFor="tool-taper-half-angle">
+              <Input
+                id="tool-taper-half-angle"
+                type="number"
+                step="any"
+                value={taperHalfAngle}
+                onChange={(e) => setTaperHalfAngle(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('cornerRadius') && (
+            <FormField label="Corner Radius (mm)" htmlFor="tool-corner-radius">
+              <Input
+                id="tool-corner-radius"
+                type="number"
+                step="any"
+                value={cornerRadius}
+                onChange={(e) => setCornerRadius(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('includedAngle') && (
+            <FormField label="Included Angle (°)" htmlFor="tool-included-angle">
+              <Input
+                id="tool-included-angle"
+                type="number"
+                step="any"
+                value={includedAngle}
+                onChange={(e) => setIncludedAngle(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('pointAngle') && (
+            <FormField label="Point Angle (°)" htmlFor="tool-point-angle">
+              <Input
+                id="tool-point-angle"
+                type="number"
+                step="any"
+                value={pointAngle}
+                onChange={(e) => setPointAngle(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('pilotDiameter') && (
+            <FormField label="Pilot Diameter (mm)" htmlFor="tool-pilot-diameter">
+              <Input
+                id="tool-pilot-diameter"
+                type="number"
+                step="any"
+                value={pilotDiameter}
+                onChange={(e) => setPilotDiameter(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('pilotLength') && (
+            <FormField label="Pilot Length (mm)" htmlFor="tool-pilot-length">
+              <Input
+                id="tool-pilot-length"
+                type="number"
+                step="any"
+                value={pilotLength}
+                onChange={(e) => setPilotLength(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('threadPitch') && (
+            <FormField label="Thread Pitch (mm)" htmlFor="tool-thread-pitch">
+              <Input
+                id="tool-thread-pitch"
+                type="number"
+                step="any"
+                value={threadPitch}
+                onChange={(e) => setThreadPitch(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+          {activeSpecific.includes('minBoreDiameter') && (
+            <FormField label="Min Bore Diameter (mm)" htmlFor="tool-min-bore-diameter">
+              <Input
+                id="tool-min-bore-diameter"
+                type="number"
+                step="any"
+                value={minBoreDiameter}
+                onChange={(e) => setMinBoreDiameter(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+          )}
+        </div>
+      </section>
+
+      {/* ── Group 3: Dimensions (always visible) ─────────────────────── */}
+      <section>
+        <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Dimensions</h3>
+        <div className="space-y-1">
           <FormField label="Shank Diameter (mm)" htmlFor="tool-shank-diameter">
             <Input
               id="tool-shank-diameter"
@@ -262,112 +328,65 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
         </div>
       </section>
 
-      {/* ── Type-specific geometry (conditional) ──────────────────────── */}
-      {activeSpecific.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-            Type-Specific
-          </h3>
-          <div className="space-y-1">
-            {activeSpecific.includes('taperHalfAngle') && (
-              <FormField label="Taper Half Angle (°)" htmlFor="tool-taper-half-angle">
-                <Input
-                  id="tool-taper-half-angle"
-                  type="number"
-                  step="any"
-                  value={taperHalfAngle}
-                  onChange={(e) => setTaperHalfAngle(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('cornerRadius') && (
-              <FormField label="Corner Radius (mm)" htmlFor="tool-corner-radius">
-                <Input
-                  id="tool-corner-radius"
-                  type="number"
-                  step="any"
-                  value={cornerRadius}
-                  onChange={(e) => setCornerRadius(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('includedAngle') && (
-              <FormField label="Included Angle (°)" htmlFor="tool-included-angle">
-                <Input
-                  id="tool-included-angle"
-                  type="number"
-                  step="any"
-                  value={includedAngle}
-                  onChange={(e) => setIncludedAngle(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('pointAngle') && (
-              <FormField label="Point Angle (°)" htmlFor="tool-point-angle">
-                <Input
-                  id="tool-point-angle"
-                  type="number"
-                  step="any"
-                  value={pointAngle}
-                  onChange={(e) => setPointAngle(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('pilotDiameter') && (
-              <FormField label="Pilot Diameter (mm)" htmlFor="tool-pilot-diameter">
-                <Input
-                  id="tool-pilot-diameter"
-                  type="number"
-                  step="any"
-                  value={pilotDiameter}
-                  onChange={(e) => setPilotDiameter(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('pilotLength') && (
-              <FormField label="Pilot Length (mm)" htmlFor="tool-pilot-length">
-                <Input
-                  id="tool-pilot-length"
-                  type="number"
-                  step="any"
-                  value={pilotLength}
-                  onChange={(e) => setPilotLength(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('threadPitch') && (
-              <FormField label="Thread Pitch (mm)" htmlFor="tool-thread-pitch">
-                <Input
-                  id="tool-thread-pitch"
-                  type="number"
-                  step="any"
-                  value={threadPitch}
-                  onChange={(e) => setThreadPitch(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
-            {activeSpecific.includes('minBoreDiameter') && (
-              <FormField label="Min Bore Diameter (mm)" htmlFor="tool-min-bore-diameter">
-                <Input
-                  id="tool-min-bore-diameter"
-                  type="number"
-                  step="any"
-                  value={minBoreDiameter}
-                  onChange={(e) => setMinBoreDiameter(e.target.value)}
-                  className="h-7 text-xs"
-                />
-              </FormField>
-            )}
+      {/* ── Group 4: Cutting Parameters (collapsible) ─────────────────── */}
+      <section>
+        <button
+          type="button"
+          onClick={() => setCuttingParamsOpen(!cuttingParamsOpen)}
+          aria-expanded={cuttingParamsOpen}
+          aria-controls={cuttingParamsId}
+          className="flex w-full items-center gap-1 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-accent"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={cn('h-3.5 w-3.5 transition-transform', !cuttingParamsOpen && '-rotate-90')}
+          />
+          <span>Cutting Parameters</span>
+        </button>
+        {cuttingParamsOpen && (
+          <div id={cuttingParamsId} className="space-y-1">
+            <FormField label="Material" htmlFor="tool-material">
+              <Input
+                id="tool-material"
+                type="text"
+                value={material}
+                onChange={(e) => setMaterial(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+            <FormField label="Flute Count" htmlFor="tool-flutes">
+              <Input
+                id="tool-flutes"
+                type="number"
+                step="1"
+                value={fluteCount}
+                onChange={(e) => setFluteCount(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+            <FormField label="Spindle Speed (RPM)" htmlFor="tool-spindle">
+              <Input
+                id="tool-spindle"
+                type="number"
+                step="any"
+                value={spindleSpeed}
+                onChange={(e) => setSpindleSpeed(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
+            <FormField label="Feed Rate (mm/min)" htmlFor="tool-feed">
+              <Input
+                id="tool-feed"
+                type="number"
+                step="any"
+                value={feedRate}
+                onChange={(e) => setFeedRate(e.target.value)}
+                className="h-7 text-xs"
+              />
+            </FormField>
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* ── Actions ───────────────────────────────────────────────────── */}
       <div className="flex gap-2 pt-2">

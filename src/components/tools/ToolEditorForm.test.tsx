@@ -150,8 +150,9 @@ describe('ToolEditorForm', () => {
 
       // Fill required fields
       fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Test' } })
-      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'Carbide' } })
       fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '6' } })
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
+      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'Carbide' } })
       fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '4' } })
 
       // Select v_bit and fill included angle
@@ -182,8 +183,9 @@ describe('ToolEditorForm', () => {
 
       expect(screen.getByLabelText(/^name$/i)).toHaveValue('My Bull Nose')
       expect(screen.getByLabelText(/^type$/i)).toHaveValue('bull_nose')
-      expect(screen.getByLabelText(/material/i)).toHaveValue('Carbide')
       expect(screen.getByLabelText(/^diameter/i)).toHaveValue(6)
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
+      expect(screen.getByLabelText(/material/i)).toHaveValue('Carbide')
       expect(screen.getByLabelText(/flute count/i)).toHaveValue(4)
       expect(screen.getByLabelText(/spindle speed/i)).toHaveValue(12000)
       expect(screen.getByLabelText(/feed rate/i)).toHaveValue(800)
@@ -205,6 +207,7 @@ describe('ToolEditorForm', () => {
       }
       render(<ToolEditorForm initialTool={spareTool} onSubmit={vi.fn()} />)
 
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
       expect(screen.getByLabelText(/material/i)).toHaveValue('')
       expect(screen.getByLabelText(/flute count/i)).toHaveValue(null)
       expect(screen.getByLabelText(/overall length/i)).toHaveValue(null)
@@ -258,6 +261,7 @@ describe('ToolEditorForm', () => {
 
       fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Test Tool' } })
       fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '6' } })
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
       fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'HSS' } })
       fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '2' } })
 
@@ -277,10 +281,11 @@ describe('ToolEditorForm', () => {
       render(<ToolEditorForm onSubmit={onSubmit} />)
 
       fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Drill Bit' } })
-      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'Carbide' } })
       fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '5' } })
-      fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '2' } })
       selectToolType('drill')
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
+      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'Carbide' } })
+      fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '2' } })
       fireEvent.change(screen.getByLabelText(/spindle speed/i), { target: { value: '8000' } })
       fireEvent.change(screen.getByLabelText(/cutting length/i), { target: { value: '15' } })
       fireEvent.change(screen.getByLabelText(TYPE_SPECIFIC_LABELS.pointAngle), {
@@ -376,6 +381,35 @@ describe('ToolEditorForm', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
       expect(onCancel).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('cutting parameters collapsible and ordering', () => {
+    it('Cutting Parameters section is collapsed by default', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      expect(screen.queryByLabelText(/spindle speed/i)).toBeNull()
+    })
+
+    it('Cutting Parameters section reveals fields when toggled', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      fireEvent.click(screen.getByRole('button', { name: /cutting parameters/i }))
+      expect(screen.getByLabelText(/spindle speed/i)).toBeInTheDocument()
+    })
+
+    it('type-specific fields appear before Shank Diameter in DOM', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      selectToolType('v_bit')
+      const includedAngle = screen.getByLabelText(/included angle/i)
+      const shankDiameter = screen.getByLabelText(/shank diameter/i)
+      expect(
+        includedAngle.compareDocumentPosition(shankDiameter) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+    })
+
+    it('Shank Diameter and Overall Length are always visible', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      expect(screen.getByLabelText(/shank diameter/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/overall length/i)).toBeInTheDocument()
     })
   })
 })
