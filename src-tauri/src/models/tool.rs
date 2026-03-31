@@ -44,11 +44,13 @@ pub struct Tool {
     #[serde(rename = "type")]
     pub tool_type: ToolType,
     /// Tool body material (e.g. `"carbide"`, `"hss"`).
-    pub material: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
     /// Cutting diameter in project units (mm or inch).
     pub diameter: f64,
     /// Number of flutes (cutting edges).
-    pub flute_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flute_count: Option<u32>,
     /// Default spindle speed in RPM, if specified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_spindle_speed: Option<u32>,
@@ -64,9 +66,8 @@ pub struct Tool {
     #[serde(default)]
     pub shank_diameter: f64,
     /// Overall length of the tool in project units.
-    /// A value of 0.0 is a sentinel meaning "not yet set".
-    #[serde(default)]
-    pub overall_length: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overall_length: Option<f64>,
 
     // -- Type-specific geometry fields --
     // Each is meaningful only for certain ToolType variants.
@@ -223,9 +224,6 @@ impl Tool {
         if self.shank_diameter == 0.0 {
             self.shank_diameter = self.diameter;
         }
-        if self.overall_length == 0.0 {
-            self.overall_length = self.cutting_length * 3.0;
-        }
 
         // --- Type-specific fields ---
         match self.tool_type {
@@ -281,14 +279,14 @@ mod tests {
             id: Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap(),
             name: "10mm 4F Flat Endmill".to_string(),
             tool_type: ToolType::FlatEndmill,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter: 10.0,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: Some(15000),
             default_feed_rate: Some(2400.0),
             cutting_length: 30.0,
             shank_diameter: 10.0,
-            overall_length: 90.0,
+            overall_length: None,
             corner_radius: None,
             included_angle: None,
             point_angle: None,
@@ -335,14 +333,14 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Drill".to_string(),
             tool_type: ToolType::Drill,
-            material: "hss".to_string(),
+            material: None,
             diameter: 6.0,
-            flute_count: 2,
+            flute_count: Some(2),
             default_spindle_speed: None,
             default_feed_rate: None,
             cutting_length: 18.0,
             shank_diameter: 6.0,
-            overall_length: 54.0,
+            overall_length: None,
             corner_radius: None,
             included_angle: None,
             point_angle: None,
@@ -355,6 +353,8 @@ mod tests {
         let value = serde_json::to_value(&tool).expect("to_value");
         assert!(value.get("defaultSpindleSpeed").is_none());
         assert!(value.get("defaultFeedRate").is_none());
+        assert!(value.get("material").is_none());
+        assert!(value.get("overallLength").is_none());
     }
 
     #[test]
@@ -371,20 +371,21 @@ mod tests {
         let mut tool: Tool = serde_json::from_str(json).expect("deserialize");
         assert_eq!(tool.cutting_length, 0.0);
         assert_eq!(tool.shank_diameter, 0.0);
-        assert_eq!(tool.overall_length, 0.0);
+        assert!(tool.overall_length.is_none());
 
         tool.resolve_defaults();
         assert_eq!(tool.cutting_length, 30.0); // diameter * 3
         assert_eq!(tool.shank_diameter, 10.0); // diameter
-        assert_eq!(tool.overall_length, 90.0); // cutting_length * 3
+        assert!(tool.overall_length.is_none()); // no longer auto-filled
     }
 
     #[test]
     fn geometry_fields_round_trip() {
-        let original = make_tool();
+        let mut original = make_tool();
+        original.overall_length = Some(90.0);
         assert_eq!(original.cutting_length, 30.0);
         assert_eq!(original.shank_diameter, 10.0);
-        assert_eq!(original.overall_length, 90.0);
+        assert_eq!(original.overall_length, Some(90.0));
 
         let json = serde_json::to_string(&original).expect("serialize");
         let recovered: Tool = serde_json::from_str(&json).expect("deserialize");
@@ -397,14 +398,14 @@ mod tests {
             id: Uuid::new_v4(),
             name: "test".to_string(),
             tool_type: ToolType::FlatEndmill,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter: 10.0,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: None,
             default_feed_rate: None,
             cutting_length: 20.0, // explicit, non-zero
             shank_diameter: 0.0,
-            overall_length: 0.0,
+            overall_length: None,
             corner_radius: None,
             included_angle: None,
             point_angle: None,
@@ -419,8 +420,8 @@ mod tests {
         assert_eq!(tool.cutting_length, 20.0);
         // shank_diameter defaults to diameter
         assert_eq!(tool.shank_diameter, 10.0);
-        // overall_length uses the *resolved* cutting_length (20), not diameter*3 (30)
-        assert_eq!(tool.overall_length, 60.0); // 20 * 3
+        // overall_length stays None (no longer auto-filled)
+        assert!(tool.overall_length.is_none());
     }
 
     #[test]

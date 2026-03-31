@@ -19,25 +19,26 @@ impl Tool {
         let spq = segments_per_quarter.max(1);
         let r = self.diameter / 2.0;
         let shank_r = self.shank_diameter / 2.0;
+        let overall_length = self.overall_length.unwrap_or(self.cutting_length * 3.0);
 
         match self.tool_type {
-            ToolType::FlatEndmill => self.profile_flat_endmill(r, shank_r),
+            ToolType::FlatEndmill => self.profile_flat_endmill(r, shank_r, overall_length),
 
             ToolType::Tap | ToolType::Reamer | ToolType::BoringBar | ToolType::ThreadMill => {
                 // Cylindrical — same shape as straight FlatEndmill.
-                profile_cylindrical(r, shank_r, self.cutting_length, self.overall_length)
+                profile_cylindrical(r, shank_r, self.cutting_length, overall_length)
             }
 
-            ToolType::BallNose => self.profile_ball_nose(r, shank_r, spq),
-            ToolType::BullNose => self.profile_bull_nose(r, shank_r, spq),
-            ToolType::VBit => self.profile_vbit(r, shank_r),
-            ToolType::Drill => self.profile_drill(r, shank_r),
-            ToolType::CenterDrill => self.profile_center_drill(r, shank_r),
+            ToolType::BallNose => self.profile_ball_nose(r, shank_r, spq, overall_length),
+            ToolType::BullNose => self.profile_bull_nose(r, shank_r, spq, overall_length),
+            ToolType::VBit => self.profile_vbit(r, shank_r, overall_length),
+            ToolType::Drill => self.profile_drill(r, shank_r, overall_length),
+            ToolType::CenterDrill => self.profile_center_drill(r, shank_r, overall_length),
         }
     }
 
     /// Profile for FlatEndmill — handles both straight and tapered variants.
-    fn profile_flat_endmill(&self, r: f64, shank_r: f64) -> Vec<(f64, f64)> {
+    fn profile_flat_endmill(&self, r: f64, shank_r: f64, overall_length: f64) -> Vec<(f64, f64)> {
         match self.taper_half_angle {
             Some(angle) => {
                 let r_top = r + self.cutting_length * angle.to_radians().tan();
@@ -47,15 +48,21 @@ impl Tool {
                 if (r_top - shank_r).abs() > f64::EPSILON {
                     pts.push((shank_r, self.cutting_length));
                 }
-                pts.push((shank_r, self.overall_length));
+                pts.push((shank_r, overall_length));
                 pts
             }
-            None => profile_cylindrical(r, shank_r, self.cutting_length, self.overall_length),
+            None => profile_cylindrical(r, shank_r, self.cutting_length, overall_length),
         }
     }
 
     /// Profile for BallNose — quarter-circle arc from tip to (R, R), then body + shank.
-    fn profile_ball_nose(&self, r: f64, shank_r: f64, spq: u32) -> Vec<(f64, f64)> {
+    fn profile_ball_nose(
+        &self,
+        r: f64,
+        shank_r: f64,
+        spq: u32,
+        overall_length: f64,
+    ) -> Vec<(f64, f64)> {
         let mut pts = Vec::with_capacity((spq as usize) + 4);
         // Quarter-circle arc from (0, 0) to (R, R)
         for i in 0..=spq {
@@ -70,13 +77,19 @@ impl Tool {
         if (r - shank_r).abs() > f64::EPSILON {
             pts.push((shank_r, self.cutting_length));
         }
-        pts.push((shank_r, self.overall_length));
+        pts.push((shank_r, overall_length));
         pts
     }
 
     /// Profile for BullNose — flat bottom, corner-radius arc, then body + shank.
     /// Handles both straight and tapered variants.
-    fn profile_bull_nose(&self, r: f64, shank_r: f64, spq: u32) -> Vec<(f64, f64)> {
+    fn profile_bull_nose(
+        &self,
+        r: f64,
+        shank_r: f64,
+        spq: u32,
+        overall_length: f64,
+    ) -> Vec<(f64, f64)> {
         let cr = self.corner_radius.unwrap_or(0.0);
         let mut pts = Vec::with_capacity((spq as usize) + 6);
 
@@ -112,12 +125,12 @@ impl Tool {
             }
         }
 
-        pts.push((shank_r, self.overall_length));
+        pts.push((shank_r, overall_length));
         pts
     }
 
     /// Profile for VBit — conical point, then transition to shank.
-    fn profile_vbit(&self, r: f64, shank_r: f64) -> Vec<(f64, f64)> {
+    fn profile_vbit(&self, r: f64, shank_r: f64, overall_length: f64) -> Vec<(f64, f64)> {
         let half_angle = self.included_angle.unwrap_or(90.0).to_radians() / 2.0;
         let cone_z = r / half_angle.tan();
 
@@ -125,12 +138,12 @@ impl Tool {
             (0.0, 0.0),
             (r, cone_z),
             (shank_r, self.cutting_length),
-            (shank_r, self.overall_length),
+            (shank_r, overall_length),
         ]
     }
 
     /// Profile for Drill — conical point, cylindrical flute, then shank.
-    fn profile_drill(&self, r: f64, shank_r: f64) -> Vec<(f64, f64)> {
+    fn profile_drill(&self, r: f64, shank_r: f64, overall_length: f64) -> Vec<(f64, f64)> {
         let half_angle = self.point_angle.unwrap_or(118.0).to_radians() / 2.0;
         let cone_z = r / half_angle.tan();
 
@@ -145,12 +158,12 @@ impl Tool {
         if (r - shank_r).abs() > f64::EPSILON {
             pts.push((shank_r, self.cutting_length));
         }
-        pts.push((shank_r, self.overall_length));
+        pts.push((shank_r, overall_length));
         pts
     }
 
     /// Profile for CenterDrill — pilot cone, pilot cylinder, step to body, then shank.
-    fn profile_center_drill(&self, r: f64, shank_r: f64) -> Vec<(f64, f64)> {
+    fn profile_center_drill(&self, r: f64, shank_r: f64, overall_length: f64) -> Vec<(f64, f64)> {
         let pilot_r = self.pilot_diameter.unwrap_or(self.diameter * 0.3) / 2.0;
         let pilot_len = self.pilot_length.unwrap_or(self.cutting_length / 3.0);
         let half_angle = self.point_angle.unwrap_or(60.0).to_radians() / 2.0;
@@ -175,7 +188,7 @@ impl Tool {
         if (r - shank_r).abs() > f64::EPSILON {
             pts.push((shank_r, self.cutting_length));
         }
-        pts.push((shank_r, self.overall_length));
+        pts.push((shank_r, overall_length));
         pts
     }
 }
@@ -212,14 +225,14 @@ mod tests {
             id: Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap(),
             name: "test".to_string(),
             tool_type,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: None,
             default_feed_rate: None,
             cutting_length: 0.0,
             shank_diameter: 0.0,
-            overall_length: 0.0,
+            overall_length: None,
             corner_radius: None,
             included_angle: None,
             point_angle: None,
@@ -333,15 +346,16 @@ mod tests {
         ];
         for tt in &types {
             let tool = make_resolved(tt.clone(), 10.0);
+            let expected_overall = tool.overall_length.unwrap_or(tool.cutting_length * 3.0);
             let pts = tool.profile(1);
 
             // First point z == 0
             assert_eq!(pts[0].1, 0.0, "{:?}: first z == 0", tt);
 
-            // Last point z == overall_length
+            // Last point z == overall_length (or fallback)
             assert_eq!(
                 pts.last().unwrap().1,
-                tool.overall_length,
+                expected_overall,
                 "{:?}: last z == overall_length",
                 tt
             );
@@ -369,10 +383,11 @@ mod tests {
         let mut tool = make_resolved(ToolType::FlatEndmill, 10.0);
         tool.taper_half_angle = Some(3.0);
         tool.shank_diameter = 14.0;
+        let expected_overall = tool.overall_length.unwrap_or(tool.cutting_length * 3.0);
         let pts = tool.profile(1);
 
         assert_eq!(pts[0].1, 0.0);
-        assert_eq!(pts.last().unwrap().1, tool.overall_length);
+        assert_eq!(pts.last().unwrap().1, expected_overall);
         for (i, &(r, _)) in pts.iter().enumerate() {
             assert!(r >= 0.0, "R >= 0 at point {}", i);
         }
@@ -590,15 +605,16 @@ mod tests {
         ];
         for tt in &types {
             let tool = make_resolved(tt.clone(), 10.0);
+            let expected_overall = tool.overall_length.unwrap_or(tool.cutting_length * 3.0);
             let pts = tool.profile(4);
 
             // First point z == 0
             assert_eq!(pts[0].1, 0.0, "{:?}: first z == 0", tt);
 
-            // Last point z == overall_length
+            // Last point z == overall_length (or fallback)
             assert_eq!(
                 pts.last().unwrap().1,
-                tool.overall_length,
+                expected_overall,
                 "{:?}: last z == overall_length",
                 tt
             );

@@ -23,9 +23,9 @@ fn drill_algorithm_golden_matches() {
         id: Uuid::nil(),
         name: "5mm Drill".to_string(),
         tool_type: ToolType::Drill,
-        material: "hss".to_string(),
+        material: Some("hss".to_string()),
         diameter: 5.0,
-        flute_count: 2,
+        flute_count: Some(2),
         default_spindle_speed: Some(1200),
         default_feed_rate: Some(150.0),
         cutting_length: 15.0,
@@ -38,7 +38,7 @@ fn drill_algorithm_golden_matches() {
         thread_pitch: None,
         min_bore_diameter: None,
         taper_half_angle: None,
-        overall_length: 45.0,
+        overall_length: Some(45.0),
     };
 
     let operation = Operation {

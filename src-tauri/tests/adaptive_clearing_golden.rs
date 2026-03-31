@@ -242,9 +242,9 @@ fn adaptive_clearing_gcode_golden() {
         id: Uuid::nil(),
         name: "6mm Flat Endmill".to_string(),
         tool_type: ToolType::FlatEndmill,
-        material: "carbide".to_string(),
+        material: Some("carbide".to_string()),
         diameter: 6.0,
-        flute_count: 4,
+        flute_count: Some(4),
         default_spindle_speed: Some(10000),
         default_feed_rate: Some(500.0),
         cutting_length: 18.0,
@@ -257,7 +257,7 @@ fn adaptive_clearing_gcode_golden() {
         thread_pitch: None,
         min_bore_diameter: None,
         taper_half_angle: None,
-        overall_length: 54.0,
+        overall_length: Some(54.0),
     };
     let operation = Operation {
         id: Uuid::nil(),

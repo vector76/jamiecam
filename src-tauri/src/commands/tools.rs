@@ -26,9 +26,9 @@ pub struct ToolInput {
     pub name: String,
     #[serde(rename = "type")]
     pub tool_type: ToolType,
-    pub material: String,
+    pub material: Option<String>,
     pub diameter: f64,
-    pub flute_count: u32,
+    pub flute_count: Option<u32>,
     pub default_spindle_speed: Option<u32>,
     pub default_feed_rate: Option<f64>,
     // Universal geometry
@@ -121,22 +121,25 @@ pub(crate) fn validate_tool_geometry(input: &ToolInput) -> Result<(), AppError> 
 
 // ── Helper: build Tool from ToolInput ────────────────────────────────────────
 
-/// Map [`ToolInput`] fields onto a [`Tool`], using `0.0` for absent universal
-/// fields and `None` for absent type-specific fields, then apply heuristic
-/// defaults.
+/// Map [`ToolInput`] fields onto a [`Tool`], using `0.0` for absent
+/// `cutting_length` / `shank_diameter` and passing optional fields through
+/// directly, then apply heuristic defaults.
 pub(crate) fn tool_from_input(id: Uuid, input: ToolInput) -> Tool {
     let mut tool = Tool {
         id,
         name: input.name,
         tool_type: input.tool_type,
-        material: input.material,
+        material: input
+            .material
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         diameter: input.diameter,
         flute_count: input.flute_count,
         default_spindle_speed: input.default_spindle_speed,
         default_feed_rate: input.default_feed_rate,
         cutting_length: input.cutting_length.unwrap_or(0.0),
         shank_diameter: input.shank_diameter.unwrap_or(0.0),
-        overall_length: input.overall_length.unwrap_or(0.0),
+        overall_length: input.overall_length,
         corner_radius: input.corner_radius,
         included_angle: input.included_angle,
         point_angle: input.point_angle,
@@ -311,9 +314,9 @@ mod tests {
         ToolInput {
             name: name.to_string(),
             tool_type: ToolType::FlatEndmill,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter: 10.0,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: Some(15000),
             default_feed_rate: Some(2400.0),
             cutting_length: None,
@@ -353,9 +356,9 @@ mod tests {
             ToolInput {
                 name: "Renamed".to_string(),
                 tool_type: ToolType::BallNose,
-                material: "hss".to_string(),
+                material: Some("hss".to_string()),
                 diameter: 6.0,
-                flute_count: 2,
+                flute_count: Some(2),
                 default_spindle_speed: None,
                 default_feed_rate: None,
                 cutting_length: None,
@@ -377,9 +380,9 @@ mod tests {
         assert_eq!(updated.id, tool.id);
         assert_eq!(updated.name, "Renamed");
         assert_eq!(updated.tool_type, ToolType::BallNose);
-        assert_eq!(updated.material, "hss");
+        assert_eq!(updated.material, Some("hss".to_string()));
         assert_eq!(updated.diameter, 6.0);
-        assert_eq!(updated.flute_count, 2);
+        assert_eq!(updated.flute_count, Some(2));
         assert!(updated.default_spindle_speed.is_none());
 
         let tools = list_tools_inner(&state.project).expect("list should succeed");
@@ -452,9 +455,9 @@ mod tests {
         let input = ToolInput {
             name: "Bull Nose".to_string(),
             tool_type: ToolType::BullNose,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter: 10.0,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: None,
             default_feed_rate: None,
             cutting_length: Some(25.0),
@@ -472,7 +475,7 @@ mod tests {
         let tool = add_tool_inner(input, &state.project).expect("add should succeed");
         assert_eq!(tool.cutting_length, 25.0);
         assert_eq!(tool.shank_diameter, 10.0);
-        assert_eq!(tool.overall_length, 80.0);
+        assert_eq!(tool.overall_length, Some(80.0));
         assert_eq!(tool.corner_radius, Some(2.0));
         assert_eq!(tool.taper_half_angle, Some(1.5));
     }
@@ -485,7 +488,7 @@ mod tests {
         // Universal: resolve_defaults fills these from diameter.
         assert_eq!(tool.cutting_length, 30.0);
         assert_eq!(tool.shank_diameter, 10.0);
-        assert_eq!(tool.overall_length, 90.0);
+        assert!(tool.overall_length.is_none());
         // FlatEndmill has no type-specific defaults.
         assert_eq!(tool.corner_radius, None);
     }
@@ -500,9 +503,9 @@ mod tests {
             ToolInput {
                 name: "After".to_string(),
                 tool_type: ToolType::Drill,
-                material: "hss".to_string(),
+                material: Some("hss".to_string()),
                 diameter: 8.0,
-                flute_count: 2,
+                flute_count: Some(2),
                 default_spindle_speed: None,
                 default_feed_rate: None,
                 cutting_length: Some(20.0),
@@ -522,7 +525,7 @@ mod tests {
         .expect("edit should succeed");
         assert_eq!(updated.cutting_length, 20.0);
         assert_eq!(updated.shank_diameter, 8.0);
-        assert_eq!(updated.overall_length, 60.0);
+        assert_eq!(updated.overall_length, Some(60.0));
         assert_eq!(updated.point_angle, Some(135.0));
     }
 

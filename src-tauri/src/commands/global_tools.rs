@@ -273,9 +273,9 @@ mod tests {
         ToolInput {
             name: name.to_string(),
             tool_type: ToolType::FlatEndmill,
-            material: "carbide".to_string(),
+            material: Some("carbide".to_string()),
             diameter: 10.0,
-            flute_count: 4,
+            flute_count: Some(4),
             default_spindle_speed: Some(15000),
             default_feed_rate: Some(2400.0),
             cutting_length: None,
@@ -323,9 +323,9 @@ mod tests {
             ToolInput {
                 name: "Renamed".to_string(),
                 tool_type: ToolType::BallNose,
-                material: "hss".to_string(),
+                material: Some("hss".to_string()),
                 diameter: 6.0,
-                flute_count: 2,
+                flute_count: Some(2),
                 default_spindle_speed: None,
                 default_feed_rate: None,
                 cutting_length: None,
@@ -348,9 +348,9 @@ mod tests {
         assert_eq!(updated.id, tool.id);
         assert_eq!(updated.name, "Renamed");
         assert_eq!(updated.tool_type, ToolType::BallNose);
-        assert_eq!(updated.material, "hss");
+        assert_eq!(updated.material, Some("hss".to_string()));
         assert_eq!(updated.diameter, 6.0);
-        assert_eq!(updated.flute_count, 2);
+        assert_eq!(updated.flute_count, Some(2));
         assert!(updated.default_spindle_speed.is_none());
 
         let tools = list_global_tools_inner(&library).expect("list should succeed");
@@ -443,7 +443,7 @@ mod tests {
         // resolve_defaults fills these from diameter (10.0).
         assert_eq!(tool.cutting_length, 30.0);
         assert_eq!(tool.shank_diameter, 10.0);
-        assert_eq!(tool.overall_length, 90.0);
+        assert!(tool.overall_length.is_none());
     }
 
     #[test]
