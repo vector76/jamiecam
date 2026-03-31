@@ -194,6 +194,22 @@ describe('ToolEditorForm', () => {
       expect(screen.getByLabelText(TYPE_SPECIFIC_LABELS.taperHalfAngle)).toHaveValue(2)
     })
 
+    it('displays empty inputs for tool with absent optional fields', () => {
+      const spareTool: Tool = {
+        id: 'aaaaaaaa-0000-0000-0000-000000000099',
+        name: 'Bare Minimum',
+        type: 'flat_endmill',
+        diameter: 10,
+        cuttingLength: 30,
+        shankDiameter: 10,
+      }
+      render(<ToolEditorForm initialTool={spareTool} onSubmit={vi.fn()} />)
+
+      expect(screen.getByLabelText(/material/i)).toHaveValue('')
+      expect(screen.getByLabelText(/flute count/i)).toHaveValue(null)
+      expect(screen.getByLabelText(/overall length/i)).toHaveValue(null)
+    })
+
     it('populates v_bit fields from an existing tool', () => {
       render(<ToolEditorForm initialTool={V_BIT_TOOL} onSubmit={vi.fn()} />)
 
@@ -204,15 +220,13 @@ describe('ToolEditorForm', () => {
   })
 
   describe('submit assembles correct ToolInput', () => {
-    it('omits blank optional number fields', async () => {
+    it('omits blank optional fields', async () => {
       const onSubmit = vi.fn<(input: ToolInput) => Promise<void>>().mockResolvedValue(undefined)
       render(<ToolEditorForm onSubmit={onSubmit} />)
 
-      // Fill only required fields (type defaults to flat_endmill)
+      // Fill only name and diameter; leave material and fluteCount blank
       fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Basic EM' } })
-      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'HSS' } })
       fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '10' } })
-      fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '2' } })
 
       fireEvent.submit(screen.getByRole('form'))
 
@@ -223,10 +237,11 @@ describe('ToolEditorForm', () => {
       const input = onSubmit.mock.calls[0][0]
       expect(input.name).toBe('Basic EM')
       expect(input.type).toBe('flat_endmill')
-      expect(input.material).toBe('HSS')
       expect(input.diameter).toBe(10)
-      expect(input.fluteCount).toBe(2)
-      // All optional fields should be undefined (omitted)
+      // material and fluteCount left blank — should be omitted
+      expect(input.material).toBeUndefined()
+      expect(input.fluteCount).toBeUndefined()
+      // All other optional fields should be undefined (omitted)
       expect(input.defaultSpindleSpeed).toBeUndefined()
       expect(input.defaultFeedRate).toBeUndefined()
       expect(input.cuttingLength).toBeUndefined()
@@ -235,6 +250,26 @@ describe('ToolEditorForm', () => {
       expect(input.cornerRadius).toBeUndefined()
       expect(input.includedAngle).toBeUndefined()
       expect(input.taperHalfAngle).toBeUndefined()
+    })
+
+    it('submits with filled material and fluteCount', async () => {
+      const onSubmit = vi.fn<(input: ToolInput) => Promise<void>>().mockResolvedValue(undefined)
+      render(<ToolEditorForm onSubmit={onSubmit} />)
+
+      fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Test Tool' } })
+      fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '6' } })
+      fireEvent.change(screen.getByLabelText(/material/i), { target: { value: 'HSS' } })
+      fireEvent.change(screen.getByLabelText(/flute count/i), { target: { value: '2' } })
+
+      fireEvent.submit(screen.getByRole('form'))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+
+      const input = onSubmit.mock.calls[0][0]
+      expect(input.material).toBe('HSS')
+      expect(input.fluteCount).toBe(2)
     })
 
     it('includes filled optional fields in submit', async () => {

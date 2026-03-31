@@ -50,14 +50,14 @@ export interface Tool {
   name: string
   /** Snake_case tool geometry type (e.g. `"flat_endmill"`, `"ball_nose"`). */
   type: string
-  material: string
+  material?: string
   diameter: number
-  fluteCount: number
+  fluteCount?: number
   defaultSpindleSpeed?: number
   defaultFeedRate?: number
   cuttingLength: number
   shankDiameter: number
-  overallLength: number
+  overallLength?: number
   cornerRadius?: number
   includedAngle?: number
   pointAngle?: number
@@ -76,9 +76,9 @@ export interface ToolInput {
   name: string
   /** Snake_case tool type string (e.g. `"flat_endmill"`). */
   type: string
-  material: string
+  material?: string
   diameter: number
-  fluteCount: number
+  fluteCount?: number
   defaultSpindleSpeed?: number
   defaultFeedRate?: number
   cuttingLength?: number

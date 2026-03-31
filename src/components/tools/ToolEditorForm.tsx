@@ -109,10 +109,15 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
     const input: ToolInput = {
       name,
       type,
-      material,
       diameter: parseFloat(diameter),
-      fluteCount: parseInt(fluteCount, 10),
     }
+
+    // Optional material and flute count
+    const trimmedMaterial = material.trim()
+    if (trimmedMaterial) input.material = trimmedMaterial
+
+    const fc = parseInt(fluteCount, 10)
+    if (!isNaN(fc)) input.fluteCount = fc
 
     // Optional common fields
     assignOpt(input, 'defaultSpindleSpeed', spindleSpeed)
@@ -173,7 +178,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               type="text"
               value={material}
               onChange={(e) => setMaterial(e.target.value)}
-              required
               className="h-7 text-xs"
             />
           </FormField>
@@ -195,7 +199,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               step="1"
               value={fluteCount}
               onChange={(e) => setFluteCount(e.target.value)}
-              required
               className="h-7 text-xs"
             />
           </FormField>
@@ -392,10 +395,8 @@ function numStr(val: number | undefined): string {
 }
 
 /**
- * Convert a geometry field from a Tool (always present as a number on Tool)
- * to an optional string for the form. The backend uses 0.0 as a sentinel for
- * "not explicitly set", but on the TS side these are just numbers. We treat
- * any truthy number as an explicit value.
+ * Convert an optional geometry field from a Tool to a string for the form.
+ * Returns '' for undefined so the input renders blank.
  */
 function optGeomStr(val: number | undefined): string {
   return val != null ? String(val) : ''
