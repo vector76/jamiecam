@@ -2,8 +2,8 @@
  * Shared menu action handlers.
  *
  * Standalone async functions that access Zustand stores via getState() so
- * they can be called from both React components (Toolbar) and non-React
- * contexts (native menu event listeners).
+ * they can be called from both React components and non-React contexts
+ * (native menu event listeners).
  *
  * Errors are surfaced through the project store's notification system.
  */

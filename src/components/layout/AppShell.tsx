@@ -1,11 +1,10 @@
 /**
  * AppShell — root layout component.
  *
- * Places the Toolbar across the top, the 3-D Viewport in the main area,
- * and sidebar panels in a scrollable column on the right.
+ * Places the 3-D Viewport in the main area and sidebar panels in a
+ * scrollable column on the right.
  */
 
-import { Toolbar } from '../toolbar/Toolbar'
 import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
 import { Notifications } from '../common/Notifications'
@@ -19,7 +18,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 export function AppShell() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
-      <Toolbar />
       <div className="flex flex-1 overflow-hidden">
         <Viewport className="flex-1" />
         <aside className="w-[280px] shrink-0 border-l border-border">
