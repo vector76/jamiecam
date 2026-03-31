@@ -9,6 +9,8 @@
 import { create } from 'zustand'
 import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary, WorkCoordinateSystem } from '../api/types'
 
+export type UnsavedChoice = 'save' | 'discard' | 'cancel'
+
 interface ProjectState {
   /** Most-recently-fetched project snapshot, or null before the first fetch. */
   snapshot: ProjectSnapshot | null
@@ -24,9 +26,17 @@ interface ProjectState {
   selectedOperationId: string | null
   /** Set the currently-selected operation ID. */
   setSelectedOperationId: (id: string | null) => void
+  /** Whether the unsaved-changes dialog is currently open. */
+  unsavedDialogOpen: boolean
+  /** Resolve callback for the pending unsaved-changes dialog, or null. */
+  unsavedDialogResolve: ((choice: UnsavedChoice) => void) | null
+  /** Open the unsaved-changes dialog and return the user's choice. */
+  showUnsavedDialog: () => Promise<UnsavedChoice>
+  /** Resolve the unsaved-changes dialog with the given choice. */
+  resolveUnsavedDialog: (choice: UnsavedChoice) => void
 }
 
-export const useProjectStore = create<ProjectState>((set) => ({
+export const useProjectStore = create<ProjectState>((set, get) => ({
   snapshot: null,
   setSnapshot: (snapshot) => set({ snapshot }),
   notifications: [],
@@ -34,6 +44,17 @@ export const useProjectStore = create<ProjectState>((set) => ({
   dismissNotification: (index) => set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
   selectedOperationId: null,
   setSelectedOperationId: (id) => set({ selectedOperationId: id }),
+  unsavedDialogOpen: false,
+  unsavedDialogResolve: null,
+  showUnsavedDialog: () =>
+    new Promise<UnsavedChoice>((resolve) => {
+      set({ unsavedDialogOpen: true, unsavedDialogResolve: resolve })
+    }),
+  resolveUnsavedDialog: (choice) => {
+    const { unsavedDialogResolve } = get()
+    if (unsavedDialogResolve) unsavedDialogResolve(choice)
+    set({ unsavedDialogOpen: false, unsavedDialogResolve: null })
+  },
 }))
 
 /**
