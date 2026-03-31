@@ -2,9 +2,20 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, onWheel, ...props }: React.ComponentProps<"input">) {
+  const ref = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el || type !== 'number') return
+    const handler = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [type])
+
   return (
     <input
+      ref={ref}
       type={type}
       data-slot="input"
       className={cn(
@@ -13,6 +24,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
         className
       )}
+      onWheel={onWheel}
       {...props}
     />
   )
