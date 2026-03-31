@@ -236,7 +236,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               step="any"
               value={cuttingLength}
               onChange={(e) => setCuttingLength(e.target.value)}
-              placeholder="diameter × 3"
               className="h-7 text-xs"
             />
           </FormField>
@@ -247,7 +246,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               step="any"
               value={shankDiameter}
               onChange={(e) => setShankDiameter(e.target.value)}
-              placeholder="= diameter"
               className="h-7 text-xs"
             />
           </FormField>
@@ -258,7 +256,6 @@ export function ToolEditorForm({ initialTool, onSubmit, onCancel }: ToolEditorFo
               step="any"
               value={overallLength}
               onChange={(e) => setOverallLength(e.target.value)}
-              placeholder="cutting length × 3"
               className="h-7 text-xs"
             />
           </FormField>

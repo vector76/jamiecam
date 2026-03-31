@@ -335,6 +335,40 @@ describe('ToolEditorForm', () => {
     })
   })
 
+  describe('placeholder and data model', () => {
+    it('cutting length input has no placeholder attribute', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      expect(screen.getByLabelText(/cutting length/i)).not.toHaveAttribute('placeholder')
+    })
+
+    it('shank diameter input has no placeholder attribute', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      expect(screen.getByLabelText(/shank diameter/i)).not.toHaveAttribute('placeholder')
+    })
+
+    it('overall length input has no placeholder attribute', () => {
+      render(<ToolEditorForm onSubmit={vi.fn()} />)
+      expect(screen.getByLabelText(/overall length/i)).not.toHaveAttribute('placeholder')
+    })
+
+    it('submitting with blank cutting length produces undefined cuttingLength', async () => {
+      const onSubmit = vi.fn<(input: ToolInput) => Promise<void>>().mockResolvedValue(undefined)
+      render(<ToolEditorForm onSubmit={onSubmit} />)
+
+      fireEvent.change(screen.getByLabelText(/^name$/i), { target: { value: 'Bare Tool' } })
+      fireEvent.change(screen.getByLabelText(/^diameter/i), { target: { value: '8' } })
+
+      fireEvent.submit(screen.getByRole('form'))
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1)
+      })
+
+      const input = onSubmit.mock.calls[0][0]
+      expect(input.cuttingLength).toBeUndefined()
+    })
+  })
+
   describe('cancel', () => {
     it('calls onCancel when cancel button is clicked', () => {
       const onCancel = vi.fn()
