@@ -615,6 +615,157 @@ mod tests {
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 
+    // ── Optional-field tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_global_tool_with_all_three_optional_fields_omitted() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let path = temp_path();
+        let input = ToolInput {
+            name: "Bare".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let tool = add_global_tool_inner(input, &library, &path).expect("add should succeed");
+        assert!(tool.material.is_none());
+        assert!(tool.flute_count.is_none());
+        assert!(tool.overall_length.is_none());
+    }
+
+    #[test]
+    fn blank_string_material_becomes_none_in_global_tools() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let path = temp_path();
+        let input = ToolInput {
+            name: "Whitespace".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: Some("  ".to_string()),
+            diameter: 10.0,
+            flute_count: Some(4),
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let tool = add_global_tool_inner(input, &library, &path).expect("add should succeed");
+        assert!(
+            tool.material.is_none(),
+            "blank-string material should become None"
+        );
+    }
+
+    #[test]
+    fn none_values_survive_disk_round_trip() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let path = temp_path();
+        let input = ToolInput {
+            name: "Disk RT".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        add_global_tool_inner(input, &library, &path).expect("add should succeed");
+
+        let loaded = GlobalToolLibrary::load(&path);
+        assert_eq!(loaded.tools.len(), 1);
+        let tool = &loaded.tools[0];
+        assert!(
+            tool.material.is_none(),
+            "material should survive disk round-trip as None"
+        );
+        assert!(
+            tool.flute_count.is_none(),
+            "flute_count should survive disk round-trip as None"
+        );
+        assert!(
+            tool.overall_length.is_none(),
+            "overall_length should survive disk round-trip as None"
+        );
+    }
+
+    #[test]
+    fn import_export_preserves_none_values() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        // Add a global tool with None optional fields.
+        let input = ToolInput {
+            name: "None Fields".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let global_tool =
+            add_global_tool_inner(input, &library, &path).expect("add should succeed");
+
+        // Import into project — None values should be preserved.
+        let imported = import_from_library_inner(&global_tool.id.to_string(), &library, &project)
+            .expect("import should succeed");
+        assert!(imported.material.is_none());
+        assert!(imported.flute_count.is_none());
+        assert!(imported.overall_length.is_none());
+
+        // Export back to library — None values should still be preserved.
+        let exported = export_to_library_inner(&imported.id.to_string(), &project, &library, &path)
+            .expect("export should succeed");
+        assert!(exported.material.is_none());
+        assert!(exported.flute_count.is_none());
+        assert!(exported.overall_length.is_none());
+    }
+
     #[test]
     fn export_persists_to_disk() {
         let library = RwLock::new(GlobalToolLibrary::default());

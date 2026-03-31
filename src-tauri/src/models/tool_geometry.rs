@@ -587,6 +587,84 @@ mod tests {
         assert_eq!(pts[5], (5.0, 90.0)); // shank end (R == shank_R)
     }
 
+    // ---- Optional overall_length tests ----
+
+    #[test]
+    fn profile_with_none_overall_length_uses_fallback() {
+        // For representative types: FlatEndmill, BallNose, Drill.
+        // When overall_length is None, the fallback is cutting_length * 3.0.
+        let cutting_length = 20.0;
+
+        for tt in &[ToolType::FlatEndmill, ToolType::BallNose, ToolType::Drill] {
+            let mut tool = Tool {
+                id: Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap(),
+                name: "test".to_string(),
+                tool_type: tt.clone(),
+                material: None,
+                diameter: 10.0,
+                flute_count: None,
+                default_spindle_speed: None,
+                default_feed_rate: None,
+                cutting_length,
+                shank_diameter: 10.0,
+                overall_length: None,
+                corner_radius: None,
+                included_angle: None,
+                point_angle: None,
+                pilot_diameter: None,
+                pilot_length: None,
+                thread_pitch: None,
+                min_bore_diameter: None,
+                taper_half_angle: None,
+            };
+            tool.resolve_defaults();
+
+            let pts = tool.profile(4);
+            let last_z = pts.last().unwrap().1;
+            assert_approx(
+                last_z,
+                cutting_length * 3.0,
+                1e-10,
+                &format!("{:?}: last Z should be cutting_length * 3.0", tt),
+            );
+        }
+    }
+
+    #[test]
+    fn profile_with_explicit_overall_length_uses_stored_value() {
+        let mut tool = Tool {
+            id: Uuid::parse_str("7f3c1a00-0000-0000-0000-000000000001").unwrap(),
+            name: "test".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: 20.0,
+            shank_diameter: 10.0,
+            overall_length: Some(100.0),
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        tool.resolve_defaults();
+
+        let pts = tool.profile(4);
+        let last_z = pts.last().unwrap().1;
+        assert_approx(
+            last_z,
+            100.0,
+            1e-10,
+            "last Z should be explicit overall_length",
+        );
+    }
+
     // ---- Profile invariants across ALL tool types ----
 
     #[test]

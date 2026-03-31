@@ -575,6 +575,141 @@ mod tests {
         assert!(matches!(result, Err(AppError::InvalidInput(_))));
     }
 
+    // ── Optional-field tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn add_tool_with_all_three_optional_fields_omitted() {
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "Bare".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let tool = add_tool_inner(input, &state.project).expect("add should succeed");
+        assert!(tool.material.is_none());
+        assert!(tool.flute_count.is_none());
+        assert!(tool.overall_length.is_none());
+    }
+
+    #[test]
+    fn blank_string_material_becomes_none() {
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "Whitespace".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: Some("  ".to_string()),
+            diameter: 10.0,
+            flute_count: Some(4),
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: None,
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let tool = add_tool_inner(input, &state.project).expect("add should succeed");
+        assert!(
+            tool.material.is_none(),
+            "blank-string material should become None"
+        );
+    }
+
+    #[test]
+    fn edit_tool_clears_previously_set_optional_values() {
+        let state = AppState::default();
+        let tool =
+            add_tool_inner(make_input("Original"), &state.project).expect("add should succeed");
+        assert_eq!(tool.material, Some("carbide".to_string()));
+        assert_eq!(tool.flute_count, Some(4));
+
+        let updated = edit_tool_inner(
+            &tool.id.to_string(),
+            ToolInput {
+                name: "Cleared".to_string(),
+                tool_type: ToolType::FlatEndmill,
+                material: None,
+                diameter: 10.0,
+                flute_count: None,
+                default_spindle_speed: None,
+                default_feed_rate: None,
+                cutting_length: None,
+                shank_diameter: None,
+                overall_length: None,
+                corner_radius: None,
+                included_angle: None,
+                point_angle: None,
+                pilot_diameter: None,
+                pilot_length: None,
+                thread_pitch: None,
+                min_bore_diameter: None,
+                taper_half_angle: None,
+            },
+            &state.project,
+        )
+        .expect("edit should succeed");
+
+        assert!(updated.material.is_none(), "material should be cleared");
+        assert!(
+            updated.flute_count.is_none(),
+            "flute_count should be cleared"
+        );
+        assert!(
+            updated.overall_length.is_none(),
+            "overall_length should be cleared"
+        );
+    }
+
+    #[test]
+    fn validation_passes_with_none_overall_length() {
+        let state = AppState::default();
+        let input = ToolInput {
+            name: "No OAL".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: Some("carbide".to_string()),
+            diameter: 10.0,
+            flute_count: Some(4),
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: Some(50.0),
+            shank_diameter: None,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        let tool = add_tool_inner(input, &state.project)
+            .expect("should succeed — OAL >= CL check is skipped when OAL is None");
+        assert_eq!(tool.cutting_length, 50.0);
+        assert!(tool.overall_length.is_none());
+    }
+
     #[test]
     fn edit_validation_rejects_invalid_input() {
         let state = AppState::default();

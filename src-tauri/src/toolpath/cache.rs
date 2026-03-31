@@ -207,6 +207,41 @@ mod tests {
         assert_ne!(k1, k2);
     }
 
+    // ── Optional-field tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn cache_key_with_none_fields_is_deterministic() {
+        let op = make_operation();
+        let stock = make_stock();
+        let mut tool = make_tool();
+        tool.material = None;
+        tool.flute_count = None;
+        tool.overall_length = None;
+
+        let k1 = compute_cache_key(&op, &tool, &stock, Some("abc123"), "v1");
+        let k2 = compute_cache_key(&op, &tool, &stock, Some("abc123"), "v1");
+        assert_eq!(k1, k2, "cache key with None fields must be deterministic");
+    }
+
+    #[test]
+    fn cache_key_changes_when_optional_field_goes_from_none_to_some() {
+        let op = make_operation();
+        let stock = make_stock();
+
+        let mut tool_none = make_tool();
+        tool_none.material = None;
+
+        let mut tool_some = make_tool();
+        tool_some.material = Some("carbide".to_string());
+
+        let k_none = compute_cache_key(&op, &tool_none, &stock, Some("abc123"), "v1");
+        let k_some = compute_cache_key(&op, &tool_some, &stock, Some("abc123"), "v1");
+        assert_ne!(
+            k_none, k_some,
+            "cache key must differ when material changes from None to Some"
+        );
+    }
+
     #[test]
     fn changed_name_does_not_change_key() {
         let op = make_operation();

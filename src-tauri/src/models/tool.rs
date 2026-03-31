@@ -670,6 +670,132 @@ mod tests {
         );
     }
 
+    // ---- Optional-field tests ----
+
+    #[test]
+    fn serde_round_trip_with_none_optional_fields() {
+        let tool = Tool {
+            id: Uuid::new_v4(),
+            name: "Bare Minimum".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: 30.0,
+            shank_diameter: 10.0,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+
+        let value = serde_json::to_value(&tool).expect("serialize");
+        // Fields with skip_serializing_if must be absent, not null.
+        assert!(value.get("material").is_none(), "material must be absent");
+        assert!(
+            value.get("fluteCount").is_none(),
+            "fluteCount must be absent"
+        );
+        assert!(
+            value.get("overallLength").is_none(),
+            "overallLength must be absent"
+        );
+
+        let recovered: Tool = serde_json::from_value(value).expect("deserialize");
+        assert_eq!(recovered.material, None);
+        assert_eq!(recovered.flute_count, None);
+        assert_eq!(recovered.overall_length, None);
+        assert_eq!(recovered, tool);
+    }
+
+    #[test]
+    fn backward_compat_deserialize_with_optional_fields_present() {
+        let json = r#"{
+            "id": "7f3c1a00-0000-0000-0000-000000000001",
+            "name": "Old Tool",
+            "type": "flat_endmill",
+            "material": "hss",
+            "diameter": 10.0,
+            "fluteCount": 2,
+            "overallLength": 50.0,
+            "cuttingLength": 25.0,
+            "shankDiameter": 10.0
+        }"#;
+        let tool: Tool = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(tool.material, Some("hss".to_string()));
+        assert_eq!(tool.flute_count, Some(2));
+        assert_eq!(tool.overall_length, Some(50.0));
+    }
+
+    #[test]
+    fn resolve_defaults_does_not_fill_overall_length() {
+        let mut tool = Tool {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 10.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: 0.0,
+            shank_diameter: 0.0,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        tool.resolve_defaults();
+        // cutting_length and shank_diameter should be filled
+        assert_eq!(tool.cutting_length, 30.0); // diameter * 3
+        assert_eq!(tool.shank_diameter, 10.0); // diameter
+                                               // overall_length must remain None
+        assert!(
+            tool.overall_length.is_none(),
+            "resolve_defaults must not fill overall_length"
+        );
+    }
+
+    #[test]
+    fn resolve_defaults_still_fills_cutting_length_and_shank_diameter() {
+        let mut tool = Tool {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            tool_type: ToolType::FlatEndmill,
+            material: None,
+            diameter: 8.0,
+            flute_count: None,
+            default_spindle_speed: None,
+            default_feed_rate: None,
+            cutting_length: 0.0,
+            shank_diameter: 0.0,
+            overall_length: None,
+            corner_radius: None,
+            included_angle: None,
+            point_angle: None,
+            pilot_diameter: None,
+            pilot_length: None,
+            thread_pitch: None,
+            min_bore_diameter: None,
+            taper_half_angle: None,
+        };
+        tool.resolve_defaults();
+        assert_eq!(tool.cutting_length, 24.0); // 8.0 * 3
+        assert_eq!(tool.shank_diameter, 8.0);
+    }
+
     #[test]
     fn z_clearance_zero_for_all_types() {
         // Universal invariant: z_clearance(0.0) == Some(0.0) for all tool types.
