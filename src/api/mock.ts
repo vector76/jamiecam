@@ -61,6 +61,11 @@ export async function saveProject(_path: string): Promise<void> {
   // no-op
 }
 
+/** Mock: no-op save to current path (always succeeds). */
+export async function saveProjectCurrent(): Promise<void> {
+  // no-op
+}
+
 /** Mock: returns a default ProjectSnapshot without reading any file. */
 export async function loadProject(_path: string): Promise<ProjectSnapshot> {
   return { ...DEFAULT_SNAPSHOT }

@@ -88,8 +88,38 @@ pub(crate) fn save_project_inner(
         project.modified_at = now;
     }
 
-    let project = read_project(project_lock)?;
-    crate::project::serialization::save(&project, &path_buf)
+    {
+        let project = read_project(project_lock)?;
+        crate::project::serialization::save(&project, &path_buf)?;
+    }
+
+    {
+        let mut project = write_project(project_lock)?;
+        project.file_path = Some(path_buf);
+    }
+
+    Ok(())
+}
+
+// ── save_project_current ─────────────────────────────────────────────────────
+
+/// Testable inner logic for [`save_project_current`].
+///
+/// Reads the stored `file_path` from the project. If no path has been set
+/// (i.e. the project has never been saved or loaded), returns
+/// [`AppError::InvalidInput`]. Otherwise delegates to [`save_project_inner`].
+pub(crate) fn save_project_current_inner(project_lock: &RwLock<Project>) -> Result<(), AppError> {
+    let path = {
+        let project = read_project(project_lock)?;
+        project.file_path.clone()
+    };
+
+    match path {
+        Some(p) => save_project_inner(&p.to_string_lossy(), project_lock),
+        None => Err(AppError::InvalidInput(
+            "No project file path set — use Save As".to_string(),
+        )),
+    }
 }
 
 // ── load_project ──────────────────────────────────────────────────────────────
@@ -160,10 +190,63 @@ pub async fn open_model(
     Ok(mesh)
 }
 
-/// Serialize the active project to a `.jcam` file at `path`.
+/// Serialize the active project to a `.jcam` file at `path` (Save As).
+///
+/// Updates the stored file path, clears the dirty flag, and emits a
+/// `project:modified` event.
 #[tauri::command]
-pub async fn save_project(path: String, state: tauri::State<'_, AppState>) -> Result<(), AppError> {
-    save_project_inner(&path, &state.project)
+pub async fn save_project(
+    path: String,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    save_project_inner(&path, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = false;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, false)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
+}
+
+/// Save the active project to its current file path (silent Save).
+///
+/// Returns [`AppError::InvalidInput`] if no path has been set. Clears the
+/// dirty flag and emits a `project:modified` event on success.
+#[tauri::command]
+pub async fn save_project_current(
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    save_project_current_inner(&state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = false;
+    }
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, false)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
 }
 
 /// Load a `.jcam` file and replace the active project.
@@ -177,6 +260,12 @@ pub async fn load_project(
 ) -> Result<ProjectSnapshot, AppError> {
     load_project_inner(&path, &state.project)?;
 
+    // The inner function replaces the entire project, so set file_path after.
+    {
+        let mut project = write_project(&state.project)?;
+        project.file_path = Some(PathBuf::from(&path));
+    }
+
     {
         let mut flag = state
             .project_is_open
@@ -185,11 +274,15 @@ pub async fn load_project(
         *flag = true;
     }
 
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, dirty)?;
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = false;
+    }
+
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, false)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(snapshot)
@@ -213,11 +306,15 @@ pub async fn new_project(
         *flag = true;
     }
 
-    let dirty = *state
-        .dirty
-        .read()
-        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, dirty)?;
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = false;
+    }
+
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, false)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(snapshot)
@@ -409,6 +506,172 @@ mod tests {
         let state = AppState::default();
         let result = save_project_inner("/nonexistent_dir_jamiecam/project.jcam", &state.project);
         assert!(matches!(result, Err(AppError::ProjectSave(_))));
+    }
+
+    // ── save sets file_path ────────────────────────────────────────────────
+
+    #[test]
+    fn save_project_sets_file_path() {
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_save_sets_path.jcam");
+
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        let project = state.project.read().expect("read lock");
+        assert_eq!(
+            project.file_path.as_ref().map(|p| p.as_path()),
+            Some(tmp.as_path()),
+            "file_path must be set after save"
+        );
+    }
+
+    // ── save_project_current ─────────────────────────────────────────────
+
+    #[test]
+    fn save_project_current_reuses_stored_path() {
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_save_current.jcam");
+
+        // First do a Save As to set the path.
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save-as should succeed");
+
+        // Mutate the project so we can verify re-save picks up the change.
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.name = "Updated Name".to_string();
+        }
+
+        // Save to current path — should succeed without providing a path.
+        save_project_current_inner(&state.project).expect("save-current should succeed");
+
+        // Load and verify the updated name was persisted.
+        let state2 = AppState::default();
+        let snap = load_project_inner(&tmp.to_string_lossy(), &state2.project)
+            .expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(snap.project_name, "Updated Name");
+    }
+
+    #[test]
+    fn save_project_current_returns_error_when_no_path_set() {
+        let state = AppState::default();
+        let result = save_project_current_inner(&state.project);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput when no file_path is set, got: {result:?}"
+        );
+    }
+
+    // ── load sets file_path ──────────────────────────────────────────────
+
+    #[test]
+    fn load_project_inner_does_not_set_file_path() {
+        // load_project_inner replaces the project — file_path setting is the
+        // wrapper's responsibility. After inner call, file_path should be None.
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_load_path.jcam");
+
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+
+        // Reset state and load.
+        new_project_inner(&state.project).expect("new_project");
+        load_project_inner(&tmp.to_string_lossy(), &state.project).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        // The inner function replaces the entire project (which defaults to
+        // file_path: None). The wrapper is responsible for setting it.
+        let project = state.project.read().expect("read lock");
+        assert!(
+            project.file_path.is_none(),
+            "load_project_inner should not set file_path (wrapper does)"
+        );
+    }
+
+    // ── new clears file_path ─────────────────────────────────────────────
+
+    #[test]
+    fn new_project_clears_file_path() {
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_new_clears_path.jcam");
+
+        // Save to establish a file_path.
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        {
+            let p = state.project.read().expect("read lock");
+            assert!(p.file_path.is_some(), "precondition: path should be set");
+        }
+
+        // New project replaces with default, which has file_path: None.
+        new_project_inner(&state.project).expect("new_project should succeed");
+
+        let project = state.project.read().expect("read lock");
+        assert!(
+            project.file_path.is_none(),
+            "file_path must be None after new_project"
+        );
+    }
+
+    // ── dirty flag management (inner-level) ──────────────────────────────
+
+    #[test]
+    fn save_project_inner_does_not_touch_dirty_flag() {
+        // dirty flag management is the wrapper's responsibility.
+        let state = AppState::default();
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_save_dirty.jcam");
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        let dirty = *state.dirty.read().expect("read lock");
+        assert!(
+            dirty,
+            "save_project_inner must not clear dirty (wrapper does)"
+        );
+    }
+
+    #[test]
+    fn load_project_inner_does_not_touch_dirty_flag() {
+        let state = AppState::default();
+        let tmp = std::env::temp_dir().join("jcam_cmd_test_load_dirty.jcam");
+        save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
+
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        load_project_inner(&tmp.to_string_lossy(), &state.project).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        let dirty = *state.dirty.read().expect("read lock");
+        assert!(
+            dirty,
+            "load_project_inner must not clear dirty (wrapper does)"
+        );
+    }
+
+    #[test]
+    fn new_project_inner_does_not_touch_dirty_flag() {
+        let state = AppState::default();
+        {
+            let mut flag = state.dirty.write().expect("write lock");
+            *flag = true;
+        }
+
+        new_project_inner(&state.project).expect("new_project should succeed");
+
+        let dirty = *state.dirty.read().expect("read lock");
+        assert!(
+            dirty,
+            "new_project_inner must not clear dirty (wrapper does)"
+        );
     }
 
     // ── open_model ────────────────────────────────────────────────────────

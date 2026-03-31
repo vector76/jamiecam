@@ -122,6 +122,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::file::open_model,
             commands::file::save_project,
+            commands::file::save_project_current,
             commands::file::load_project,
             commands::file::new_project,
             commands::project::get_project_snapshot,

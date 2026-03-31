@@ -42,6 +42,16 @@ export async function saveProject(path: string): Promise<void> {
 }
 
 /**
+ * Save the active project to its current file path (silent Save).
+ *
+ * Requires a prior Save As or Load so the backend has a stored path.
+ * @throws AppError with kind "InvalidInput" if no path has been set.
+ */
+export async function saveProjectCurrent(): Promise<void> {
+  return typedInvoke<void>('save_project_current')
+}
+
+/**
  * Load a .jcam project file and replace the active project.
  *
  * @param path Absolute path to the .jcam file.
