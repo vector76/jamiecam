@@ -1,305 +1,96 @@
 /**
- * Tests for Toolbar.tsx — file operation buttons and error notifications.
+ * Tests for Toolbar.tsx — verifies button rendering and delegation to
+ * shared menu action handlers.
  *
- * @tauri-apps/plugin-dialog and the API layer are mocked so tests run in
- * jsdom without a real Tauri context.
+ * Detailed handler logic is tested in src/lib/menuActions.test.ts.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Toolbar } from './Toolbar'
-import { useProjectStore } from '../../store/projectStore'
-import { useViewportStore } from '../../store/viewportStore'
-import type { MeshData, ProjectSnapshot, LineGeometryData } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
-  save: vi.fn(),
-}))
-
-vi.mock('../../api/file', () => ({
-  openModel: vi.fn(),
-  newProject: vi.fn(),
-  saveProject: vi.fn(),
-  loadProject: vi.fn(),
-  getProjectSnapshot: vi.fn(),
-}))
-
-vi.mock('../../api/toolpath', () => ({
-  getToolpathGeometry: vi.fn(),
+vi.mock('../../lib/menuActions', () => ({
+  handleOpenModel: vi.fn().mockResolvedValue(undefined),
+  handleNewProject: vi.fn().mockResolvedValue(undefined),
+  handleSaveAs: vi.fn().mockResolvedValue(undefined),
+  handleOpenProject: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../api/window', () => ({
-  openToolEditor: vi.fn(),
+  openToolEditor: vi.fn().mockResolvedValue(undefined),
 }))
 
-// Dynamic import inside updateWindowTitle — mock the whole module.
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(() => ({ setTitle: vi.fn() })),
-}))
-
-// Import mocked modules for control in tests.
-const { open, save } = await import('@tauri-apps/plugin-dialog')
-const api = await import('../../api/file')
-const toolpathApi = await import('../../api/toolpath')
+const menuActions = await import('../../lib/menuActions')
 const windowApi = await import('../../api/window')
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
-
-const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2], faceGroups: [] }
-const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false }
-const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false }
-const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 0, 0], colours: [1, 0, 0, 1, 0, 0], types: [1] }
-const OP_ID = 'op-1'
-const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }], projectIsOpen: false, filePath: null, dirty: false }
-const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }], projectIsOpen: false, filePath: null, dirty: false }
-
-// ── Setup ─────────────────────────────────────────────────────────────────────
+// ── Setup ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks()
-  useProjectStore.setState({ snapshot: null })
-  useViewportStore.setState({ meshData: null, toolpathGeometry: null, orbitTarget: [0, 0, 0], zoom: 1 })
 })
 
-// ── Open Model ────────────────────────────────────────────────────────────────
+// ── Button rendering ─────────────────────────────────────────────────────────
 
-describe('Toolbar — Open Model', () => {
-  it('renders an Open Model button', () => {
+describe('Toolbar — button rendering', () => {
+  it('renders Open Model button', () => {
     render(<Toolbar />)
     expect(screen.getByRole('button', { name: /open model/i })).toBeInTheDocument()
   })
 
-  it('calls openModel with the selected path', async () => {
-    vi.mocked(open).mockResolvedValue('/models/part.step')
-    vi.mocked(api.openModel).mockResolvedValue(MESH)
-    vi.mocked(api.getProjectSnapshot).mockResolvedValue(SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => expect(api.openModel).toHaveBeenCalledWith('/models/part.step'))
-  })
-
-  it('updates viewportStore.meshData on success', async () => {
-    vi.mocked(open).mockResolvedValue('/models/part.step')
-    vi.mocked(api.openModel).mockResolvedValue(MESH)
-    vi.mocked(api.getProjectSnapshot).mockResolvedValue(SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => expect(useViewportStore.getState().meshData).toEqual(MESH))
-  })
-
-  it('updates projectStore.snapshot on success', async () => {
-    vi.mocked(open).mockResolvedValue('/models/part.step')
-    vi.mocked(api.openModel).mockResolvedValue(MESH)
-    vi.mocked(api.getProjectSnapshot).mockResolvedValue(SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => expect(useProjectStore.getState().snapshot).toEqual(SNAPSHOT))
-  })
-
-  it('does nothing when the dialog is cancelled', async () => {
-    vi.mocked(open).mockResolvedValue(null)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => expect(api.openModel).not.toHaveBeenCalled())
-  })
-
-  it('shows an error notification when openModel throws', async () => {
-    vi.mocked(open).mockResolvedValue('/bad.step')
-    vi.mocked(api.openModel).mockRejectedValue({ kind: 'GeometryImport', message: 'Failed to parse file' })
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByText(/failed to parse file/i)).toBeInTheDocument()
-  })
-
-  it('error notification is dismissible', async () => {
-    vi.mocked(open).mockResolvedValue('/bad.step')
-    vi.mocked(api.openModel).mockRejectedValue({ kind: 'GeometryImport', message: 'Import error' })
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
-
-    await waitFor(() => screen.getByRole('alert'))
-    fireEvent.click(screen.getByRole('button', { name: /dismiss error/i }))
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  })
-})
-
-// ── New Project ───────────────────────────────────────────────────────────────
-
-describe('Toolbar — New Project', () => {
-  it('renders a New Project button', () => {
+  it('renders New Project button', () => {
     render(<Toolbar />)
     expect(screen.getByRole('button', { name: /new project/i })).toBeInTheDocument()
   })
 
-  it('clears viewportStore.meshData', async () => {
-    useViewportStore.setState({ meshData: MESH })
-    vi.mocked(api.newProject).mockResolvedValue(EMPTY_SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /new project/i }))
-
-    await waitFor(() => expect(useViewportStore.getState().meshData).toBeNull())
-  })
-
-  it('updates projectStore.snapshot', async () => {
-    vi.mocked(api.newProject).mockResolvedValue(EMPTY_SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /new project/i }))
-
-    await waitFor(() => expect(useProjectStore.getState().snapshot).toEqual(EMPTY_SNAPSHOT))
-  })
-
-  it('shows an error notification when newProject throws', async () => {
-    vi.mocked(api.newProject).mockRejectedValue({ kind: 'Io', message: 'Disk full' })
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /new project/i }))
-
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-    expect(screen.getByText(/disk full/i)).toBeInTheDocument()
-  })
-})
-
-// ── Save Project ──────────────────────────────────────────────────────────────
-
-describe('Toolbar — Save Project', () => {
-  it('renders a Save Project button', () => {
+  it('renders Save Project button', () => {
     render(<Toolbar />)
     expect(screen.getByRole('button', { name: /save project/i })).toBeInTheDocument()
   })
 
-  it('calls saveProject with the chosen path', async () => {
-    vi.mocked(save).mockResolvedValue('/output/project.jcam')
-    vi.mocked(api.saveProject).mockResolvedValue(undefined)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /save project/i }))
-
-    await waitFor(() => expect(api.saveProject).toHaveBeenCalledWith('/output/project.jcam'))
-  })
-
-  it('does nothing when the save dialog is cancelled', async () => {
-    vi.mocked(save).mockResolvedValue(null)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /save project/i }))
-
-    await waitFor(() => expect(api.saveProject).not.toHaveBeenCalled())
-  })
-
-  it('shows an error notification when saveProject throws', async () => {
-    vi.mocked(save).mockResolvedValue('/output/project.jcam')
-    vi.mocked(api.saveProject).mockRejectedValue({ kind: 'Io', message: 'Permission denied' })
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /save project/i }))
-
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-  })
-})
-
-// ── Open Project ──────────────────────────────────────────────────────────────
-
-describe('Toolbar — Open Project', () => {
-  it('renders an Open Project button', () => {
+  it('renders Open Project button', () => {
     render(<Toolbar />)
     expect(screen.getByRole('button', { name: /open project/i })).toBeInTheDocument()
   })
 
-  it('calls loadProject with the chosen path and updates snapshot', async () => {
-    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
-    vi.mocked(api.loadProject).mockResolvedValue(EMPTY_SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(api.loadProject).toHaveBeenCalledWith('/projects/job.jcam'))
-    expect(useProjectStore.getState().snapshot).toEqual(EMPTY_SNAPSHOT)
-  })
-
-  it('reloads the model mesh when snapshot has a modelPath', async () => {
-    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
-    vi.mocked(api.loadProject).mockResolvedValue(SNAPSHOT) // SNAPSHOT has modelPath
-    vi.mocked(api.openModel).mockResolvedValue(MESH)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(api.openModel).toHaveBeenCalledWith(SNAPSHOT.modelPath))
-    expect(useViewportStore.getState().meshData).toEqual(MESH)
-  })
-
-  it('clears meshData when snapshot has no modelPath', async () => {
-    useViewportStore.setState({ meshData: MESH })
-    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
-    vi.mocked(api.loadProject).mockResolvedValue(EMPTY_SNAPSHOT)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(useViewportStore.getState().meshData).toBeNull())
-  })
-
-  it('shows an error notification when loadProject throws', async () => {
-    vi.mocked(open).mockResolvedValue('/bad.jcam')
-    vi.mocked(api.loadProject).mockRejectedValue({ kind: 'FileNotFound' })
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-  })
-
-  it('calls getToolpathGeometry for non-stale operations and updates viewport', async () => {
-    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
-    vi.mocked(api.loadProject).mockResolvedValue(SNAPSHOT_WITH_OP)
-    vi.mocked(toolpathApi.getToolpathGeometry).mockResolvedValue(LINE_GEOMETRY)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(toolpathApi.getToolpathGeometry).toHaveBeenCalledWith(OP_ID))
-    expect(useViewportStore.getState().toolpathGeometry).toEqual(LINE_GEOMETRY)
-  })
-
-  it('skips getToolpathGeometry for stale operations', async () => {
-    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
-    vi.mocked(api.loadProject).mockResolvedValue(SNAPSHOT_WITH_STALE_OP)
-
-    render(<Toolbar />)
-    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
-
-    await waitFor(() => expect(api.loadProject).toHaveBeenCalled())
-    expect(toolpathApi.getToolpathGeometry).not.toHaveBeenCalled()
-  })
-})
-
-// ── Tool Editor ──────────────────────────────────────────────────────────────
-
-describe('Toolbar — Tool Editor', () => {
-  it('renders a Tool Editor button', () => {
+  it('renders Tool Editor button', () => {
     render(<Toolbar />)
     expect(screen.getByRole('button', { name: /tool editor/i })).toBeInTheDocument()
   })
+})
 
-  it('calls openToolEditor when clicked', async () => {
-    vi.mocked(windowApi.openToolEditor).mockResolvedValue(undefined)
+// ── Handler delegation ───────────────────────────────────────────────────────
 
+describe('Toolbar — handler delegation', () => {
+  it('calls handleOpenModel when Open Model is clicked', async () => {
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /open model/i }))
+
+    await waitFor(() => expect(menuActions.handleOpenModel).toHaveBeenCalled())
+  })
+
+  it('calls handleNewProject when New Project is clicked', async () => {
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /new project/i }))
+
+    await waitFor(() => expect(menuActions.handleNewProject).toHaveBeenCalled())
+  })
+
+  it('calls handleSaveAs when Save Project is clicked', async () => {
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /save project/i }))
+
+    await waitFor(() => expect(menuActions.handleSaveAs).toHaveBeenCalled())
+  })
+
+  it('calls handleOpenProject when Open Project is clicked', async () => {
+    render(<Toolbar />)
+    fireEvent.click(screen.getByRole('button', { name: /open project/i }))
+
+    await waitFor(() => expect(menuActions.handleOpenProject).toHaveBeenCalled())
+  })
+
+  it('calls openToolEditor when Tool Editor is clicked', async () => {
     render(<Toolbar />)
     fireEvent.click(screen.getByRole('button', { name: /tool editor/i }))
 
