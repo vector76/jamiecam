@@ -185,14 +185,17 @@ fn open_tool_editor_window(app: &tauri::AppHandle) {
 
     let handle = app.clone();
     std::thread::spawn(move || {
-        let _ = tauri::WebviewWindowBuilder::new(
+        if let Ok(win) = tauri::WebviewWindowBuilder::new(
             &handle,
             "tool-editor",
             tauri::WebviewUrl::App("/".into()),
         )
         .title("Tool Editor")
         .inner_size(900.0, 650.0)
-        .build();
+        .build()
+        {
+            let _ = win.remove_menu();
+        }
     });
 }
 
