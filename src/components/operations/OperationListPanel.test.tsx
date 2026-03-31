@@ -60,6 +60,8 @@ const SNAPSHOT_WITH_OPS: ProjectSnapshot = {
     { id: OP2_ID, name: 'Rough Pocket', operationType: 'pocket', enabled: false, needsRecalculate: true },
   ],
   projectIsOpen: false,
+  filePath: null,
+  dirty: false,
 }
 
 const SNAPSHOT_NO_TOOLS: ProjectSnapshot = {

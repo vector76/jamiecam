@@ -86,6 +86,8 @@ const SNAPSHOT_OPEN: ProjectSnapshot = {
   modelChecksum: null,
   modifiedAt: '',
   projectIsOpen: true,
+  filePath: null,
+  dirty: false,
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

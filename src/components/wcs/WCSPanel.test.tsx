@@ -14,7 +14,7 @@ const fileApi = await import('../../api/file')
 
 const SNAPSHOT_NO_WCS = {
   stock: null, tools: [], operations: [], wcs: [],
-  projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false,
+  projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false, filePath: null, dirty: false,
 }
 const SNAPSHOT_WITH_WCS = {
   ...SNAPSHOT_NO_WCS,

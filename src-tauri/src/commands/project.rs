@@ -75,12 +75,16 @@ pub struct ProjectSnapshot {
     pub operations: Vec<OperationSummary>,
     /// Whether a project is actively open.
     pub project_is_open: bool,
+    /// Absolute path to the `.jcam` project file, if saved/loaded.
+    pub file_path: Option<String>,
+    /// Whether the project has unsaved changes.
+    pub dirty: bool,
 }
 
 impl ProjectSnapshot {
-    /// Build a snapshot from a [`Project`] reference and the current
-    /// `project_is_open` flag.
-    pub fn build(p: &Project, project_is_open: bool) -> Self {
+    /// Build a snapshot from a [`Project`] reference, the current
+    /// `project_is_open` flag, and the `dirty` flag.
+    pub fn build(p: &Project, project_is_open: bool, dirty: bool) -> Self {
         let tools = p
             .tools
             .iter()
@@ -151,6 +155,11 @@ impl ProjectSnapshot {
             wcs: p.wcs.clone(),
             operations,
             project_is_open,
+            file_path: p
+                .file_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned()),
+            dirty,
         }
     }
 }
@@ -161,9 +170,10 @@ impl ProjectSnapshot {
 pub fn get_project_snapshot_inner(
     project_lock: &RwLock<Project>,
     project_is_open: bool,
+    dirty: bool,
 ) -> Result<ProjectSnapshot, AppError> {
     let project = read_project(project_lock)?;
-    Ok(ProjectSnapshot::build(&project, project_is_open))
+    Ok(ProjectSnapshot::build(&project, project_is_open, dirty))
 }
 
 /// Return a lightweight snapshot of the current project.
@@ -177,7 +187,11 @@ pub async fn get_project_snapshot(
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    get_project_snapshot_inner(&state.project, is_open)
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    get_project_snapshot_inner(&state.project, is_open, dirty)
 }
 
 /// Testable inner logic for [`is_project_open`].
@@ -208,8 +222,8 @@ mod tests {
     #[test]
     fn snapshot_of_default_project_has_no_model() {
         let state = AppState::default();
-        let snap =
-            get_project_snapshot_inner(&state.project, false).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project, false, false)
+            .expect("snapshot should not fail");
         assert!(snap.model_path.is_none());
         assert!(snap.model_checksum.is_none());
         assert_eq!(snap.project_name, "");
@@ -228,8 +242,8 @@ mod tests {
             p.name = "My Project".to_string();
             p.modified_at = "2026-01-01T00:00:00Z".to_string();
         }
-        let snap =
-            get_project_snapshot_inner(&state.project, false).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project, false, false)
+            .expect("snapshot should not fail");
         assert_eq!(snap.project_name, "My Project");
         assert_eq!(snap.modified_at, "2026-01-01T00:00:00Z");
     }
@@ -255,8 +269,8 @@ mod tests {
                 shape: None,
             });
         }
-        let snap =
-            get_project_snapshot_inner(&state.project, false).expect("snapshot should not fail");
+        let snap = get_project_snapshot_inner(&state.project, false, false)
+            .expect("snapshot should not fail");
         assert_eq!(snap.model_path.as_deref(), Some("/home/user/part.step"));
         assert_eq!(snap.model_checksum.as_deref(), Some("deadbeef"));
     }
@@ -273,6 +287,8 @@ mod tests {
             wcs: vec![],
             operations: vec![],
             project_is_open: false,
+            file_path: None,
+            dirty: false,
         };
         let value = serde_json::to_value(&snap).expect("serialize");
         assert!(
@@ -301,6 +317,11 @@ mod tests {
             value.get("projectIsOpen").is_some(),
             "expected camelCase projectIsOpen"
         );
+        assert!(
+            value.get("filePath").is_some(),
+            "expected camelCase filePath"
+        );
+        assert!(value.get("dirty").is_some(), "expected dirty field");
     }
 
     #[test]
@@ -332,7 +353,7 @@ mod tests {
             });
         }
 
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert_eq!(snap.tools.len(), 1);
         assert_eq!(snap.tools[0].id, tool_id);
         assert_eq!(snap.tools[0].name, "10mm Flat Endmill");
@@ -371,7 +392,7 @@ mod tests {
             }));
         }
 
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert!(snap.stock.is_some());
         let StockDefinition::Box(b) = snap.stock.unwrap();
         assert_eq!(b.width, 100.0);
@@ -404,7 +425,7 @@ mod tests {
             });
         }
 
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert_eq!(snap.wcs.len(), 1);
         assert_eq!(snap.wcs[0].id, wcs_id);
         assert_eq!(snap.wcs[0].name, "G54");
@@ -461,7 +482,7 @@ mod tests {
             });
         }
 
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert_eq!(snap.operations.len(), 2);
 
         assert_eq!(snap.operations[0].id, op_id);
@@ -551,7 +572,7 @@ mod tests {
             });
         }
 
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert!(!snap.operations[0].needs_recalculate);
     }
 
@@ -646,7 +667,7 @@ mod tests {
         }
 
         // With checksum-A in cache and matching model — should not need recalculate.
-        let snap = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert!(!snap.operations[0].needs_recalculate);
 
         // Change the model checksum — cache key no longer matches.
@@ -655,7 +676,7 @@ mod tests {
             p.source_model.as_mut().unwrap().checksum = "checksum-B".to_string();
         }
 
-        let snap2 = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap2 = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert!(snap2.operations[0].needs_recalculate);
     }
 
@@ -705,10 +726,11 @@ mod tests {
     #[test]
     fn snapshot_project_is_open_reflects_flag() {
         let state = AppState::default();
-        let snap_closed = get_project_snapshot_inner(&state.project, false).expect("snapshot");
+        let snap_closed =
+            get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
         assert!(!snap_closed.project_is_open);
 
-        let snap_open = get_project_snapshot_inner(&state.project, true).expect("snapshot");
+        let snap_open = get_project_snapshot_inner(&state.project, true, false).expect("snapshot");
         assert!(snap_open.project_is_open);
     }
 }

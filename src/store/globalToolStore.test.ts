@@ -50,6 +50,8 @@ const SNAPSHOT: ProjectSnapshot = {
   wcs: [],
   operations: [],
   projectIsOpen: false,
+  filePath: null,
+  dirty: false,
 }
 
 // ── Setup ────────────────────────────────────────────────────────────────────

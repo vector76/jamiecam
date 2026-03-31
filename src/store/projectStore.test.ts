@@ -6,6 +6,8 @@ import {
   useOperations,
   useTools,
   useStock,
+  useFilePath,
+  useDirty,
 } from './projectStore'
 import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary } from '../api/types'
 
@@ -19,6 +21,8 @@ const SNAPSHOT: ProjectSnapshot = {
   wcs: [],
   operations: [],
   projectIsOpen: false,
+  filePath: null,
+  dirty: false,
 }
 
 beforeEach(() => {
@@ -205,5 +209,73 @@ describe('projectStore — useStock selector', () => {
     useProjectStore.setState({ snapshot: { ...SNAPSHOT, stock } })
     const { result } = renderHook(() => useStock())
     expect(result.current).toEqual(stock)
+  })
+})
+
+describe('projectStore — useFilePath selector', () => {
+  it('returns null when snapshot is null', () => {
+    const { result } = renderHook(() => useFilePath())
+    expect(result.current).toBeNull()
+  })
+
+  it('returns null when filePath is null', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    const { result } = renderHook(() => useFilePath())
+    expect(result.current).toBeNull()
+  })
+
+  it('returns filePath when snapshot has filePath', () => {
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT, filePath: '/home/user/project.jcam' } })
+    const { result } = renderHook(() => useFilePath())
+    expect(result.current).toBe('/home/user/project.jcam')
+  })
+
+  it('updates when snapshot changes', () => {
+    const { result } = renderHook(() => useFilePath())
+    expect(result.current).toBeNull()
+
+    act(() => {
+      useProjectStore.getState().setSnapshot({ ...SNAPSHOT, filePath: '/tmp/test.jcam' })
+    })
+    expect(result.current).toBe('/tmp/test.jcam')
+
+    act(() => {
+      useProjectStore.getState().setSnapshot(null)
+    })
+    expect(result.current).toBeNull()
+  })
+})
+
+describe('projectStore — useDirty selector', () => {
+  it('returns false when snapshot is null', () => {
+    const { result } = renderHook(() => useDirty())
+    expect(result.current).toBe(false)
+  })
+
+  it('returns false when dirty is false', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    const { result } = renderHook(() => useDirty())
+    expect(result.current).toBe(false)
+  })
+
+  it('returns true when dirty is true', () => {
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT, dirty: true } })
+    const { result } = renderHook(() => useDirty())
+    expect(result.current).toBe(true)
+  })
+
+  it('updates when snapshot changes', () => {
+    const { result } = renderHook(() => useDirty())
+    expect(result.current).toBe(false)
+
+    act(() => {
+      useProjectStore.getState().setSnapshot({ ...SNAPSHOT, dirty: true })
+    })
+    expect(result.current).toBe(true)
+
+    act(() => {
+      useProjectStore.getState().setSnapshot({ ...SNAPSHOT, dirty: false })
+    })
+    expect(result.current).toBe(false)
   })
 })

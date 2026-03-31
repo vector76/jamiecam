@@ -104,7 +104,7 @@ pub(crate) fn load_project_inner(
 ) -> Result<ProjectSnapshot, AppError> {
     let path_buf = PathBuf::from(path_str);
     let new_project = crate::project::serialization::load(&path_buf)?;
-    let snapshot = ProjectSnapshot::build(&new_project, false);
+    let snapshot = ProjectSnapshot::build(&new_project, false, false);
     let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
@@ -120,7 +120,7 @@ pub(crate) fn new_project_inner(
     project_lock: &RwLock<Project>,
 ) -> Result<ProjectSnapshot, AppError> {
     let new_project = Project::default();
-    let snapshot = ProjectSnapshot::build(&new_project, false);
+    let snapshot = ProjectSnapshot::build(&new_project, false, false);
     let mut project = write_project(project_lock)?;
     *project = new_project;
     Ok(snapshot)
@@ -150,7 +150,11 @@ pub async fn open_model(
     }
 
     let is_open = true;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(mesh)
@@ -181,7 +185,11 @@ pub async fn load_project(
         *flag = true;
     }
 
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, true)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(snapshot)
@@ -205,7 +213,11 @@ pub async fn new_project(
         *flag = true;
     }
 
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, true)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, true, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(snapshot)
@@ -514,7 +526,8 @@ mod tests {
             let mut p = state.project.write().expect("write lock");
             p.name = "Snapshot Test".to_string();
         }
-        let snap = get_project_snapshot_inner(&state.project, false).expect("should succeed");
+        let snap =
+            get_project_snapshot_inner(&state.project, false, false).expect("should succeed");
         assert_eq!(snap.project_name, "Snapshot Test");
     }
 

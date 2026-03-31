@@ -86,6 +86,8 @@ const SNAPSHOT_PROJECT_OPEN: ProjectSnapshot = {
   modelChecksum: null,
   modifiedAt: '',
   projectIsOpen: true,
+  filePath: null,
+  dirty: false,
 }
 
 const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
@@ -98,6 +100,8 @@ const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
   modelChecksum: null,
   modifiedAt: '',
   projectIsOpen: false,
+  filePath: null,
+  dirty: false,
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

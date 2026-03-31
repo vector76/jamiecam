@@ -357,6 +357,10 @@ export interface ProjectSnapshot {
   operations: OperationSummary[]
   /** Whether a project file is currently open (has been saved/loaded). */
   projectIsOpen: boolean
+  /** Absolute path to the .jcam project file, or null if not yet saved/loaded. */
+  filePath: string | null
+  /** Whether the project has unsaved changes. */
+  dirty: boolean
 }
 
 /**

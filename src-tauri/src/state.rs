@@ -59,6 +59,9 @@ pub struct Project {
     pub operations: Vec<Operation>,
     /// Generated toolpaths keyed by operation UUID.
     pub toolpaths: HashMap<Uuid, crate::toolpath::Toolpath>,
+    /// Path to the `.jcam` file on disk, if the project has been saved/loaded.
+    /// Not serialized in `.jcam` files (managed at the application level).
+    pub file_path: Option<PathBuf>,
 }
 
 impl Default for Project {
@@ -76,6 +79,7 @@ impl Default for Project {
             tools: Vec::new(),
             operations: Vec::new(),
             toolpaths: HashMap::new(),
+            file_path: None,
         }
     }
 }
@@ -164,6 +168,8 @@ pub struct AppState {
     pub global_library_path: PathBuf,
     /// Whether a project is actively open (set to true after load/new/open_model).
     pub project_is_open: RwLock<bool>,
+    /// Whether the project has unsaved changes.
+    pub dirty: RwLock<bool>,
 }
 
 impl Default for AppState {
@@ -176,6 +182,7 @@ impl Default for AppState {
             global_tool_library: RwLock::new(GlobalToolLibrary::default()),
             global_library_path: PathBuf::new(),
             project_is_open: RwLock::new(false),
+            dirty: RwLock::new(false),
         }
     }
 }

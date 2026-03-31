@@ -247,7 +247,11 @@ pub async fn add_tool(
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(tool)
@@ -270,7 +274,11 @@ pub async fn edit_tool(
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(tool)
@@ -291,7 +299,11 @@ pub async fn delete_tool(
         .project_is_open
         .read()
         .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
-    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open)?;
+    let dirty = *state
+        .dirty
+        .read()
+        .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, dirty)?;
     let _ = app.emit("project:modified", &snapshot);
 
     Ok(())

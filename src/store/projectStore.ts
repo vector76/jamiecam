@@ -114,3 +114,20 @@ export const useSelectedOperationId = (): string | null =>
  */
 export const usePushNotification = (): ((message: string) => void) =>
   useProjectStore((state) => state.pushNotification)
+
+/**
+ * Selector hook: returns the project's file path on disk, or null.
+ *
+ * Re-renders the component only when filePath changes.
+ */
+export const useFilePath = (): string | null =>
+  useProjectStore((state) => state.snapshot?.filePath ?? null)
+
+/**
+ * Selector hook: returns whether the project has unsaved changes.
+ *
+ * Re-renders the component only when dirty changes. Defaults to false
+ * when no snapshot is available.
+ */
+export const useDirty = (): boolean =>
+  useProjectStore((state) => state.snapshot?.dirty ?? false)

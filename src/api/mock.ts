@@ -40,6 +40,8 @@ const DEFAULT_SNAPSHOT: ProjectSnapshot = {
   wcs: [],
   operations: [],
   projectIsOpen: false,
+  filePath: null,
+  dirty: false,
 }
 
 // ── File / project commands ───────────────────────────────────────────────────

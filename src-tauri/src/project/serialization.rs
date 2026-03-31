@@ -126,6 +126,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
             .collect(),
         operations: pf.operations,
         toolpaths: std::collections::HashMap::new(),
+        file_path: None,
     };
 
     // Restore persisted toolpaths for operations that have a binary_file reference.
