@@ -9,8 +9,10 @@ import type { ProjectSnapshot } from './api/types'
 import { getProjectSnapshot } from './api/file'
 import { listGlobalTools } from './api/globalTools'
 import { listen } from '@tauri-apps/api/event'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { updateWindowTitle } from './lib/windowTitle'
 import { menuActionDispatch } from './lib/menuActions'
+import { checkUnsavedChanges } from './lib/unsavedGuard'
 
 /**
  * Detect the current Tauri window label, falling back to 'main'
@@ -55,6 +57,15 @@ async function bootstrap(): Promise<void> {
     await listen<string>('menu:action', (event) => {
       const handler = menuActionDispatch[event.payload]
       if (handler) handler()
+    })
+
+    // Intercept window close to guard unsaved changes.
+    const currentWindow = getCurrentWindow()
+    await currentWindow.onCloseRequested(async (event) => {
+      const proceed = await checkUnsavedChanges()
+      if (!proceed) {
+        event.preventDefault()
+      }
     })
   }
 }

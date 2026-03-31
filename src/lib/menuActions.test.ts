@@ -29,6 +29,10 @@ vi.mock('../api/toolpath', () => ({
   getToolpathGeometry: vi.fn(),
 }))
 
+vi.mock('./unsavedGuard', () => ({
+  checkUnsavedChanges: vi.fn(),
+}))
+
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: vi.fn(() => ({ setTitle: vi.fn() })),
 }))
@@ -36,6 +40,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 const { open, save } = await import('@tauri-apps/plugin-dialog')
 const api = await import('../api/file')
 const toolpathApi = await import('../api/toolpath')
+const { checkUnsavedChanges } = await import('./unsavedGuard')
 
 import {
   handleOpenModel,
@@ -63,6 +68,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   useProjectStore.setState({ snapshot: null, notifications: [] })
   useViewportStore.setState({ meshData: null, toolpathGeometry: null })
+  vi.mocked(checkUnsavedChanges).mockResolvedValue(true)
 })
 
 // ── handleOpenModel ──────────────────────────────────────────────────────────
@@ -118,6 +124,14 @@ describe('handleNewProject', () => {
     await handleNewProject()
 
     expect(useProjectStore.getState().notifications).toEqual(['Disk full'])
+  })
+
+  it('does nothing when the unsaved-changes guard returns false', async () => {
+    vi.mocked(checkUnsavedChanges).mockResolvedValue(false)
+
+    await handleNewProject()
+
+    expect(api.newProject).not.toHaveBeenCalled()
   })
 })
 
@@ -235,6 +249,15 @@ describe('handleOpenProject', () => {
 
     await handleOpenProject()
 
+    expect(api.loadProject).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when the unsaved-changes guard returns false', async () => {
+    vi.mocked(checkUnsavedChanges).mockResolvedValue(false)
+
+    await handleOpenProject()
+
+    expect(open).not.toHaveBeenCalled()
     expect(api.loadProject).not.toHaveBeenCalled()
   })
 

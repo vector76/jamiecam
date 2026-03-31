@@ -14,6 +14,7 @@ import { getToolpathGeometry } from '../api/toolpath'
 import { useProjectStore } from '../store/projectStore'
 import { useViewportStore } from '../store/viewportStore'
 import { updateWindowTitle } from './windowTitle'
+import { checkUnsavedChanges } from './unsavedGuard'
 import type { AppError } from '../api/types'
 
 function notify(e: unknown): void {
@@ -39,6 +40,8 @@ export async function handleOpenModel(): Promise<void> {
 }
 
 export async function handleNewProject(): Promise<void> {
+  const proceed = await checkUnsavedChanges()
+  if (!proceed) return
   try {
     const snapshot = await api.newProject()
     useProjectStore.getState().setSnapshot(snapshot)
@@ -75,6 +78,8 @@ export async function handleSave(): Promise<void> {
 }
 
 export async function handleOpenProject(): Promise<void> {
+  const proceed = await checkUnsavedChanges()
+  if (!proceed) return
   const path = await open({
     filters: [{ name: 'JamieCam Project', extensions: ['jcam'] }],
   })
