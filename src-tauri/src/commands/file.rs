@@ -187,6 +187,8 @@ pub async fn open_model(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let snapshot = super::project::get_project_snapshot_inner(&state.project, true, true)?;
     let _ = app.emit("project:modified", &snapshot);
 
@@ -212,6 +214,8 @@ pub async fn save_project(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = false;
     }
+
+    crate::menu::update_save_enabled(&app, false);
 
     let is_open = *state
         .project_is_open
@@ -241,6 +245,8 @@ pub async fn save_project_current(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = false;
     }
+
+    crate::menu::update_save_enabled(&app, false);
 
     let is_open = *state
         .project_is_open
@@ -285,6 +291,8 @@ pub async fn load_project(
         *flag = false;
     }
 
+    crate::menu::update_save_enabled(&app, false);
+
     let snapshot = super::project::get_project_snapshot_inner(&state.project, true, false)?;
     let _ = app.emit("project:modified", &snapshot);
 
@@ -316,6 +324,8 @@ pub async fn new_project(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = false;
     }
+
+    crate::menu::update_save_enabled(&app, false);
 
     let snapshot = super::project::get_project_snapshot_inner(&state.project, true, false)?;
     let _ = app.emit("project:modified", &snapshot);

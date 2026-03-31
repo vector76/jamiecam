@@ -243,6 +243,8 @@ pub async fn import_from_library(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()

@@ -651,6 +651,8 @@ pub async fn calculate_toolpath(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()
@@ -695,6 +697,8 @@ pub async fn auto_lift(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = true;
     }
+
+    crate::menu::update_save_enabled(&app, true);
 
     let is_open = *state
         .project_is_open

@@ -251,6 +251,8 @@ pub async fn add_tool(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()
@@ -282,6 +284,8 @@ pub async fn edit_tool(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()
@@ -310,6 +314,8 @@ pub async fn delete_tool(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = true;
     }
+
+    crate::menu::update_save_enabled(&app, true);
 
     let is_open = *state
         .project_is_open

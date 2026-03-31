@@ -4,6 +4,7 @@ pub mod error;
 pub mod feed_library;
 pub mod gcode_parser;
 pub mod geometry;
+pub mod menu;
 pub mod models;
 pub mod postprocessor;
 pub mod project;

@@ -244,6 +244,8 @@ pub async fn add_operation(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()
@@ -275,6 +277,8 @@ pub async fn edit_operation(
         *flag = true;
     }
 
+    crate::menu::update_save_enabled(&app, true);
+
     let is_open = *state
         .project_is_open
         .read()
@@ -303,6 +307,8 @@ pub async fn delete_operation(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = true;
     }
+
+    crate::menu::update_save_enabled(&app, true);
 
     let is_open = *state
         .project_is_open
@@ -333,6 +339,8 @@ pub async fn reorder_operations(
             .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
         *flag = true;
     }
+
+    crate::menu::update_save_enabled(&app, true);
 
     let is_open = *state
         .project_is_open
