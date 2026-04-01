@@ -23,6 +23,8 @@ export interface Measurement {
 interface ViewportState {
   /** Tessellated mesh currently loaded into the viewport, or null. */
   meshData: MeshData | null
+  /** Simulation mesh from the dexel engine, or null. When set, displayed instead of meshData. */
+  simulationMeshData: MeshData | null
   /** Toolpath line geometry currently loaded into the viewport, or null. */
   toolpathGeometry: LineGeometryData | null
   /** World-space point the orbit camera rotates around (x, y, z). */
@@ -43,6 +45,10 @@ interface ViewportState {
   faceDescriptors: FaceDescriptor[]
   /** Replace the displayed mesh (pass null to clear the viewport). */
   setMeshData: (m: MeshData | null) => void
+  /** Set the simulation mesh. When set, it is displayed instead of meshData. */
+  setSimulationMeshData: (m: MeshData | null) => void
+  /** Clear the simulation mesh, restoring the model mesh. */
+  clearSimulationMesh: () => void
   /** Replace the displayed toolpath geometry (pass null to clear). */
   setToolpathGeometry: (g: LineGeometryData | null) => void
   /** Move the orbit camera target to (x, y, z). */
@@ -93,6 +99,7 @@ interface ViewportState {
 
 export const useViewportStore = create<ViewportState>((set) => ({
   meshData: null,
+  simulationMeshData: null,
   toolpathGeometry: null,
   orbitTarget: [0, 0, 0],
   zoom: 1,
@@ -103,6 +110,8 @@ export const useViewportStore = create<ViewportState>((set) => ({
   selectedFaceFingerprints: [],
   faceDescriptors: [],
   setMeshData: (meshData) => set({ meshData }),
+  setSimulationMeshData: (simulationMeshData) => set({ simulationMeshData }),
+  clearSimulationMesh: () => set({ simulationMeshData: null }),
   setToolpathGeometry: (toolpathGeometry) => set({ toolpathGeometry }),
   setOrbitTarget: (x, y, z) => set({ orbitTarget: [x, y, z] }),
   setZoom: (zoom) => set({ zoom }),

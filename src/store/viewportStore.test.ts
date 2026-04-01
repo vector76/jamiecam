@@ -14,6 +14,7 @@ beforeEach(() => {
   // Reset store to initial state between tests.
   useViewportStore.setState({
     meshData: null,
+    simulationMeshData: null,
     orbitTarget: [0, 0, 0],
     zoom: 1,
     displayMode: 'shaded',
@@ -69,6 +70,37 @@ describe('viewportStore — setMeshData', () => {
     useViewportStore.getState().setMeshData(first)
     useViewportStore.getState().setMeshData(second)
     expect(useViewportStore.getState().meshData).toEqual(second)
+  })
+})
+
+describe('viewportStore — simulationMeshData', () => {
+  it('starts as null', () => {
+    expect(useViewportStore.getState().simulationMeshData).toBeNull()
+  })
+
+  it('setSimulationMeshData stores the mesh', () => {
+    useViewportStore.getState().setSimulationMeshData(MESH)
+    expect(useViewportStore.getState().simulationMeshData).toEqual(MESH)
+  })
+
+  it('setSimulationMeshData with null clears the simulation mesh', () => {
+    useViewportStore.getState().setSimulationMeshData(MESH)
+    useViewportStore.getState().setSimulationMeshData(null)
+    expect(useViewportStore.getState().simulationMeshData).toBeNull()
+  })
+
+  it('clearSimulationMesh sets simulationMeshData to null', () => {
+    useViewportStore.getState().setSimulationMeshData(MESH)
+    useViewportStore.getState().clearSimulationMesh()
+    expect(useViewportStore.getState().simulationMeshData).toBeNull()
+  })
+
+  it('clearSimulationMesh does not affect meshData', () => {
+    useViewportStore.getState().setMeshData(MESH)
+    useViewportStore.getState().setSimulationMeshData(MESH)
+    useViewportStore.getState().clearSimulationMesh()
+    expect(useViewportStore.getState().meshData).toEqual(MESH)
+    expect(useViewportStore.getState().simulationMeshData).toBeNull()
   })
 })
 

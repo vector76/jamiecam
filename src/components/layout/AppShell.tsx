@@ -12,6 +12,7 @@ import { UnsavedChangesDialog } from '../common/UnsavedChangesDialog'
 import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
 import { StockPanel } from '../stock/StockPanel'
 import { WCSPanel } from '../wcs/WCSPanel'
+import { MaterialRemovalPanel } from '../simulation/MaterialRemovalPanel'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
@@ -33,6 +34,9 @@ export function AppShell() {
             </SidebarSection>
             <SidebarSection title="G-Code" defaultOpen={false}>
               <GCodePreviewPanel />
+            </SidebarSection>
+            <SidebarSection title="Simulation" defaultOpen={false}>
+              <MaterialRemovalPanel />
             </SidebarSection>
           </ScrollArea>
         </aside>

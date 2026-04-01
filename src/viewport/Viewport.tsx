@@ -31,6 +31,8 @@ export function Viewport({ className }: ViewportProps) {
   useSimulationLoop(mgrRef)
 
   const meshData = useViewportStore((state) => state.meshData)
+  const simulationMeshData = useViewportStore((state) => state.simulationMeshData)
+  const displayedMesh = simulationMeshData ?? meshData
   const toolpathGeometry = useViewportStore((state) => state.toolpathGeometry)
   const selectionMode = useViewportStore((state) => state.selectionMode)
   const hoveredFaceIdx = useViewportStore((state) => state.hoveredFaceIdx)
@@ -54,13 +56,13 @@ export function Viewport({ className }: ViewportProps) {
   const projectionModeRef = useRef(projectionMode)
   const hoveredFaceIdxRef = useRef(hoveredFaceIdx)
   const faceDescriptorsRef = useRef(faceDescriptors)
-  const meshDataRef = useRef(meshData)
+  const meshDataRef = useRef(displayedMesh)
 
   useEffect(() => { selectionModeRef.current = selectionMode }, [selectionMode])
   useEffect(() => { projectionModeRef.current = projectionMode }, [projectionMode])
   useEffect(() => { hoveredFaceIdxRef.current = hoveredFaceIdx }, [hoveredFaceIdx])
   useEffect(() => { faceDescriptorsRef.current = faceDescriptors }, [faceDescriptors])
-  useEffect(() => { meshDataRef.current = meshData }, [meshData])
+  useEffect(() => { meshDataRef.current = displayedMesh }, [displayedMesh])
 
   // ── Mount / unmount ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -196,8 +198,8 @@ export function Viewport({ className }: ViewportProps) {
       mgr.setModelMesh(null)
     }
 
-    if (meshData) {
-      const { mesh, boundingSphere } = buildModelMesh(meshData)
+    if (displayedMesh) {
+      const { mesh, boundingSphere } = buildModelMesh(displayedMesh)
       const group = new THREE.Group()
       group.name = 'ModelGroup'
       group.add(mesh)
@@ -207,7 +209,7 @@ export function Viewport({ className }: ViewportProps) {
       mgr.setDisplayMode(displayMode)
       mgr.frameModel(boundingSphere)
     }
-  }, [meshData])
+  }, [displayedMesh])
 
   // ── Selection mode effect ──────────────────────────────────────────────────
   useEffect(() => {
@@ -227,7 +229,7 @@ export function Viewport({ className }: ViewportProps) {
       highlightMeshRef.current = null
     }
 
-    if (selectionMode && meshData) {
+    if (selectionMode && displayedMesh) {
       mgr?.setOrbitEnabled(false)
       const modelMesh = modelGroupRef.current?.children.find(
         (c) => c instanceof THREE.Mesh,
@@ -251,7 +253,7 @@ export function Viewport({ className }: ViewportProps) {
       mgr?.setOrbitEnabled(true)
       setHoveredFaceIdx(null)
     }
-  }, [selectionMode, meshData])
+  }, [selectionMode, displayedMesh])
 
   // ── Projection mode sync ───────────────────────────────────────────────────
   useEffect(() => {

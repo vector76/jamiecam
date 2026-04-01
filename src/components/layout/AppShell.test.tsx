@@ -42,6 +42,12 @@ vi.mock('../wcs/WCSPanel', () => ({
   WCSPanel: () => <div data-testid="wcs-panel">WCSPanel</div>,
 }))
 
+vi.mock('../simulation/MaterialRemovalPanel', () => ({
+  MaterialRemovalPanel: () => (
+    <div data-testid="material-removal-panel">MaterialRemovalPanel</div>
+  ),
+}))
+
 vi.mock('@/components/ui/sidebar-section', () => ({
   SidebarSection: ({ title, children }: { title: string; children: React.ReactNode }) => (
     <div data-testid={`sidebar-section-${title.toLowerCase()}`}>{children}</div>
@@ -68,6 +74,7 @@ describe('AppShell', () => {
     expect(screen.getByTestId('wcs-panel')).toBeInTheDocument()
     expect(screen.getByTestId('operation-list-panel')).toBeInTheDocument()
     expect(screen.getByTestId('gcode-preview-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('material-removal-panel')).toBeInTheDocument()
   })
 
   it('renders Notifications and UnsavedChangesDialog', () => {
