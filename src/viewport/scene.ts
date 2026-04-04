@@ -19,6 +19,9 @@ import { decimateToolpath, LOD_MAX_DISPLAY_POINTS, LOD_THRESHOLDS } from './deci
 import { buildToolpathLines } from './toolpathLines'
 import type { LineGeometryData } from '../api/types'
 
+/** Animation state used by snap-to-view tweens. */
+type CameraSnapState = { x: number; y: number; z: number; ux: number; uy: number; uz: number }
+
 export class SceneManager {
   /** The Three.js scene.  Viewport.tsx adds/removes model meshes here. */
   readonly scene: THREE.Scene
@@ -34,7 +37,7 @@ export class SceneManager {
   private resizeObserver: ResizeObserver
   private toolpathGroup: THREE.Group
   private _tweenGroup: TWEEN.Group
-  private _activeTween: TWEEN.Tween<any> | null = null
+  private _activeTween: TWEEN.Tween<CameraSnapState> | null = null
   private _projectionMode: 'perspective' | 'orthographic' = 'perspective'
   private _modelMesh: THREE.Mesh | null = null
   private _edgeOverlay: THREE.LineSegments | null = null

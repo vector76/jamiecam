@@ -472,7 +472,7 @@ describe('SceneManager — setDisplayMode', () => {
     mgr.setDisplayMode('shaded-edges')
     mgr.setDisplayMode('shaded')
     // shaded-edges created the overlay; shaded must hide it (not destroy it).
-    const overlay = (mgr as any)._edgeOverlay as THREE.LineSegments
+    const overlay = priv<THREE.LineSegments>(mgr, '_edgeOverlay')
     expect(overlay).not.toBeNull()
     expect(overlay.visible).toBe(false)
   })
@@ -491,16 +491,16 @@ describe('SceneManager — setDisplayMode', () => {
   it('shaded-edges: wireframe is false, edge overlay is not null and visible', () => {
     mgr.setDisplayMode('shaded-edges')
     expect(material.wireframe).toBe(false)
-    const overlay = (mgr as any)._edgeOverlay as THREE.LineSegments | null
+    const overlay = priv<THREE.LineSegments | null>(mgr, '_edgeOverlay')
     expect(overlay).not.toBeNull()
     expect(overlay!.visible).toBe(true)
   })
 
   it('shaded-edges: overlay is reused on second call', () => {
     mgr.setDisplayMode('shaded-edges')
-    const first = (mgr as any)._edgeOverlay
+    const first = priv<THREE.LineSegments | null>(mgr, '_edgeOverlay')
     mgr.setDisplayMode('shaded-edges')
-    const second = (mgr as any)._edgeOverlay
+    const second = priv<THREE.LineSegments | null>(mgr, '_edgeOverlay')
     expect(second).toBe(first)
   })
 
@@ -532,7 +532,7 @@ describe('SceneManager — snapToView', () => {
 
   it('snapFront sets _activeTween while animating', () => {
     mgr.snapFront()
-    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).not.toBeNull()
+    expect(priv<TWEEN.Tween<object> | null>(mgr, '_activeTween')).not.toBeNull()
   })
 
   it('snapFront positions camera on the -Y axis after completion', () => {
@@ -578,7 +578,7 @@ describe('SceneManager — snapToView', () => {
   it('clears _activeTween after completion', () => {
     mgr.snapFront()
     driveToCompletion()
-    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+    expect(priv<TWEEN.Tween<object> | null>(mgr, '_activeTween')).toBeNull()
   })
 
   it('is a no-op if camera is already at the target view', () => {
@@ -586,25 +586,25 @@ describe('SceneManager — snapToView', () => {
     driveToCompletion()
     // A second snapFront should hit the early-return path.
     mgr.snapFront()
-    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+    expect(priv<TWEEN.Tween<object> | null>(mgr, '_activeTween')).toBeNull()
   })
 
   it('cancels an in-flight tween when a new snap is requested', () => {
     mgr.snapFront()
-    const firstTween = priv<TWEEN.Tween<any>>(mgr, '_activeTween')!
+    const firstTween = priv<TWEEN.Tween<object>>(mgr, '_activeTween')!
     const stopSpy = vi.spyOn(firstTween, 'stop')
     mgr.snapRight()
     expect(stopSpy).toHaveBeenCalled()
-    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).not.toBe(firstTween)
+    expect(priv<TWEEN.Tween<object> | null>(mgr, '_activeTween')).not.toBe(firstTween)
   })
 
   it('dispose() stops and clears an in-flight tween', () => {
     mgr.snapFront()
-    const activeTween = priv<TWEEN.Tween<any>>(mgr, '_activeTween')!
+    const activeTween = priv<TWEEN.Tween<object>>(mgr, '_activeTween')!
     const stopSpy = vi.spyOn(activeTween, 'stop')
     mgr.dispose()
     expect(stopSpy).toHaveBeenCalled()
-    expect(priv<TWEEN.Tween<any> | null>(mgr, '_activeTween')).toBeNull()
+    expect(priv<TWEEN.Tween<object> | null>(mgr, '_activeTween')).toBeNull()
   })
 
   it('snapFront sets camera up to (0,0,1) after completion', () => {

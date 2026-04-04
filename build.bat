@@ -30,7 +30,7 @@ if defined SKIP_ENV_CHECK (
     echo Skipping environment check (--skip-env-check)
     echo.
 ) else (
-    echo [1/3] Checking environment...
+    echo [1/4] Checking environment...
     powershell -ExecutionPolicy Bypass -File "%~dp0scripts\check-env.ps1"
     if !ERRORLEVEL! neq 0 (
         echo.
@@ -42,7 +42,7 @@ if defined SKIP_ENV_CHECK (
 )
 
 :: ── Install frontend dependencies ────────────────────────────────────
-echo [2/3] Installing frontend dependencies...
+echo [2/4] Installing frontend dependencies...
 call pnpm install --frozen-lockfile
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -51,9 +51,25 @@ if %ERRORLEVEL% neq 0 (
 )
 echo.
 
+:: ── Frontend checks (typecheck + lint) ───────────────────────────────
+echo [3/4] Running frontend checks...
+call pnpm typecheck
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo Build aborted: TypeScript typecheck failed.
+    exit /b 1
+)
+call pnpm lint
+if %ERRORLEVEL% neq 0 (
+    echo.
+    echo Build aborted: ESLint failed.
+    exit /b 1
+)
+echo.
+
 :: ── Build ────────────────────────────────────────────────────────────
 if "%MODE%"=="debug" (
-    echo [3/3] Building Tauri application [debug, no bundling]...
+    echo [4/4] Building Tauri application [debug, no bundling]...
     call pnpm tauri build --debug --no-bundle
     if !ERRORLEVEL! neq 0 (
         echo.
@@ -70,7 +86,7 @@ if "%MODE%"=="debug" (
 )
 
 if "%MODE%"=="release" (
-    echo [3/3] Building Tauri application [release, no bundling]...
+    echo [4/4] Building Tauri application [release, no bundling]...
     call pnpm tauri build --no-bundle
     if !ERRORLEVEL! neq 0 (
         echo.
@@ -99,7 +115,7 @@ if "%MODE%"=="release" (
 )
 
 if "%MODE%"=="installer" (
-    echo [3/3] Building Tauri application [release + installers]...
+    echo [4/4] Building Tauri application [release + installers]...
     call pnpm tauri build
     if !ERRORLEVEL! neq 0 (
         echo.

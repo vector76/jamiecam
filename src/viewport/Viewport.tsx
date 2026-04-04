@@ -177,6 +177,7 @@ export function Viewport({ className }: ViewportProps) {
       mgr.dispose()
       if (container.contains(canvas)) container.removeChild(canvas)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Toolpath update ────────────────────────────────────────────────────────
@@ -209,6 +210,7 @@ export function Viewport({ className }: ViewportProps) {
       mgr.setDisplayMode(displayMode)
       mgr.frameModel(boundingSphere)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMesh])
 
   // ── Selection mode effect ──────────────────────────────────────────────────
@@ -253,6 +255,7 @@ export function Viewport({ className }: ViewportProps) {
       mgr?.setOrbitEnabled(true)
       setHoveredFaceIdx(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionMode, displayedMesh])
 
   // ── Projection mode sync ───────────────────────────────────────────────────
@@ -281,10 +284,12 @@ export function Viewport({ className }: ViewportProps) {
   // ── Measurement / selection mutual exclusivity ─────────────────────────────
   useEffect(() => {
     if (measurementMode !== 'off') setSelectionMode(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measurementMode])
 
   useEffect(() => {
     if (selectionMode) setMeasurementMode('off')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionMode])
 
   // ── Highlight rebuild effect ───────────────────────────────────────────────

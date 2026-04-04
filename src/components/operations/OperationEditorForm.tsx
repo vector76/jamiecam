@@ -81,6 +81,7 @@ export function OperationEditorForm({ operationId }: Props) {
       })
       .catch(handleError)
     return () => { setSelectionMode(false) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operationId])
 
   if (!operationId || !operation) {

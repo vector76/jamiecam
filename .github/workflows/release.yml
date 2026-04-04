@@ -116,6 +116,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      # ── Validate tag matches package version ────────────────────────────────
+      - name: Validate tag matches package.json version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ github.ref_name }}"
+          if [ "v${PKG_VERSION}" != "${TAG_VERSION}" ]; then
+            echo "ERROR: Tag ${TAG_VERSION} does not match package.json version v${PKG_VERSION}"
+            exit 1
+          fi
+        shell: bash
+
       # ── Tauri release build ─────────────────────────────────────────────────
       - name: Build Tauri application (Linux/macOS)
         if: runner.os != 'Windows'

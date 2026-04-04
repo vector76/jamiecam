@@ -37,6 +37,7 @@ export function GCodePreviewPanel() {
         const e = toAppError(err)
         pushNotification(`Failed to load post-processors: ${e.message ?? e.kind}`)
       })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Fetch G-code preview when operation or post-processor selection changes
@@ -60,6 +61,7 @@ export function GCodePreviewPanel() {
         }
       })
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOperationId, selectedPpId])
 
   async function handleExport() {

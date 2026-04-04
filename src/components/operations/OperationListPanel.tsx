@@ -48,6 +48,7 @@ export function OperationListPanel() {
       if (active) { unlisten = fn } else { fn() }
     }).catch(handleError)
     return () => { active = false; unlisten?.() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calculatingId])
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export function OperationListPanel() {
       }
       setDrillPointCounts(counts)
     }).catch(handleError)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [operations])
 
   function handleError(e: unknown) {

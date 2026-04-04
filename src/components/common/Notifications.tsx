@@ -18,6 +18,7 @@ export function Notifications() {
     if (notifications.length === 0) return
     const id = setTimeout(() => dismissNotification(0), 5000)
     return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications[0], dismissNotification])
 
   if (notifications.length === 0) return null

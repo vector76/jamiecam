@@ -160,7 +160,7 @@ describe('SceneManager — snap methods (mock Tween)', () => {
   it('is a no-op (no Tween created) when camera is already at the target', () => {
     // snapTop targets (0, 0, 1) * orbitDistance, up (0, 1, 0).
     // Position the perspective camera there manually so the early-return fires.
-    const perspectiveCamera = (mgr as any).perspectiveCamera as THREE.PerspectiveCamera
+    const perspectiveCamera = (mgr as unknown as { perspectiveCamera: THREE.PerspectiveCamera }).perspectiveCamera
     const orbitDistance = perspectiveCamera.position.length()
     perspectiveCamera.position.set(0, 0, orbitDistance)
     perspectiveCamera.up.set(0, 1, 0)

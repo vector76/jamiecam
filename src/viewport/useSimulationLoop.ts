@@ -61,6 +61,7 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
       if (toolMeshRef.current) mgr.scene.remove(toolMeshRef.current)
       if (highlightRef.current) mgr.scene.remove(highlightRef.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [simulationActive, simulationPoints])
 
   // ── RAF loop: run when active and not paused ─────────────────────────────────
