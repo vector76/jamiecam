@@ -177,9 +177,10 @@ export function ToolpathViewerMode() {
     try {
       const result = await open({
         filters: [{ name: 'G-code', extensions: ['nc', 'gcode', 'tap'] }],
+        multiple: false,
       })
-      if (!result) return
-      await loadFile(result as string)
+      if (typeof result !== 'string') return
+      await loadFile(result)
     } catch (e: unknown) {
       const err = e as { message?: string; kind?: string }
       setLoadStatus('error')
@@ -197,14 +198,13 @@ export function ToolpathViewerMode() {
       const err = e as { message?: string; kind?: string }
       setLoadStatus('error')
       setLoadError(err.message ?? err.kind ?? 'Failed to get sample path')
-      setSimulateError(null)
     }
   }
 
   // ── Simulate logic ─────────────────────────────────────────────────────────
 
   async function handleSimulate() {
-    if (!filePath || !canSimulate) return
+    if (!filePath || !canSimulate || simulateStatus === 'simulating') return
     setSimulateStatus('simulating')
     setSimulateError(null)
     try {
@@ -305,6 +305,10 @@ export function ToolpathViewerMode() {
             {/* Stock panel */}
             <SidebarSection title="Stock">
               <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span>box</span>
+                </div>
                 <div className="grid grid-cols-3 gap-1">
                   {(
                     [
