@@ -16,6 +16,7 @@ pub mod dexel;
 pub mod feeds;
 pub mod file;
 pub mod gcode_parser;
+pub mod gcode_viewer;
 pub mod geometry;
 pub mod global_tools;
 pub mod operations;

@@ -1,6 +1,7 @@
 import { useCurrentView } from './store/projectStore'
 import { ModeSelector } from './components/modes/ModeSelector'
 import { ModePlaceholder } from './components/modes/ModePlaceholder'
+import { ToolpathViewerMode } from './components/modes/ToolpathViewerMode'
 import { Notifications } from './components/common/Notifications'
 import { UnsavedChangesDialog } from './components/common/UnsavedChangesDialog'
 
@@ -11,7 +12,13 @@ export default function App() {
     <div>
       <Notifications />
       <UnsavedChangesDialog />
-      {view === 'selector' ? <ModeSelector /> : <ModePlaceholder mode={view} />}
+      {view === 'selector' ? (
+        <ModeSelector />
+      ) : view === 'gcode_viewer' ? (
+        <ToolpathViewerMode />
+      ) : (
+        <ModePlaceholder mode={view} />
+      )}
     </div>
   )
 }

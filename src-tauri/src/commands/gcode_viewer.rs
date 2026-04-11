@@ -300,16 +300,69 @@ mod tests {
 
     // ── simulate_gcode_viewer tests ───────────────────────────────────────
 
-    /// Assert that a `MeshData` is structurally valid (matches the helper in dexel tests).
+    /// Assert that a `MeshData` is structurally valid.
     fn assert_mesh_valid(mesh: &MeshData) {
         let vertex_count = mesh.vertices.len() / 3;
         assert!(vertex_count > 0, "mesh has no vertices");
-        assert_eq!(mesh.vertices.len() % 3, 0);
-        assert_eq!(mesh.normals.len(), mesh.vertices.len());
-        assert!(mesh.indices.len() >= 3);
-        assert_eq!(mesh.indices.len() % 3, 0);
-        for &idx in &mesh.indices {
-            assert!((idx as usize) < vertex_count);
+        assert_eq!(mesh.vertices.len() % 3, 0, "vertices not a multiple of 3");
+        assert_eq!(
+            mesh.normals.len(),
+            mesh.vertices.len(),
+            "normals/vertices length mismatch"
+        );
+        assert!(mesh.indices.len() >= 3, "mesh has no triangles");
+        assert_eq!(mesh.indices.len() % 3, 0, "indices not a multiple of 3");
+
+        // All indices in bounds.
+        for (i, &idx) in mesh.indices.iter().enumerate() {
+            assert!(
+                (idx as usize) < vertex_count,
+                "index[{i}] = {idx} out of bounds (vertex_count={vertex_count})"
+            );
+        }
+
+        // All normals are unit-length.
+        for i in 0..vertex_count {
+            let nx = mesh.normals[i * 3] as f64;
+            let ny = mesh.normals[i * 3 + 1] as f64;
+            let nz = mesh.normals[i * 3 + 2] as f64;
+            let len = (nx * nx + ny * ny + nz * nz).sqrt();
+            assert!(
+                (len - 1.0).abs() < 0.01,
+                "normal[{i}] = ({nx},{ny},{nz}) has length {len}, expected ~1.0"
+            );
+        }
+
+        // No degenerate (zero-area) triangles.
+        for tri in 0..(mesh.indices.len() / 3) {
+            let i0 = mesh.indices[tri * 3] as usize;
+            let i1 = mesh.indices[tri * 3 + 1] as usize;
+            let i2 = mesh.indices[tri * 3 + 2] as usize;
+            let v0 = [
+                mesh.vertices[i0 * 3],
+                mesh.vertices[i0 * 3 + 1],
+                mesh.vertices[i0 * 3 + 2],
+            ];
+            let v1 = [
+                mesh.vertices[i1 * 3],
+                mesh.vertices[i1 * 3 + 1],
+                mesh.vertices[i1 * 3 + 2],
+            ];
+            let v2 = [
+                mesh.vertices[i2 * 3],
+                mesh.vertices[i2 * 3 + 1],
+                mesh.vertices[i2 * 3 + 2],
+            ];
+            let e1 = [v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]];
+            let e2 = [v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]];
+            let cx = e1[1] * e2[2] - e1[2] * e2[1];
+            let cy = e1[2] * e2[0] - e1[0] * e2[2];
+            let cz = e1[0] * e2[1] - e1[1] * e2[0];
+            let area2 = ((cx * cx + cy * cy + cz * cz) as f64).sqrt();
+            assert!(
+                area2 > 1e-12,
+                "triangle {tri} (indices {i0},{i1},{i2}) is degenerate (area~0)"
+            );
         }
     }
 
@@ -458,8 +511,8 @@ mod tests {
         );
         if let AppError::InvalidInput(msg) = err {
             assert!(
-                msg.contains("ball_nose") || msg.contains("flat_endmill"),
-                "error should mention the tool type: {msg}"
+                msg.contains("ball_nose") && msg.contains("flat_endmill"),
+                "error should name the rejected type and the supported type, got: {msg}"
             );
         }
     }

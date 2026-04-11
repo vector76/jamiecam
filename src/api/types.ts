@@ -458,6 +458,56 @@ export interface LineGeometryData {
   types: number[]
 }
 
+// ── G-code parser types ───────────────────────────────────────────────────────
+
+/** A non-fatal warning generated during G-code parsing or metadata parsing. */
+export interface ParseWarning {
+  /** 1-based line number in the source file where the warning was generated. */
+  line: number
+  /** Human-readable description of the problem. */
+  message: string
+}
+
+/** Parsed stock metadata from a `; @STOCK` comment in a G-code header. */
+export interface GcodeStockMetadata {
+  /** Stock shape identifier. Currently always `'box'`. */
+  stockType: 'box'
+  /** X dimension (mm). */
+  width: number
+  /** Y dimension (mm). */
+  depth: number
+  /** Z dimension (mm). */
+  height: number
+  /** Minimum-XYZ corner in work coordinates. Always present (defaults to origin when absent in file). */
+  origin: Vec3
+}
+
+/** Parsed tool metadata from a `; @TOOL` comment in a G-code header. */
+export interface GcodeToolMetadata {
+  /** Tool number matching the T-word in the G-code body. */
+  number: number
+  /** Tool type string (e.g. `'flat_endmill'`, `'ball_nose'`). */
+  toolType: string
+  /** Cutting diameter (mm). */
+  diameter: number
+  /** Number of flutes (optional). */
+  flutes?: number
+  /** Tool body material string (optional, e.g. `'carbide'`, `'hss'`). */
+  material?: string
+}
+
+/** Composite result returned by the `load_gcode_for_viewer` IPC command. */
+export interface GcodeViewerLoadResult {
+  /** Parsed stock metadata, or null if no valid `; @STOCK` comment was found. */
+  stock: GcodeStockMetadata | null
+  /** Parsed tool metadata entries (one per valid `; @TOOL` comment). */
+  tools: GcodeToolMetadata[]
+  /** Toolpath centerline geometry for immediate 3D viewport display. */
+  lineGeometry: LineGeometryData
+  /** Non-fatal warnings from G-code parsing and metadata parsing combined. */
+  warnings: ParseWarning[]
+}
+
 // ── Material / feeds types ────────────────────────────────────────────────────
 
 /** Metadata for a workpiece material in the feeds/speeds library. */
