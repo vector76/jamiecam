@@ -3,11 +3,15 @@
 pub(crate) mod arcs;
 pub(crate) mod cycles;
 pub(crate) mod interpreter;
+pub mod line_geometry;
+pub mod metadata;
 pub(crate) mod modal;
 pub(crate) mod state;
 pub(crate) mod tokenizer;
 pub mod types;
 
+pub use line_geometry::gcode_segments_to_line_geometry;
+pub use metadata::{parse_metadata, GcodeMetadata, GcodeStockMetadata, GcodeToolMetadata};
 pub use types::{
     FeedMode, MotionSegment, ParseWarning, ParsedProgram, Plane, ProgramMetadata, SegmentMetadata,
     SpindleDir, ToolChange, Units,
