@@ -23,6 +23,7 @@ const SNAPSHOT: ProjectSnapshot = {
   projectIsOpen: false,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 beforeEach(() => {

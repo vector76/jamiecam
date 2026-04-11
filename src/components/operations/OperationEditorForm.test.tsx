@@ -97,6 +97,7 @@ const SNAPSHOT_BASE: ProjectSnapshot = {
   projectIsOpen: false,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

@@ -62,6 +62,7 @@ const SNAPSHOT_WITH_OPS: ProjectSnapshot = {
   projectIsOpen: false,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 const SNAPSHOT_NO_TOOLS: ProjectSnapshot = {

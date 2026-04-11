@@ -22,13 +22,14 @@ export async function openModel(path: string): Promise<MeshData> {
 }
 
 /**
- * Reset the active project to a fresh default state.
+ * Reset the active project to a fresh default state with the given mode.
  *
+ * @param mode Canonical mode string (e.g. "3d", "2d", "gcode_viewer").
  * @returns A ProjectSnapshot reflecting the new empty project.
- * @throws AppError on unexpected backend failure.
+ * @throws AppError with kind "InvalidInput" if mode is not recognized.
  */
-export async function newProject(): Promise<ProjectSnapshot> {
-  return typedInvoke<ProjectSnapshot>('new_project')
+export async function newProject(mode: string): Promise<ProjectSnapshot> {
+  return typedInvoke<ProjectSnapshot>('new_project', { mode })
 }
 
 /**

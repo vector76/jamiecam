@@ -37,6 +37,7 @@ const CLEAN_SNAPSHOT: ProjectSnapshot = {
   projectIsOpen: false,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 const DIRTY_SNAPSHOT: ProjectSnapshot = {

@@ -16,7 +16,7 @@ use tauri::Emitter;
 
 use crate::error::AppError;
 use crate::geometry::{MeshData, OcctShape};
-use crate::state::{AppState, LoadedModel, Project};
+use crate::state::{AppState, LoadedModel, Mode, Project};
 
 use crate::postprocessor::{program::GenerateOptions, PostProcessor};
 
@@ -144,12 +144,19 @@ pub(crate) fn load_project_inner(
 
 /// Testable inner logic for [`new_project`].
 ///
-/// Replaces the active project with [`Project::default()`] and returns a
-/// [`ProjectSnapshot`] for immediate display.
+/// Replaces the active project with a default [`Project`] using the given
+/// `mode` string, and returns a [`ProjectSnapshot`] for immediate display.
+/// Returns [`AppError::InvalidInput`] if `mode` is not a recognized variant.
 pub(crate) fn new_project_inner(
     project_lock: &RwLock<Project>,
+    mode: &str,
 ) -> Result<ProjectSnapshot, AppError> {
-    let new_project = Project::default();
+    let parsed_mode = serde_json::from_value::<Mode>(serde_json::Value::String(mode.to_string()))
+        .map_err(|_| AppError::InvalidInput(format!("unrecognized mode: {mode}")))?;
+    let new_project = Project {
+        mode: parsed_mode,
+        ..Project::default()
+    };
     let snapshot = ProjectSnapshot::build(&new_project, false, false);
     let mut project = write_project(project_lock)?;
     *project = new_project;
@@ -299,15 +306,17 @@ pub async fn load_project(
     Ok(snapshot)
 }
 
-/// Reset the active project to a fresh default state.
+/// Reset the active project to a fresh default state with the given `mode`.
 ///
 /// Returns a [`ProjectSnapshot`] for immediate display in the frontend.
+/// Returns [`AppError::InvalidInput`] if `mode` is not a recognized variant.
 #[tauri::command]
 pub async fn new_project(
+    mode: String,
     state: tauri::State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<ProjectSnapshot, AppError> {
-    new_project_inner(&state.project)?;
+    new_project_inner(&state.project, &mode)?;
 
     {
         let mut flag = state
@@ -418,7 +427,7 @@ pub async fn export_gcode(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::AppState;
+    use crate::state::{AppState, Mode};
 
     // ── new_project ───────────────────────────────────────────────────────
 
@@ -429,13 +438,15 @@ mod tests {
             let mut p = state.project.write().expect("write lock");
             p.name = "Old Project".to_string();
         }
-        let snap = new_project_inner(&state.project).expect("new_project should succeed");
+        let snap = new_project_inner(&state.project, "3d").expect("new_project should succeed");
         assert_eq!(snap.project_name, "");
         assert!(snap.model_path.is_none());
+        assert_eq!(snap.mode, "3d");
         let project = state.project.read().expect("read lock");
         assert_eq!(project.schema_version, 1);
         assert_eq!(project.units, "mm");
         assert!(project.source_model.is_none());
+        assert_eq!(project.mode, Mode::ThreeD);
     }
 
     // ── save_project / load_project ───────────────────────────────────────
@@ -466,7 +477,7 @@ mod tests {
         }
 
         // Reset state, then load the saved file.
-        new_project_inner(&state.project).expect("new_project should succeed");
+        new_project_inner(&state.project, "3d").expect("new_project should succeed");
 
         let snap = load_project_inner(&tmp.to_string_lossy(), &state.project)
             .expect("load should succeed");
@@ -589,7 +600,7 @@ mod tests {
         save_project_inner(&tmp.to_string_lossy(), &state.project).expect("save should succeed");
 
         // Reset state and load.
-        new_project_inner(&state.project).expect("new_project");
+        new_project_inner(&state.project, "3d").expect("new_project");
         load_project_inner(&tmp.to_string_lossy(), &state.project).expect("load should succeed");
         let _ = std::fs::remove_file(&tmp);
 
@@ -619,7 +630,7 @@ mod tests {
         }
 
         // New project replaces with default, which has file_path: None.
-        new_project_inner(&state.project).expect("new_project should succeed");
+        new_project_inner(&state.project, "3d").expect("new_project should succeed");
 
         let project = state.project.read().expect("read lock");
         assert!(
@@ -678,7 +689,7 @@ mod tests {
             *flag = true;
         }
 
-        new_project_inner(&state.project).expect("new_project should succeed");
+        new_project_inner(&state.project, "3d").expect("new_project should succeed");
 
         let dirty = *state.dirty.read().expect("read lock");
         assert!(
@@ -772,7 +783,7 @@ mod tests {
             *flag = true;
         }
 
-        new_project_inner(&state.project).expect("new_project");
+        new_project_inner(&state.project, "3d").expect("new_project");
 
         // Simulate wrapper clearing dirty.
         {
@@ -835,6 +846,45 @@ mod tests {
             super::super::project::get_project_snapshot_inner(&state.project, true, false)
                 .expect("snapshot");
         assert!(!snapshot.dirty, "dirty must be false after load");
+    }
+
+    // ── new_project_inner mode variants ──────────────────────────────────
+
+    #[test]
+    fn new_project_inner_accepts_all_canonical_modes() {
+        let cases: &[(&str, Mode)] = &[
+            ("gcode_viewer", Mode::GcodeViewer),
+            ("2d", Mode::TwoD),
+            ("2_5d", Mode::TwoAndHalfD),
+            ("3d", Mode::ThreeD),
+            ("rotary_2", Mode::RotaryTwo),
+            ("rotary_3", Mode::RotaryThree),
+            ("5_axis", Mode::FiveAxis),
+        ];
+        for (mode_str, expected_mode) in cases {
+            let state = AppState::default();
+            let snap = new_project_inner(&state.project, mode_str)
+                .unwrap_or_else(|e| panic!("new_project_inner({mode_str}) failed: {e:?}"));
+            assert_eq!(
+                &snap.mode, mode_str,
+                "snapshot mode mismatch for {mode_str}"
+            );
+            let project = state.project.read().expect("read lock");
+            assert_eq!(
+                &project.mode, expected_mode,
+                "project mode mismatch for {mode_str}"
+            );
+        }
+    }
+
+    #[test]
+    fn new_project_inner_rejects_bogus_mode() {
+        let state = AppState::default();
+        let result = new_project_inner(&state.project, "bogus");
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "expected InvalidInput for unrecognized mode, got: {result:?}"
+        );
     }
 
     // ── open_model ────────────────────────────────────────────────────────

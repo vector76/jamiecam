@@ -79,6 +79,8 @@ pub struct ProjectSnapshot {
     pub file_path: Option<String>,
     /// Whether the project has unsaved changes.
     pub dirty: bool,
+    /// Active CNC operation mode string (e.g. `"3d"`, `"2d"`).
+    pub mode: String,
 }
 
 impl ProjectSnapshot {
@@ -160,6 +162,10 @@ impl ProjectSnapshot {
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned()),
             dirty,
+            mode: serde_json::to_value(&p.mode)
+                .ok()
+                .and_then(|v| v.as_str().map(String::from))
+                .unwrap_or_default(),
         }
     }
 }
@@ -289,6 +295,7 @@ mod tests {
             project_is_open: false,
             file_path: None,
             dirty: false,
+            mode: "3d".to_string(),
         };
         let value = serde_json::to_value(&snap).expect("serialize");
         assert!(
@@ -322,6 +329,20 @@ mod tests {
             "expected camelCase filePath"
         );
         assert!(value.get("dirty").is_some(), "expected dirty field");
+        assert!(value.get("mode").is_some(), "expected mode field");
+    }
+
+    #[test]
+    fn snapshot_build_populates_mode_field() {
+        use crate::state::Mode;
+
+        let state = AppState::default();
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.mode = Mode::TwoD;
+        }
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
+        assert_eq!(snap.mode, "2d");
     }
 
     #[test]

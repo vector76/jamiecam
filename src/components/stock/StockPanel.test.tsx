@@ -13,7 +13,7 @@ const fileApi = await import('../../api/file')
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const SNAPSHOT_NO_STOCK = {
-  stock: null, tools: [], operations: [], wcs: [], projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false, filePath: null, dirty: false,
+  stock: null, tools: [], operations: [], wcs: [], projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false, filePath: null, dirty: false, mode: '3d',
 }
 const SNAPSHOT_WITH_STOCK = {
   ...SNAPSHOT_NO_STOCK,

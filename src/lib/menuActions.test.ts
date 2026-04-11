@@ -54,12 +54,12 @@ import {
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 const MESH: MeshData = { vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0], normals: [0, 0, 1, 0, 0, 1, 0, 0, 1], indices: [0, 1, 2], faceGroups: [] }
-const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false }
-const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false }
+const SNAPSHOT: ProjectSnapshot = { modelPath: '/models/part.step', modelChecksum: 'abc', projectName: 'Test', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false, mode: '3d' }
+const EMPTY_SNAPSHOT: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [], projectIsOpen: false, filePath: null, dirty: false, mode: '3d' }
 const LINE_GEOMETRY: LineGeometryData = { positions: [0, 0, 0, 1, 0, 0], colours: [1, 0, 0, 1, 0, 0], types: [1] }
 const OP_ID = 'op-1'
-const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }], projectIsOpen: false, filePath: null, dirty: false }
-const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }], projectIsOpen: false, filePath: null, dirty: false }
+const SNAPSHOT_WITH_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: false }], projectIsOpen: false, filePath: null, dirty: false, mode: '3d' }
+const SNAPSHOT_WITH_STALE_OP: ProjectSnapshot = { modelPath: null, modelChecksum: null, projectName: '', modifiedAt: '', tools: [], stock: null, wcs: [], operations: [{ id: OP_ID, name: 'Op 1', operationType: 'profile', enabled: true, needsRecalculate: true }], projectIsOpen: false, filePath: null, dirty: false, mode: '3d' }
 const SNAPSHOT_WITH_FILE_PATH: ProjectSnapshot = { ...SNAPSHOT, filePath: '/projects/my.jcam', dirty: true }
 
 // ── Setup ────────────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ describe('handleNewProject', () => {
 
     await handleNewProject()
 
-    expect(api.newProject).toHaveBeenCalled()
+    expect(api.newProject).toHaveBeenCalledWith('3d')
     expect(useViewportStore.getState().meshData).toBeNull()
     expect(useProjectStore.getState().snapshot).toEqual(EMPTY_SNAPSHOT)
   })

@@ -43,7 +43,7 @@ export async function handleNewProject(): Promise<void> {
   const proceed = await checkUnsavedChanges()
   if (!proceed) return
   try {
-    const snapshot = await api.newProject()
+    const snapshot = await api.newProject('3d')
     useProjectStore.getState().setSnapshot(snapshot)
     useViewportStore.getState().setMeshData(null)
     await updateWindowTitle(snapshot)

@@ -361,6 +361,8 @@ export interface ProjectSnapshot {
   filePath: string | null
   /** Whether the project has unsaved changes. */
   dirty: boolean
+  /** Active CNC operation mode (e.g. "3d", "2d", "gcode_viewer"). */
+  mode: string
 }
 
 /**

@@ -88,6 +88,7 @@ const SNAPSHOT_PROJECT_OPEN: ProjectSnapshot = {
   projectIsOpen: true,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
@@ -102,6 +103,7 @@ const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
   projectIsOpen: false,
   filePath: null,
   dirty: false,
+  mode: '3d',
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
