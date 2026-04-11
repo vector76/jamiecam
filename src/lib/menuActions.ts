@@ -40,16 +40,11 @@ export async function handleOpenModel(): Promise<void> {
 }
 
 export async function handleNewProject(): Promise<void> {
+  const snapshot = useProjectStore.getState().snapshot
+  if (snapshot === null) return
   const proceed = await checkUnsavedChanges()
   if (!proceed) return
-  try {
-    const snapshot = await api.newProject('3d')
-    useProjectStore.getState().setSnapshot(snapshot)
-    useViewportStore.getState().setMeshData(null)
-    await updateWindowTitle(snapshot)
-  } catch (e: unknown) {
-    notify(e)
-  }
+  useProjectStore.getState().returnToSelector()
 }
 
 export async function handleSaveAs(): Promise<void> {

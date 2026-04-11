@@ -107,31 +107,31 @@ describe('handleOpenModel', () => {
 // ── handleNewProject ─────────────────────────────────────────────────────────
 
 describe('handleNewProject', () => {
-  it('calls newProject, clears meshData, and updates snapshot', async () => {
-    useViewportStore.setState({ meshData: MESH })
-    vi.mocked(api.newProject).mockResolvedValue(EMPTY_SNAPSHOT)
+  it('is a no-op when snapshot is null (user already on selector)', async () => {
+    useProjectStore.setState({ snapshot: null })
 
     await handleNewProject()
 
-    expect(api.newProject).toHaveBeenCalledWith('3d')
-    expect(useViewportStore.getState().meshData).toBeNull()
-    expect(useProjectStore.getState().snapshot).toEqual(EMPTY_SNAPSHOT)
+    expect(checkUnsavedChanges).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().snapshot).toBeNull()
   })
 
-  it('pushes a notification when newProject throws', async () => {
-    vi.mocked(api.newProject).mockRejectedValue({ kind: 'Io', message: 'Disk full' })
+  it('calls returnToSelector when project is clean (snapshot becomes null)', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
 
     await handleNewProject()
 
-    expect(useProjectStore.getState().notifications).toEqual(['Disk full'])
+    expect(checkUnsavedChanges).toHaveBeenCalled()
+    expect(useProjectStore.getState().snapshot).toBeNull()
   })
 
-  it('does nothing when the unsaved-changes guard returns false', async () => {
+  it('does not call returnToSelector when user cancels unsaved-changes dialog', async () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
     vi.mocked(checkUnsavedChanges).mockResolvedValue(false)
 
     await handleNewProject()
 
-    expect(api.newProject).not.toHaveBeenCalled()
+    expect(useProjectStore.getState().snapshot).toEqual(SNAPSHOT)
   })
 })
 
@@ -288,6 +288,18 @@ describe('handleOpenProject', () => {
     await handleOpenProject()
 
     expect(useProjectStore.getState().notifications).toEqual(['File not found'])
+  })
+
+  it('stores the loaded mode in snapshot when projectIsOpen is true', async () => {
+    const openSnapshot: ProjectSnapshot = { ...EMPTY_SNAPSHOT, projectIsOpen: true, mode: '3d' }
+    vi.mocked(open).mockResolvedValue('/projects/job.jcam')
+    vi.mocked(api.loadProject).mockResolvedValue(openSnapshot)
+
+    await handleOpenProject()
+
+    const stored = useProjectStore.getState().snapshot
+    expect(stored?.projectIsOpen).toBe(true)
+    expect(stored?.mode).toBe('3d')
   })
 })
 

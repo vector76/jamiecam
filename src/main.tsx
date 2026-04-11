@@ -28,27 +28,21 @@ export function getWindowLabel(): string {
 }
 
 /**
- * Bootstrap the main application window: fetch initial project state and
- * register backend event listeners before the first render.
+ * Bootstrap the main application window: register backend event listeners.
+ *
+ * Does not call getProjectSnapshot() — initial state is loaded by the selector
+ * or by the project-open flow.
  */
-async function bootstrap(): Promise<void> {
-  const setSnapshot = useProjectStore.getState().setSnapshot
+export async function bootstrapApp(): Promise<void> {
   const useMock = import.meta.env.VITE_MOCK_API === 'true'
-
-  // Select real Tauri IPC or mock stubs based on the build-time env var.
-  // The mock import stays dynamic so it is only bundled when VITE_MOCK_API is set.
-  const { getProjectSnapshot: getSnapshot } = useMock
-    ? await import('./api/mock')
-    : { getProjectSnapshot }
-
-  // Populate the project store with the current backend state on startup.
-  const snapshot = await getSnapshot()
-  setSnapshot(snapshot)
-  updateWindowTitle(snapshot)
 
   if (!useMock) {
     // Register a listener for backend-initiated project state changes.
+    // Skip the update if snapshot is null (user is on the selector screen)
+    // so no backend event can accidentally flip the UI back to a mode view.
     await listen<ProjectSnapshot>('project:modified', (event) => {
+      const { snapshot, setSnapshot } = useProjectStore.getState()
+      if (snapshot === null) return
       setSnapshot(event.payload)
       updateWindowTitle(event.payload)
     })
@@ -99,7 +93,7 @@ const isToolEditor = label === 'tool-editor'
 // Run the appropriate bootstrap for this window.
 const init = isToolEditor
   ? bootstrapToolEditor()
-  : bootstrap()
+  : bootstrapApp()
 
 init.catch(console.error)
 
