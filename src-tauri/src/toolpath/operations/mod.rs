@@ -7,5 +7,6 @@ pub mod pencil_milling;
 pub mod pocket;
 pub mod profile;
 pub mod scallop_finishing;
+pub mod twod_profile;
 pub mod zlevel_finishing;
 pub mod zlevel_roughing;
