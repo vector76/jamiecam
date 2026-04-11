@@ -7,7 +7,8 @@
  */
 
 import { create } from 'zustand'
-import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary, WorkCoordinateSystem } from '../api/types'
+import type { Mode, OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary, WorkCoordinateSystem } from '../api/types'
+import { useViewportStore } from './viewportStore'
 
 export type UnsavedChoice = 'save' | 'discard' | 'cancel'
 
@@ -34,6 +35,8 @@ interface ProjectState {
   showUnsavedDialog: () => Promise<UnsavedChoice>
   /** Resolve the unsaved-changes dialog with the given choice. */
   resolveUnsavedDialog: (choice: UnsavedChoice) => void
+  /** Return to the mode selector: clears the snapshot and viewport state. */
+  returnToSelector: () => void
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -54,6 +57,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { unsavedDialogResolve } = get()
     if (unsavedDialogResolve) unsavedDialogResolve(choice)
     set({ unsavedDialogOpen: false, unsavedDialogResolve: null })
+  },
+  returnToSelector: () => {
+    set({ snapshot: null })
+    const vp = useViewportStore.getState()
+    vp.setMeshData(null)
+    vp.setToolpathGeometry(null)
+    vp.setSimulationMeshData(null)
   },
 }))
 
@@ -152,3 +162,17 @@ export const useFilePath = (): string | null =>
  */
 export const useDirty = (): boolean =>
   useProjectStore((state) => state.snapshot?.dirty ?? false)
+
+/**
+ * Selector hook: returns the current top-level view.
+ *
+ * Returns `'selector'` when no project is open, otherwise returns the
+ * project's active mode. The return type is `'selector' | Mode` (not
+ * `string`) so callers can use exhaustive narrowing.
+ */
+export const useCurrentView = (): 'selector' | Mode =>
+  useProjectStore((state) => {
+    const s = state.snapshot
+    if (!s || !s.projectIsOpen) return 'selector'
+    return s.mode
+  })

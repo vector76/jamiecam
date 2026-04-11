@@ -8,7 +8,9 @@ import {
   useStock,
   useFilePath,
   useDirty,
+  useCurrentView,
 } from './projectStore'
+import { useViewportStore } from './viewportStore'
 import type { OperationSummary, ProjectSnapshot, StockDefinition, ToolSummary } from '../api/types'
 
 const SNAPSHOT: ProjectSnapshot = {
@@ -244,6 +246,59 @@ describe('projectStore — useFilePath selector', () => {
       useProjectStore.getState().setSnapshot(null)
     })
     expect(result.current).toBeNull()
+  })
+})
+
+describe('projectStore — useCurrentView selector', () => {
+  it("returns 'selector' when snapshot is null", () => {
+    const { result } = renderHook(() => useCurrentView())
+    expect(result.current).toBe('selector')
+  })
+
+  it("returns 'selector' when snapshot.projectIsOpen is false", () => {
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: false } })
+    const { result } = renderHook(() => useCurrentView())
+    expect(result.current).toBe('selector')
+  })
+
+  it('returns the mode when snapshot.projectIsOpen is true', () => {
+    useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: true, mode: '2d' } })
+    const { result } = renderHook(() => useCurrentView())
+    expect(result.current).toBe('2d')
+  })
+})
+
+describe('projectStore — returnToSelector action', () => {
+  beforeEach(() => {
+    useViewportStore.setState({
+      meshData: { vertices: [], normals: [], indices: [], faceGroups: [] },
+      toolpathGeometry: { positions: [], colours: [], types: [] },
+      simulationMeshData: { vertices: [], normals: [], indices: [], faceGroups: [] },
+    })
+  })
+
+  it('sets snapshot to null', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    useProjectStore.getState().returnToSelector()
+    expect(useProjectStore.getState().snapshot).toBeNull()
+  })
+
+  it('clears meshData on the viewport store', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    useProjectStore.getState().returnToSelector()
+    expect(useViewportStore.getState().meshData).toBeNull()
+  })
+
+  it('clears toolpathGeometry on the viewport store', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    useProjectStore.getState().returnToSelector()
+    expect(useViewportStore.getState().toolpathGeometry).toBeNull()
+  })
+
+  it('clears simulationMeshData on the viewport store', () => {
+    useProjectStore.setState({ snapshot: SNAPSHOT })
+    useProjectStore.getState().returnToSelector()
+    expect(useViewportStore.getState().simulationMeshData).toBeNull()
   })
 })
 
