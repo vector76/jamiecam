@@ -13,6 +13,7 @@
 import type {
   FaceDescriptor,
   MeshData,
+  Mode,
   Operation,
   OperationInput,
   ProjectSnapshot,
@@ -53,8 +54,8 @@ export async function openModel(_path: string): Promise<MeshData> {
 }
 
 /** Mock: returns a default ProjectSnapshot without invoking the backend. */
-export async function newProject(_mode: string): Promise<ProjectSnapshot> {
-  return { ...DEFAULT_SNAPSHOT }
+export async function newProject(mode: Mode): Promise<ProjectSnapshot> {
+  return { ...DEFAULT_SNAPSHOT, mode }
 }
 
 /** Mock: no-op save (always succeeds). */

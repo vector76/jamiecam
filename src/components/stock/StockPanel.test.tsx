@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { StockPanel } from './StockPanel'
 import { useProjectStore } from '../../store/projectStore'
+import type { ProjectSnapshot } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -12,10 +13,10 @@ const fileApi = await import('../../api/file')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const SNAPSHOT_NO_STOCK = {
+const SNAPSHOT_NO_STOCK: ProjectSnapshot = {
   stock: null, tools: [], operations: [], wcs: [], projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false, filePath: null, dirty: false, mode: '3d',
 }
-const SNAPSHOT_WITH_STOCK = {
+const SNAPSHOT_WITH_STOCK: ProjectSnapshot = {
   ...SNAPSHOT_NO_STOCK,
   stock: { type: 'box' as const, origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 80, height: 50 },
 }

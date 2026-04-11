@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { WCSPanel } from './WCSPanel'
 import { useProjectStore } from '../../store/projectStore'
+import type { ProjectSnapshot } from '../../api/types'
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -12,11 +13,11 @@ const fileApi = await import('../../api/file')
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const SNAPSHOT_NO_WCS = {
+const SNAPSHOT_NO_WCS: ProjectSnapshot = {
   stock: null, tools: [], operations: [], wcs: [],
   projectName: 'test', modelPath: null, modelChecksum: null, modifiedAt: '', projectIsOpen: false, filePath: null, dirty: false, mode: '3d',
 }
-const SNAPSHOT_WITH_WCS = {
+const SNAPSHOT_WITH_WCS: ProjectSnapshot = {
   ...SNAPSHOT_NO_WCS,
   wcs: [{
     id: 'wcs-id-1', name: 'G54',

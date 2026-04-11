@@ -333,6 +333,8 @@ export interface OperationSummary {
 
 // ── ProjectSnapshot ───────────────────────────────────────────────────────────
 
+export type Mode = 'gcode_viewer' | '2d' | '2_5d' | '3d' | 'rotary_2' | 'rotary_3' | '5_axis'
+
 /**
  * Lightweight snapshot of the active project returned by project commands.
  *
@@ -362,7 +364,7 @@ export interface ProjectSnapshot {
   /** Whether the project has unsaved changes. */
   dirty: boolean
   /** Active CNC operation mode (e.g. "3d", "2d", "gcode_viewer"). */
-  mode: string
+  mode: Mode
 }
 
 /**

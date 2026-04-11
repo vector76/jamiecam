@@ -7,7 +7,7 @@
  *    callers always receive a typed error object.
  */
 
-import type { MeshData, ProjectSnapshot } from './types'
+import type { MeshData, Mode, ProjectSnapshot } from './types'
 import { typedInvoke } from './errors'
 
 /**
@@ -28,7 +28,7 @@ export async function openModel(path: string): Promise<MeshData> {
  * @returns A ProjectSnapshot reflecting the new empty project.
  * @throws AppError with kind "InvalidInput" if mode is not recognized.
  */
-export async function newProject(mode: string): Promise<ProjectSnapshot> {
+export async function newProject(mode: Mode): Promise<ProjectSnapshot> {
   return typedInvoke<ProjectSnapshot>('new_project', { mode })
 }
 
