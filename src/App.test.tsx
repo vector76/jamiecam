@@ -1,9 +1,9 @@
 /**
  * Tests for App.tsx — the navigation root.
  *
- * Sub-components (ModeSelector, ModePlaceholder, Notifications,
- * UnsavedChangesDialog) are mocked so these tests stay fast and
- * focus on the routing logic driven by useCurrentView.
+ * Sub-components (ModeSelector, ModePlaceholder, ToolpathViewerMode,
+ * Notifications, UnsavedChangesDialog) are mocked so these tests stay fast
+ * and focus on the routing logic driven by useCurrentView.
  */
 
 import { render, screen } from '@testing-library/react'
@@ -19,6 +19,10 @@ vi.mock('./components/modes/ModePlaceholder', () => ({
   ModePlaceholder: ({ mode }: { mode: string }) => (
     <div data-testid="mode-placeholder" data-mode={mode} />
   ),
+}))
+
+vi.mock('./components/modes/ToolpathViewerMode', () => ({
+  ToolpathViewerMode: () => <div data-testid="toolpath-viewer-mode" />,
 }))
 
 vi.mock('./components/common/Notifications', () => ({
@@ -53,6 +57,29 @@ describe('App', () => {
     it('renders ModeSelector (contains mode labels)', () => {
       render(<App />)
       expect(screen.getByTestId('mode-selector')).toBeInTheDocument()
+      expect(screen.queryByTestId('mode-placeholder')).not.toBeInTheDocument()
+    })
+
+    it('renders Notifications', () => {
+      render(<App />)
+      expect(screen.getByTestId('notifications')).toBeInTheDocument()
+    })
+
+    it('renders UnsavedChangesDialog', () => {
+      render(<App />)
+      expect(screen.getByTestId('unsaved-dialog')).toBeInTheDocument()
+    })
+  })
+
+  describe('gcode_viewer state (projectIsOpen: true, mode: "gcode_viewer")', () => {
+    beforeEach(() => {
+      useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: true, mode: 'gcode_viewer' } })
+    })
+
+    it('renders ToolpathViewerMode and not ModeSelector or ModePlaceholder', () => {
+      render(<App />)
+      expect(screen.getByTestId('toolpath-viewer-mode')).toBeInTheDocument()
+      expect(screen.queryByTestId('mode-selector')).not.toBeInTheDocument()
       expect(screen.queryByTestId('mode-placeholder')).not.toBeInTheDocument()
     })
 

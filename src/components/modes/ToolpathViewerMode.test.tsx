@@ -219,6 +219,32 @@ describe('ToolpathViewerMode — loading a file with no metadata', () => {
 })
 
 describe('ToolpathViewerMode — loading a second file', () => {
+  it('clears prior simulation mesh when loading a new file', async () => {
+    vi.mocked(gcodeApi.simulateGcodeViewer).mockResolvedValue(MOCK_MESH)
+
+    render(<ToolpathViewerMode />)
+
+    // Load and simulate with the first file.
+    await loadFileViaButton()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /simulate/i }))
+    })
+    await waitFor(() => {
+      expect(useViewportStore.getState().simulationMeshData).toEqual(MOCK_MESH)
+    })
+
+    // Load a second file — prior simulation mesh must be cleared.
+    vi.mocked(dialogApi.open).mockResolvedValue('/second.nc')
+    vi.mocked(gcodeApi.loadGcodeForViewer).mockResolvedValue(MOCK_LOAD_RESULT)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open file/i }))
+    })
+
+    await waitFor(() => {
+      expect(useViewportStore.getState().simulationMeshData).toBeNull()
+    })
+  })
+
   it('resets overrides and repopulates from the new file metadata', async () => {
     const secondResult: GcodeViewerLoadResult = {
       ...MOCK_LOAD_RESULT,
@@ -507,5 +533,21 @@ describe('ToolpathViewerMode — back button', () => {
     await waitFor(() => {
       expect(spy).toHaveBeenCalled()
     })
+  })
+
+  it('does not call returnToSelector when checkUnsavedChanges returns false', async () => {
+    vi.mocked(unsavedGuard.checkUnsavedChanges).mockResolvedValue(false)
+    const spy = vi.spyOn(useProjectStore.getState(), 'returnToSelector')
+
+    render(<ToolpathViewerMode />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /back/i }))
+    })
+
+    // Wait for the guard to have been called, then confirm the store was not touched.
+    await waitFor(() => {
+      expect(unsavedGuard.checkUnsavedChanges).toHaveBeenCalled()
+    })
+    expect(spy).not.toHaveBeenCalled()
   })
 })

@@ -22,14 +22,6 @@ vi.mock('../operations/OperationListPanel', () => ({
   OperationListPanel: () => <div data-testid="operation-list-panel">OperationListPanel</div>,
 }))
 
-vi.mock('../common/Notifications', () => ({
-  Notifications: () => <div data-testid="notifications">Notifications</div>,
-}))
-
-vi.mock('../common/UnsavedChangesDialog', () => ({
-  UnsavedChangesDialog: () => <div data-testid="unsaved-changes-dialog">UnsavedChangesDialog</div>,
-}))
-
 vi.mock('../gcode/GCodePreviewPanel', () => ({
   GCodePreviewPanel: () => <div data-testid="gcode-preview-panel">GCodePreviewPanel</div>,
 }))
@@ -75,12 +67,6 @@ describe('AppShell', () => {
     expect(screen.getByTestId('operation-list-panel')).toBeInTheDocument()
     expect(screen.getByTestId('gcode-preview-panel')).toBeInTheDocument()
     expect(screen.getByTestId('material-removal-panel')).toBeInTheDocument()
-  })
-
-  it('renders Notifications and UnsavedChangesDialog', () => {
-    render(<AppShell />)
-    expect(screen.getByTestId('notifications')).toBeInTheDocument()
-    expect(screen.getByTestId('unsaved-changes-dialog')).toBeInTheDocument()
   })
 
   it('does not render a Toolbar', () => {
