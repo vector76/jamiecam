@@ -107,6 +107,11 @@ pub fn plan(
         OperationParams::PencilMilling(params) => {
             operations::pencil_milling::pencil_milling_passes(stock, params, tool.diameter, shape)?
         }
+        OperationParams::Profile2d(_) => {
+            return Err(crate::error::AppError::InvalidInput(
+                "Profile2d toolpath calculation is not yet implemented".to_string(),
+            ));
+        }
     };
 
     // Step 3: Compute stats over the returned passes.

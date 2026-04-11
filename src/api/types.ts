@@ -287,6 +287,23 @@ export interface PencilMillingParams {
   rampEntryAngleDeg?: number | null
 }
 
+/** Cut side for 2D profile operations. */
+export type CutType = 'inside' | 'outside' | 'on_line'
+
+/** Milling direction for 2D profile operations. */
+export type MillingDirection = 'climb' | 'conventional'
+
+/** Parameters for a 2D Profile operation. */
+export interface Profile2dParams {
+  curveId: string
+  cutType: CutType
+  direction: MillingDirection
+  topOfCut: number
+  depthOfCut: number
+  stepDown: number
+  feedRate: number
+}
+
 /**
  * A machining operation returned by the backend.
  *
@@ -326,9 +343,11 @@ export interface OperationInput {
 export interface OperationSummary {
   id: string
   name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
+  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
   enabled: boolean
   needsRecalculate: boolean
+  /** UUID of the associated curve for 2D profile operations; absent for all other types. */
+  curveId?: string
 }
 
 // ── ProjectSnapshot ───────────────────────────────────────────────────────────

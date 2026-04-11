@@ -45,6 +45,9 @@ pub struct OperationSummary {
     pub enabled: bool,
     /// Whether the cached toolpath is stale and must be recalculated before use.
     pub needs_recalculate: bool,
+    /// UUID of the associated curve for 2D profile operations; absent for all other types.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curve_id: Option<Uuid>,
 }
 
 // ── ProjectSnapshot ───────────────────────────────────────────────────────────
@@ -127,23 +130,30 @@ impl ProjectSnapshot {
                 } else {
                     true
                 };
+                let (operation_type, curve_id) = match &op.params {
+                    OperationParams::Profile(_) => ("profile".to_string(), None),
+                    OperationParams::Pocket(_) => ("pocket".to_string(), None),
+                    OperationParams::Drill(_) => ("drill".to_string(), None),
+                    OperationParams::ZLevelRoughing(_) => ("z_level_roughing".to_string(), None),
+                    OperationParams::ZLevelFinishing(_) => ("z_level_finishing".to_string(), None),
+                    OperationParams::AdaptiveClearing(_) => ("adaptive_clearing".to_string(), None),
+                    OperationParams::ParallelFinishing(_) => {
+                        ("parallelFinishing".to_string(), None)
+                    }
+                    OperationParams::ScallopFinishing(_) => ("scallopFinishing".to_string(), None),
+                    OperationParams::FlowlineFinishing(_) => {
+                        ("flowlineFinishing".to_string(), None)
+                    }
+                    OperationParams::PencilMilling(_) => ("pencilMilling".to_string(), None),
+                    OperationParams::Profile2d(p) => ("profile_2d".to_string(), Some(p.curve_id)),
+                };
                 OperationSummary {
                     id: op.id,
                     name: op.name.clone(),
-                    operation_type: match &op.params {
-                        OperationParams::Profile(_) => "profile".to_string(),
-                        OperationParams::Pocket(_) => "pocket".to_string(),
-                        OperationParams::Drill(_) => "drill".to_string(),
-                        OperationParams::ZLevelRoughing(_) => "z_level_roughing".to_string(),
-                        OperationParams::ZLevelFinishing(_) => "z_level_finishing".to_string(),
-                        OperationParams::AdaptiveClearing(_) => "adaptive_clearing".to_string(),
-                        OperationParams::ParallelFinishing(_) => "parallelFinishing".to_string(),
-                        OperationParams::ScallopFinishing(_) => "scallopFinishing".to_string(),
-                        OperationParams::FlowlineFinishing(_) => "flowlineFinishing".to_string(),
-                        OperationParams::PencilMilling(_) => "pencilMilling".to_string(),
-                    },
+                    operation_type,
                     enabled: op.enabled,
                     needs_recalculate,
+                    curve_id,
                 }
             })
             .collect();
@@ -224,7 +234,8 @@ pub async fn is_project_open(state: tauri::State<'_, AppState>) -> Result<bool, 
 mod tests {
     use super::*;
     use crate::models::operation::{
-        CacheState, CompensationSide, DrillParams, OperationParams, PocketParams, ProfileParams,
+        CacheState, CompensationSide, CutType, DrillParams, MillingDirection, OperationParams,
+        PocketParams, Profile2dParams, ProfileParams,
     };
     use crate::models::stock::{BoxDimensions, Vec3};
     use crate::models::wcs::WorkCoordinateSystem;
@@ -725,6 +736,7 @@ mod tests {
             operation_type: "drill".to_string(),
             enabled: true,
             needs_recalculate: true,
+            curve_id: None,
         };
         let value = serde_json::to_value(&summary).expect("serialize");
         assert!(
@@ -769,5 +781,76 @@ mod tests {
 
         let snap_open = get_project_snapshot_inner(&state.project, true, false).expect("snapshot");
         assert!(snap_open.project_is_open);
+    }
+
+    // ── Profile2d operation summary ─────────────────────────────────────
+
+    #[test]
+    fn profile2d_operation_summary_includes_curve_id() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        let curve_id = Uuid::new_v4();
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.operations.push(Operation {
+                id: Uuid::new_v4(),
+                name: "2D Profile".to_string(),
+                enabled: true,
+                tool_id,
+                spindle_speed_override: None,
+                feed_rate_override: None,
+                workpiece_material: None,
+                params: OperationParams::Profile2d(Profile2dParams {
+                    curve_id,
+                    cut_type: CutType::Outside,
+                    direction: MillingDirection::Climb,
+                    top_of_cut: 0.0,
+                    depth_of_cut: 5.0,
+                    step_down: 2.5,
+                    feed_rate: 1000.0,
+                }),
+                cache: CacheState::default(),
+            });
+        }
+
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
+        assert_eq!(snap.operations.len(), 1);
+        assert_eq!(snap.operations[0].operation_type, "profile_2d");
+        assert_eq!(snap.operations[0].curve_id, Some(curve_id));
+    }
+
+    #[test]
+    fn non_2d_operation_summary_has_no_curve_id() {
+        let state = AppState::default();
+        let tool_id = Uuid::new_v4();
+        {
+            let mut p = state.project.write().expect("write lock");
+            p.operations.push(Operation {
+                id: Uuid::new_v4(),
+                name: "Drill Op".to_string(),
+                enabled: true,
+                tool_id,
+                spindle_speed_override: None,
+                feed_rate_override: None,
+                workpiece_material: None,
+                params: OperationParams::Drill(DrillParams {
+                    depth: 10.0,
+                    points: vec![],
+                    peck_depth: None,
+                }),
+                cache: CacheState::default(),
+            });
+        }
+
+        let snap = get_project_snapshot_inner(&state.project, false, false).expect("snapshot");
+        assert_eq!(snap.operations.len(), 1);
+        assert_eq!(snap.operations[0].curve_id, None);
+
+        // Also verify curve_id is absent from serialized JSON (skip_serializing_if)
+        let json = serde_json::to_value(&snap.operations[0]).expect("serialize");
+        assert!(
+            json.get("curveId").is_none(),
+            "curveId should be absent from JSON for non-2d ops"
+        );
     }
 }

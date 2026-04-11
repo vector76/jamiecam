@@ -308,6 +308,43 @@ pub struct PencilMillingParams {
     pub ramp_entry_angle_deg: Option<f64>,
 }
 
+/// Cut side for 2D profile operations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CutType {
+    Inside,
+    Outside,
+    OnLine,
+}
+
+/// Milling direction for 2D profile operations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MillingDirection {
+    Climb,
+    Conventional,
+}
+
+/// Parameters for a 2D Profile operation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile2dParams {
+    /// UUID of the curve (DXF entity) to profile.
+    pub curve_id: Uuid,
+    /// Whether to cut inside, outside, or on the curve.
+    pub cut_type: CutType,
+    /// Milling direction (climb or conventional).
+    pub direction: MillingDirection,
+    /// Z coordinate of the top of the cut (mm).
+    pub top_of_cut: f64,
+    /// Total depth of cut below top_of_cut (mm).
+    pub depth_of_cut: f64,
+    /// Maximum depth per pass (mm).
+    pub step_down: f64,
+    /// Feed rate in mm/min.
+    pub feed_rate: f64,
+}
+
 /// Type-discriminated operation parameters.
 ///
 /// Uses adjacently-tagged serde so the JSON representation places the `"type"`
@@ -330,6 +367,8 @@ pub enum OperationParams {
     FlowlineFinishing(FlowlineFinishingParams),
     #[serde(rename = "pencilMilling")]
     PencilMilling(PencilMillingParams),
+    #[serde(rename = "profile_2d")]
+    Profile2d(Profile2dParams),
 }
 
 /// A machining operation in the project operation list.
@@ -1371,5 +1410,79 @@ mod tests {
             "curvatureThreshold must default to None when absent"
         );
         assert!(params.arc_lead_in_radius.is_none());
+    }
+
+    // ── Profile2d / CutType / MillingDirection tests ────────────────────
+
+    #[test]
+    fn profile2d_params_round_trips_serde() {
+        let curve_id = Uuid::parse_str("aaaabbbb-0000-0000-0000-000000000001").unwrap();
+        let op = Operation {
+            id: Uuid::parse_str("aaaabbbb-0000-0000-0000-000000000002").unwrap(),
+            name: "2D Profile".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            workpiece_material: None,
+            params: OperationParams::Profile2d(Profile2dParams {
+                curve_id,
+                cut_type: CutType::Outside,
+                direction: MillingDirection::Climb,
+                top_of_cut: 0.0,
+                depth_of_cut: 5.0,
+                step_down: 2.5,
+                feed_rate: 1000.0,
+            }),
+            cache: CacheState::default(),
+        };
+        let json = serde_json::to_string(&op).expect("serialize");
+        let recovered: Operation = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(op, recovered);
+    }
+
+    #[test]
+    fn profile2d_discriminant_is_profile_2d() {
+        let curve_id = Uuid::new_v4();
+        let op = Operation {
+            id: Uuid::new_v4(),
+            name: "2D Profile".to_string(),
+            enabled: true,
+            tool_id: tool_id(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            workpiece_material: None,
+            params: OperationParams::Profile2d(Profile2dParams {
+                curve_id,
+                cut_type: CutType::Inside,
+                direction: MillingDirection::Conventional,
+                top_of_cut: 0.0,
+                depth_of_cut: 3.0,
+                step_down: 1.5,
+                feed_rate: 800.0,
+            }),
+            cache: CacheState::default(),
+        };
+        let value = serde_json::to_value(&op).expect("serialize");
+        assert_eq!(value["type"], "profile_2d");
+    }
+
+    #[test]
+    fn cut_type_serialization() {
+        assert_eq!(serde_json::to_value(CutType::Inside).unwrap(), "inside");
+        assert_eq!(serde_json::to_value(CutType::Outside).unwrap(), "outside");
+        assert_eq!(serde_json::to_value(CutType::OnLine).unwrap(), "on_line");
+    }
+
+    #[test]
+    fn milling_direction_serialization() {
+        assert_eq!(
+            serde_json::to_value(MillingDirection::Climb).unwrap(),
+            "climb"
+        );
+        assert_eq!(
+            serde_json::to_value(MillingDirection::Conventional).unwrap(),
+            "conventional"
+        );
     }
 }

@@ -298,6 +298,7 @@ pub fn calculate_toolpath_inner(
             p.helical_entry_pitch,
             p.ramp_entry_angle_deg,
         ),
+        OperationParams::Profile2d(_) => (None, None, None, None, None),
     };
     let linked_passes = match &operation.params {
         OperationParams::Pocket(_)
@@ -321,7 +322,7 @@ pub fn calculate_toolpath_inner(
                 ramp_entry_angle_deg,
             },
         ),
-        OperationParams::Drill(_) => raw_passes,
+        OperationParams::Drill(_) | OperationParams::Profile2d(_) => raw_passes,
     };
     progress(80, "Passes linked");
 
