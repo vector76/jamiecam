@@ -168,6 +168,8 @@ pub fn run() {
             commands::global_tools::delete_global_tool,
             commands::global_tools::import_from_library,
             commands::global_tools::export_to_library,
+            commands::twod::load_2d_file,
+            commands::twod::get_2d_curves,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

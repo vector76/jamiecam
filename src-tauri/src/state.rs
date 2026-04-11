@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::feed_library::FeedLibrary;
 use crate::geometry::MeshData;
+use crate::models::twod::LoadedArtwork;
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
 
 /// CNC operation mode — determines which machining strategy is active.
@@ -82,6 +83,8 @@ pub struct Project {
     pub toolpaths: HashMap<Uuid, crate::toolpath::Toolpath>,
     /// Active CNC operation mode.
     pub mode: Mode,
+    /// 2D artwork loaded for the 2D Profiling mode, if any.
+    pub source_2d_artwork: Option<LoadedArtwork>,
     /// Path to the `.jcam` file on disk, if the project has been saved/loaded.
     /// Not serialized in `.jcam` files (managed at the application level).
     pub file_path: Option<PathBuf>,
@@ -103,6 +106,7 @@ impl Default for Project {
             operations: Vec::new(),
             toolpaths: HashMap::new(),
             mode: Mode::default(),
+            source_2d_artwork: None,
             file_path: None,
         }
     }
@@ -239,6 +243,12 @@ mod tests {
     fn project_default_has_no_source_model() {
         let project = Project::default();
         assert!(project.source_model.is_none());
+    }
+
+    #[test]
+    fn project_default_has_no_source_2d_artwork() {
+        let project = Project::default();
+        assert!(project.source_2d_artwork.is_none());
     }
 
     #[test]

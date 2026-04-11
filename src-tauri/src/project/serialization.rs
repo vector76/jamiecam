@@ -127,6 +127,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         operations: pf.operations,
         toolpaths: std::collections::HashMap::new(),
         mode: pf.mode,
+        source_2d_artwork: pf.source_2d_artwork,
         file_path: None,
     };
 
@@ -217,6 +218,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         wcs: project.wcs.clone(),
         tools: project.tools.clone(),
         operations: ops,
+        source_2d_artwork: project.source_2d_artwork.clone(),
     };
 
     // Serialize and write project.json.
@@ -996,6 +998,7 @@ mod tests {
                 wcs: vec![],
                 tools: vec![],
                 operations: ops,
+                source_2d_artwork: None,
             };
             let json = serde_json::to_string_pretty(&pf).unwrap();
             let file = std::fs::File::create(&tmp).unwrap();

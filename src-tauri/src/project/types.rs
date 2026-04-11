@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::twod::LoadedArtwork;
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
 use crate::state::Mode;
 
@@ -68,6 +69,9 @@ pub struct ProjectFile {
     /// Machining operations.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<Operation>,
+    /// 2D artwork loaded for the 2D Profiling mode, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_2d_artwork: Option<LoadedArtwork>,
 }
 
 #[cfg(test)]

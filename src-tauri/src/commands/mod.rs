@@ -11,6 +11,7 @@
 //! - [`stock`]        — stock definition and WCS get/set
 //! - [`toolpath`]     — toolpath queries and post-processor management
 //! - [`tools`]        — tool library CRUD
+//! - [`twod`]         — 2D Profiling mode: SVG/DXF import, curve queries
 
 pub mod dexel;
 pub mod feeds;
@@ -24,6 +25,7 @@ pub mod project;
 pub mod stock;
 pub mod toolpath;
 pub mod tools;
+pub mod twod;
 
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
