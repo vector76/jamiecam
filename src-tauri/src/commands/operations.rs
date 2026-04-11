@@ -74,6 +74,17 @@ pub(crate) fn add_operation_inner(
         )));
     }
 
+    if let OperationParams::Profile2d(p) = &input.params {
+        if project.operations.iter().any(
+            |op| matches!(&op.params, OperationParams::Profile2d(ep) if ep.curve_id == p.curve_id),
+        ) {
+            return Err(AppError::InvalidInput(format!(
+                "curve {} already has an assigned operation",
+                p.curve_id
+            )));
+        }
+    }
+
     let op = Operation {
         id: Uuid::new_v4(),
         name: input.name,
@@ -114,12 +125,25 @@ pub(crate) fn edit_operation_inner(
         )));
     }
 
-    let entry = project
+    let idx = project
         .operations
-        .iter_mut()
-        .find(|op| op.id == op_uuid)
+        .iter()
+        .position(|op| op.id == op_uuid)
         .ok_or_else(|| AppError::NotFound(format!("operation {id} not found")))?;
 
+    if let OperationParams::Profile2d(p) = &input.params {
+        if project.operations.iter().any(|op| {
+            op.id != op_uuid
+                && matches!(&op.params, OperationParams::Profile2d(ep) if ep.curve_id == p.curve_id)
+        }) {
+            return Err(AppError::InvalidInput(format!(
+                "curve {} already has an assigned operation",
+                p.curve_id
+            )));
+        }
+    }
+
+    let entry = &mut project.operations[idx];
     entry.name = input.name;
     if let Some(enabled) = input.enabled {
         entry.enabled = enabled;
@@ -365,7 +389,10 @@ pub async fn list_operations(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::operation::{CompensationSide, DrillParams, PocketParams, ProfileParams};
+    use crate::models::operation::{
+        CompensationSide, CutType, DrillParams, MillingDirection, PocketParams, Profile2dParams,
+        ProfileParams,
+    };
     use crate::models::{Tool, ToolType};
     use crate::state::AppState;
 
@@ -453,6 +480,26 @@ mod tests {
                 depth: 20.0,
                 points: vec![],
                 peck_depth: Some(5.0),
+            }),
+        }
+    }
+
+    fn profile2d_input(name: &str, tool_id: &str, curve_id: Uuid) -> OperationInput {
+        OperationInput {
+            name: name.to_string(),
+            enabled: None,
+            tool_id: tool_id.to_string(),
+            spindle_speed_override: None,
+            feed_rate_override: None,
+            workpiece_material: None,
+            params: OperationParams::Profile2d(Profile2dParams {
+                curve_id,
+                cut_type: CutType::Outside,
+                direction: MillingDirection::Climb,
+                top_of_cut: 0.0,
+                depth_of_cut: 5.0,
+                step_down: 2.5,
+                feed_rate: 1000.0,
             }),
         }
     }
@@ -811,5 +858,129 @@ mod tests {
         let fake_id = Uuid::new_v4().to_string();
         let result = reorder_operations_inner(vec![op1.id.to_string(), fake_id], &state.project);
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ── Profile2d curve uniqueness ────────────────────────────────────────────
+
+    #[test]
+    fn add_profile2d_for_new_curve_succeeds() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+
+        let result = add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project);
+        assert!(result.is_ok(), "first Profile2d for curve A must succeed");
+    }
+
+    #[test]
+    fn add_profile2d_for_same_curve_twice_fails() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+
+        add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project)
+            .expect("first add must succeed");
+
+        let result =
+            add_operation_inner(profile2d_input("Op A dup", &tid, curve_a), &state.project);
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "second Profile2d for the same curve must return InvalidInput"
+        );
+    }
+
+    #[test]
+    fn add_profile2d_for_different_curves_succeeds() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+        let curve_b = Uuid::new_v4();
+
+        add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project)
+            .expect("curve A must succeed");
+        let result = add_operation_inner(profile2d_input("Op B", &tid, curve_b), &state.project);
+        assert!(
+            result.is_ok(),
+            "Profile2d for a distinct curve B must succeed"
+        );
+    }
+
+    #[test]
+    fn edit_profile2d_to_already_claimed_curve_fails() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+        let curve_b = Uuid::new_v4();
+
+        add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project).expect("add A");
+        let op_b = add_operation_inner(profile2d_input("Op B", &tid, curve_b), &state.project)
+            .expect("add B");
+
+        // Try to reassign op_b to curve_a (already owned by op_a).
+        let result = edit_operation_inner(
+            &op_b.id.to_string(),
+            profile2d_input("Op B edited", &tid, curve_a),
+            &state.project,
+        );
+        assert!(
+            matches!(result, Err(AppError::InvalidInput(_))),
+            "editing to a curve already claimed by another operation must return InvalidInput"
+        );
+    }
+
+    #[test]
+    fn edit_profile2d_keeping_own_curve_succeeds() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+
+        let op = add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project)
+            .expect("add");
+
+        // Edit, keeping the same curve_id — must not self-conflict.
+        let result = edit_operation_inner(
+            &op.id.to_string(),
+            profile2d_input("Op A renamed", &tid, curve_a),
+            &state.project,
+        );
+        assert!(result.is_ok(), "editing keeping own curve_id must succeed");
+    }
+
+    #[test]
+    fn edit_nonexistent_profile2d_op_with_claimed_curve_returns_not_found() {
+        // Existence check must run before curve-uniqueness check.
+        // If the operation ID doesn't exist, NotFound must be returned even
+        // when the supplied curve_id is already claimed by another operation.
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+        let curve_a = Uuid::new_v4();
+
+        add_operation_inner(profile2d_input("Op A", &tid, curve_a), &state.project).expect("add A");
+
+        let fake_id = Uuid::new_v4().to_string();
+        let result = edit_operation_inner(
+            &fake_id,
+            profile2d_input("Ghost edit", &tid, curve_a),
+            &state.project,
+        );
+        assert!(
+            matches!(result, Err(AppError::NotFound(_))),
+            "non-existent operation must return NotFound, not InvalidInput"
+        );
+    }
+
+    #[test]
+    fn non_2d_operations_unaffected_by_curve_check() {
+        let state = AppState::default();
+        let tid = add_test_tool(&state);
+
+        // Adding two Profile (3D) operations with no curve_id must both succeed.
+        add_operation_inner(profile_input("3D Profile 1", &tid), &state.project)
+            .expect("first 3D profile must succeed");
+        let result = add_operation_inner(profile_input("3D Profile 2", &tid), &state.project);
+        assert!(
+            result.is_ok(),
+            "second 3D Profile must succeed — curve check must not apply"
+        );
     }
 }
