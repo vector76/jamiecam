@@ -126,6 +126,7 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
             .collect(),
         operations: pf.operations,
         toolpaths: std::collections::HashMap::new(),
+        mode: pf.mode,
         file_path: None,
     };
 
@@ -205,6 +206,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         app_version: APP_VERSION.to_string(),
         created_at: project.created_at.clone(),
         modified_at: project.modified_at.clone(),
+        mode: project.mode.clone(),
         project: ProjectMeta {
             name: project.name.clone(),
             description: project.description.clone(),
@@ -877,6 +879,7 @@ mod tests {
                 app_version: "0.0.0".to_string(),
                 created_at: "2026-01-01T00:00:00Z".to_string(),
                 modified_at: "2026-01-01T00:00:00Z".to_string(),
+                mode: crate::state::Mode::default(),
                 project: ProjectMeta {
                     name: "Ghost".to_string(),
                     description: String::new(),

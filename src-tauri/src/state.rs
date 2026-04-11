@@ -8,12 +8,33 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::RwLock;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::feed_library::FeedLibrary;
 use crate::geometry::MeshData;
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
+
+/// CNC operation mode — determines which machining strategy is active.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub enum Mode {
+    #[serde(rename = "gcode_viewer")]
+    GcodeViewer,
+    #[serde(rename = "2d")]
+    TwoD,
+    #[serde(rename = "2_5d")]
+    TwoAndHalfD,
+    #[default]
+    #[serde(rename = "3d")]
+    ThreeD,
+    #[serde(rename = "rotary_2")]
+    RotaryTwo,
+    #[serde(rename = "rotary_3")]
+    RotaryThree,
+    #[serde(rename = "5_axis")]
+    FiveAxis,
+}
 
 /// A geometry model that has been loaded into memory.
 #[derive(Debug)]
@@ -59,6 +80,8 @@ pub struct Project {
     pub operations: Vec<Operation>,
     /// Generated toolpaths keyed by operation UUID.
     pub toolpaths: HashMap<Uuid, crate::toolpath::Toolpath>,
+    /// Active CNC operation mode.
+    pub mode: Mode,
     /// Path to the `.jcam` file on disk, if the project has been saved/loaded.
     /// Not serialized in `.jcam` files (managed at the application level).
     pub file_path: Option<PathBuf>,
@@ -79,6 +102,7 @@ impl Default for Project {
             tools: Vec::new(),
             operations: Vec::new(),
             toolpaths: HashMap::new(),
+            mode: Mode::default(),
             file_path: None,
         }
     }
@@ -324,6 +348,61 @@ mod tests {
         let parsed: Vec<Tool> = serde_json::from_str(&raw).expect("should be valid JSON array");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "10mm 4F Flat Endmill");
+    }
+
+    // ── Mode tests ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn mode_default_is_three_d() {
+        assert_eq!(Mode::default(), Mode::ThreeD);
+    }
+
+    #[test]
+    fn project_default_mode_is_three_d() {
+        let project = Project::default();
+        assert_eq!(project.mode, Mode::ThreeD);
+    }
+
+    #[test]
+    fn mode_serializes_to_canonical_strings() {
+        let cases = [
+            (Mode::GcodeViewer, "\"gcode_viewer\""),
+            (Mode::TwoD, "\"2d\""),
+            (Mode::TwoAndHalfD, "\"2_5d\""),
+            (Mode::ThreeD, "\"3d\""),
+            (Mode::RotaryTwo, "\"rotary_2\""),
+            (Mode::RotaryThree, "\"rotary_3\""),
+            (Mode::FiveAxis, "\"5_axis\""),
+        ];
+        for (variant, expected) in cases {
+            let json = serde_json::to_string(&variant).expect("serialize");
+            assert_eq!(
+                json, expected,
+                "variant {:?} should serialize to {}",
+                variant, expected
+            );
+        }
+    }
+
+    #[test]
+    fn mode_deserializes_from_canonical_strings() {
+        let cases = [
+            ("\"gcode_viewer\"", Mode::GcodeViewer),
+            ("\"2d\"", Mode::TwoD),
+            ("\"2_5d\"", Mode::TwoAndHalfD),
+            ("\"3d\"", Mode::ThreeD),
+            ("\"rotary_2\"", Mode::RotaryTwo),
+            ("\"rotary_3\"", Mode::RotaryThree),
+            ("\"5_axis\"", Mode::FiveAxis),
+        ];
+        for (json, expected) in cases {
+            let variant: Mode = serde_json::from_str(json).expect("deserialize");
+            assert_eq!(
+                variant, expected,
+                "json {} should deserialize to {:?}",
+                json, expected
+            );
+        }
     }
 
     #[test]

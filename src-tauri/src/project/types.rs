@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::models::{Operation, StockDefinition, Tool, WorkCoordinateSystem};
+use crate::state::Mode;
 
 /// Core project metadata stored under the `"project"` key in `project.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +47,9 @@ pub struct ProjectFile {
     pub created_at: String,
     /// ISO-8601 last-modified timestamp (UTC).
     pub modified_at: String,
+    /// Active CNC operation mode; defaults to `ThreeD` for v1 files that lack this key.
+    #[serde(default)]
+    pub mode: Mode,
     /// Core project metadata (name, description, units).
     pub project: ProjectMeta,
     /// Source geometry model reference, if any.
@@ -64,4 +68,26 @@ pub struct ProjectFile {
     /// Machining operations.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<Operation>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_file_missing_mode_defaults_to_three_d() {
+        let json = r#"{
+            "schema_version": 1,
+            "app_version": "0.0.1",
+            "created_at": "2024-01-01T00:00:00Z",
+            "modified_at": "2024-01-01T00:00:00Z",
+            "project": {
+                "name": "test",
+                "description": "",
+                "units": "mm"
+            }
+        }"#;
+        let pf: ProjectFile = serde_json::from_str(json).expect("should deserialize");
+        assert_eq!(pf.mode, Mode::ThreeD);
+    }
 }
