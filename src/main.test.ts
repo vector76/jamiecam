@@ -65,15 +65,19 @@ vi.mock('react-dom/client', () => ({
 
 // ── Lazy imports ─────────────────────────────────────────────────────────────
 
+import { useProjectStore } from './store/projectStore'
 const { listen } = await import('@tauri-apps/api/event')
 const { getCurrentWindow } = await import('@tauri-apps/api/window')
 const { getProjectSnapshot } = await import('./api/file')
-const { bootstrapApp } = await import('./main')
+const { listGlobalTools } = await import('./api/globalTools')
+const { checkUnsavedChanges } = await import('./lib/unsavedGuard')
+const { bootstrapApp, bootstrapToolEditor } = await import('./main')
 
 // ── Setup ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks()
+  useProjectStore.setState({ snapshot: null })
 })
 
 afterEach(() => {
@@ -93,5 +97,79 @@ describe('bootstrapApp', () => {
     expect(getCurrentWindow).toHaveBeenCalled()
     expect(mockOnCloseRequested).toHaveBeenCalledWith(expect.any(Function))
     expect(getProjectSnapshot).not.toHaveBeenCalled()
+  })
+})
+
+describe('Tool editor path regression', () => {
+  it('bootstrapToolEditor fetches project snapshot and global tools then registers listener', async () => {
+    ;(getProjectSnapshot as ReturnType<typeof vi.fn>).mockResolvedValue({
+      modelPath: null,
+      modelChecksum: null,
+      projectName: '',
+      modifiedAt: '',
+      tools: [],
+      stock: null,
+      wcs: [],
+      operations: [],
+      projectIsOpen: false,
+      filePath: null,
+      dirty: false,
+      mode: '3d' as const,
+    })
+
+    await bootstrapToolEditor()
+
+    // Both data sources are fetched (distinguishes this path from bootstrapApp,
+    // which calls neither)
+    expect(getProjectSnapshot).toHaveBeenCalled()
+    expect(listGlobalTools).toHaveBeenCalled()
+
+    // The project:modified listener is registered for live updates
+    expect(listen).toHaveBeenCalledWith('project:modified', expect.any(Function))
+  })
+})
+
+describe('Window close guard', () => {
+  it('does not call preventDefault when snapshot is null', async () => {
+    vi.stubEnv('VITE_MOCK_API', 'false')
+    useProjectStore.setState({ snapshot: null })
+    ;(checkUnsavedChanges as ReturnType<typeof vi.fn>).mockResolvedValue(true)
+
+    await bootstrapApp()
+
+    const handler = mockOnCloseRequested.mock.calls[0][0]
+    const mockEvent = { preventDefault: vi.fn() }
+    await handler(mockEvent)
+
+    expect(mockEvent.preventDefault).not.toHaveBeenCalled()
+  })
+
+  it('calls preventDefault when user cancels on a dirty project', async () => {
+    vi.stubEnv('VITE_MOCK_API', 'false')
+    useProjectStore.setState({
+      snapshot: {
+        modelPath: null,
+        modelChecksum: null,
+        projectName: '',
+        modifiedAt: '',
+        tools: [],
+        stock: null,
+        wcs: [],
+        operations: [],
+        projectIsOpen: true,
+        filePath: null,
+        dirty: true,
+        mode: '3d' as const,
+      },
+    })
+    ;(checkUnsavedChanges as ReturnType<typeof vi.fn>).mockResolvedValue(false)
+
+    await bootstrapApp()
+
+    const handler = mockOnCloseRequested.mock.calls[0][0]
+    const mockEvent = { preventDefault: vi.fn() }
+    await handler(mockEvent)
+
+    expect(mockEvent.preventDefault).toHaveBeenCalled()
   })
 })

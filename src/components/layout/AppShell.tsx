@@ -7,8 +7,6 @@
 
 import { Viewport } from '../../viewport/Viewport'
 import { OperationListPanel } from '../operations/OperationListPanel'
-import { Notifications } from '../common/Notifications'
-import { UnsavedChangesDialog } from '../common/UnsavedChangesDialog'
 import { GCodePreviewPanel } from '../gcode/GCodePreviewPanel'
 import { StockPanel } from '../stock/StockPanel'
 import { WCSPanel } from '../wcs/WCSPanel'
@@ -41,8 +39,6 @@ export function AppShell() {
           </ScrollArea>
         </aside>
       </div>
-      <Notifications />
-      <UnsavedChangesDialog />
     </div>
   )
 }
