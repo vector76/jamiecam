@@ -25,6 +25,12 @@ vi.mock('./Canvas2D', () => ({
   },
 }))
 
+vi.mock('../../../viewport/Viewport', () => ({
+  Viewport: (props: { className?: string }) => (
+    <div data-testid="viewport" className={props.className}>Viewport</div>
+  ),
+}))
+
 // ── Other module mocks ────────────────────────────────────────────────────────
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -803,5 +809,86 @@ describe('Mode2DMode — generate G-code button', () => {
 
     // Still in editing subState — generate button still visible
     expect(screen.getByRole('button', { name: /generate g-code/i })).toBeInTheDocument()
+  })
+})
+
+// ── Tests: viewing sub-state ──────────────────────────────────────────────────
+
+describe('Mode2DMode — viewing sub-state', () => {
+  async function generateAndView(gcode = 'G0 Z5\nG1 X10', warnings: string[] = []) {
+    useProjectStore.setState({
+      snapshot: {
+        ...BASE_SNAPSHOT,
+        operations: [
+          {
+            id: 'op-1',
+            name: 'Profile 2D',
+            operationType: 'profile_2d',
+            enabled: true,
+            needsRecalculate: false,
+            curveId: 'curve-1',
+          },
+        ],
+      },
+    })
+    vi.mocked(twodApi.generate2dGcode).mockResolvedValue({
+      gcode,
+      lineGeometry: { positions: [], colours: [], types: [] },
+      warnings,
+      stats: { totalPointCount: 10, totalPassCount: 1, totalPathLengthMm: 100 },
+    })
+    render(<Mode2DMode />)
+    await loadDxfViaButton()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /generate g-code/i }))
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /generate g-code/i })).not.toBeInTheDocument()
+    })
+  }
+
+  it('canvas is not rendered when subState is viewing', async () => {
+    await generateAndView()
+    expect(screen.queryByTestId('canvas-2d')).not.toBeInTheDocument()
+  })
+
+  it('G-code text is displayed when subState is viewing', async () => {
+    await generateAndView('G0 Z5\nG1 X10')
+    expect(screen.getByText(/G0 Z5/)).toBeInTheDocument()
+  })
+
+  it('warnings banner is shown when warnings are non-empty', async () => {
+    await generateAndView('G0 Z5', ['Top of cut below stock'])
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent(/top of cut below stock/i)
+    })
+  })
+
+  it('warnings banner is absent when warnings are empty', async () => {
+    await generateAndView('G0 Z5', [])
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('"Back to 2D Canvas" click returns to editing state', async () => {
+    await generateAndView()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /back to 2d canvas/i }))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /generate g-code/i })).toBeInTheDocument()
+    })
+  })
+
+  it('operations panel is still visible after returning to editing', async () => {
+    await generateAndView()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /back to 2d canvas/i }))
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByText(/click a closed curve on the canvas to assign a cut operation/i),
+      ).toBeInTheDocument()
+    })
   })
 })

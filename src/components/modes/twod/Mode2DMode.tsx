@@ -11,6 +11,7 @@ import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Canvas2D } from './Canvas2D'
+import { Viewport } from '../../../viewport/Viewport'
 import { ToolEditorList } from '../../tools/ToolEditorList'
 import {
   loadTwodFile,
@@ -24,6 +25,7 @@ import { addOperation, editOperation, deleteOperation, listOperations } from '..
 import { listTools, deleteTool } from '../../../api/tools'
 import { toAppError } from '../../../api/errors'
 import { useProjectStore, usePushNotification } from '../../../store/projectStore'
+import { useViewportStore } from '../../../store/viewportStore'
 import type { CurveSummary, Generate2dResult } from '../../../api/twodMode'
 import type { BoxStock, Tool, Profile2dParams, Operation } from '../../../api/types'
 
@@ -342,6 +344,14 @@ export function Mode2DMode() {
     }
   }, [snapshot?.safeHeight])
 
+  // ── Viewport lifecycle ─────────────────────────────────────────────────────
+  useEffect(() => {
+    useViewportStore.getState().setToolpathGeometry(null)
+    return () => {
+      useViewportStore.getState().setToolpathGeometry(null)
+    }
+  }, [])
+
   // ── File import logic ─────────────────────────────────────────────────────
 
   async function doLoad(path: string, unitHint: 'mm' | 'inches' | null) {
@@ -570,12 +580,21 @@ export function Mode2DMode() {
       const result = await generate2dGcode('grbl')
       setGenerate2dResult(result)
       setSubState('viewing')
+      useViewportStore.getState().setToolpathGeometry(result.lineGeometry)
     } catch (e) {
       const err = toAppError(e)
       setGenerateError(err.message ?? err.kind ?? 'Generation failed')
     } finally {
       setGenerating(false)
     }
+  }
+
+  // ── Back to editing ───────────────────────────────────────────────────────
+
+  function handleBackToEditing() {
+    setSubState('editing')
+    setGenerate2dResult(null)
+    useViewportStore.getState().setToolpathGeometry(null)
   }
 
   // ── Operations panel renderer ─────────────────────────────────────────────
@@ -623,7 +642,15 @@ export function Mode2DMode() {
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* Left: Canvas area */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex flex-col overflow-hidden">
+        {subState === 'viewing' && generate2dResult && generate2dResult.warnings.length > 0 && (
+          <div
+            role="status"
+            className="shrink-0 rounded border border-amber-400 bg-amber-50 px-2 py-1.5 text-xs text-amber-700"
+          >
+            {`Warnings: ${generate2dResult.warnings.join(', ')}`}
+          </div>
+        )}
         {subState === 'editing' && curves.length > 0 && (
           <Canvas2D
             curves={curves}
@@ -634,6 +661,9 @@ export function Mode2DMode() {
             onCurveSelect={handleCurveSelect}
             onArtworkOriginChange={handleOriginChange}
           />
+        )}
+        {subState === 'viewing' && generate2dResult && (
+          <Viewport className="flex-1" />
         )}
       </div>
 
@@ -653,16 +683,28 @@ export function Mode2DMode() {
           </div>
 
           {subState === 'viewing' && generate2dResult && (
-            <div className="px-3 py-3 flex flex-col gap-3">
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full"
-                onClick={() => setSubState('editing')}
-              >
-                ← Back to Edit
-              </Button>
-              <div className="text-xs text-muted-foreground">
+            <div className="flex flex-col gap-3">
+              {/* Back to 2D Canvas */}
+              <div className="border-b border-border px-3 py-2">
+                <Button
+                  size="sm"
+                  className="w-full"
+                  onClick={handleBackToEditing}
+                >
+                  ← Back to 2D Canvas
+                </Button>
+              </div>
+
+              {/* G-code preview */}
+              <div className="px-3">
+                <span className="text-xs font-medium text-foreground">G-code</span>
+                <pre className="mt-1 max-h-64 overflow-auto rounded-md bg-muted p-2 font-mono text-xs text-muted-foreground">
+                  {generate2dResult.gcode}
+                </pre>
+              </div>
+
+              {/* Stats */}
+              <div className="px-3 text-xs text-muted-foreground">
                 <p>Points: {generate2dResult.stats.totalPointCount}</p>
                 <p>Passes: {generate2dResult.stats.totalPassCount}</p>
                 <p>Path: {generate2dResult.stats.totalPathLengthMm.toFixed(1)} mm</p>
