@@ -84,6 +84,10 @@ path = "tests/scallop_finishing_golden.rs"
 name = "twod_golden"
 path = "tests/twod_golden.rs"
 
+[[test]]
+name = "twod_roundtrip"
+path = "tests/twod_roundtrip.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

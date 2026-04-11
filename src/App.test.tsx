@@ -25,6 +25,10 @@ vi.mock('./components/modes/ToolpathViewerMode', () => ({
   ToolpathViewerMode: () => <div data-testid="toolpath-viewer-mode" />,
 }))
 
+vi.mock('./components/modes/twod/Mode2DMode', () => ({
+  Mode2DMode: () => <div data-testid="mode-2d-mode" />,
+}))
+
 vi.mock('./components/common/Notifications', () => ({
   Notifications: () => <div data-testid="notifications" />,
 }))
@@ -81,6 +85,29 @@ describe('App', () => {
     it('renders ToolpathViewerMode and not ModeSelector or ModePlaceholder', () => {
       render(<App />)
       expect(screen.getByTestId('toolpath-viewer-mode')).toBeInTheDocument()
+      expect(screen.queryByTestId('mode-selector')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('mode-placeholder')).not.toBeInTheDocument()
+    })
+
+    it('renders Notifications', () => {
+      render(<App />)
+      expect(screen.getByTestId('notifications')).toBeInTheDocument()
+    })
+
+    it('renders UnsavedChangesDialog', () => {
+      render(<App />)
+      expect(screen.getByTestId('unsaved-dialog')).toBeInTheDocument()
+    })
+  })
+
+  describe('2d mode state (projectIsOpen: true, mode: "2d")', () => {
+    beforeEach(() => {
+      useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: true, mode: '2d' } })
+    })
+
+    it('renders Mode2DMode and not ModeSelector or ModePlaceholder', () => {
+      render(<App />)
+      expect(screen.getByTestId('mode-2d-mode')).toBeInTheDocument()
       expect(screen.queryByTestId('mode-selector')).not.toBeInTheDocument()
       expect(screen.queryByTestId('mode-placeholder')).not.toBeInTheDocument()
     })
