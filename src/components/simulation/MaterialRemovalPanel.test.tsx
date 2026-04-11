@@ -7,20 +7,12 @@ import type { MeshData } from '../../api/types'
 
 vi.mock('../../api/dexel', () => ({
   getSimulationMesh: vi.fn(),
-  getDemoSimulationMesh: vi.fn(),
 }))
 
-const { getSimulationMesh, getDemoSimulationMesh } = await import('../../api/dexel')
+const { getSimulationMesh } = await import('../../api/dexel')
 
 const MESH: MeshData = {
   vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0],
-  normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
-  indices: [0, 1, 2],
-  faceGroups: [{ startTriangle: 0, triangleCount: 1 }],
-}
-
-const MESH2: MeshData = {
-  vertices: [0, 0, 0, 2, 0, 0, 0, 2, 0],
   normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
   indices: [0, 1, 2],
   faceGroups: [{ startTriangle: 0, triangleCount: 1 }],
@@ -33,7 +25,6 @@ function resetStores() {
 beforeEach(() => {
   resetStores()
   vi.mocked(getSimulationMesh).mockClear()
-  vi.mocked(getDemoSimulationMesh).mockClear()
 })
 
 // ── Initial render ───────────────────────────────────────────────────────────
@@ -44,9 +35,9 @@ describe('MaterialRemovalPanel — initial state', () => {
     expect(screen.getByRole('button', { name: 'Simulate' })).toBeInTheDocument()
   })
 
-  it('renders the Demo button', () => {
+  it('does not render a Demo button', () => {
     render(<MaterialRemovalPanel />)
-    expect(screen.getByRole('button', { name: 'Demo' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Demo' })).not.toBeInTheDocument()
   })
 
   it('does not show Clear button when no simulation mesh is loaded', () => {
@@ -115,7 +106,7 @@ describe('MaterialRemovalPanel — Simulate', () => {
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
   })
 
-  it('disables both buttons while Simulating', async () => {
+  it('disables the button while Simulating', async () => {
     let resolve: (m: MeshData) => void = () => {}
     vi.mocked(getSimulationMesh).mockReturnValue(
       new Promise<MeshData>((res) => { resolve = res }),
@@ -126,7 +117,6 @@ describe('MaterialRemovalPanel — Simulate', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Simulating…' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Demo' })).toBeDisabled()
     })
 
     await act(async () => { resolve(MESH) })
@@ -143,7 +133,7 @@ describe('MaterialRemovalPanel — Simulate', () => {
     expect(useViewportStore.getState().simulationMeshData).toBeNull()
   })
 
-  it('re-enables buttons after error', async () => {
+  it('re-enables button after error', async () => {
     vi.mocked(getSimulationMesh).mockRejectedValue({ kind: 'InvalidInput', message: 'no stock' })
     render(<MaterialRemovalPanel />)
 
@@ -152,73 +142,6 @@ describe('MaterialRemovalPanel — Simulate', () => {
     })
 
     expect(screen.getByRole('button', { name: 'Simulate' })).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Demo' })).not.toBeDisabled()
-  })
-})
-
-// ── Demo button ──────────────────────────────────────────────────────────────
-
-describe('MaterialRemovalPanel — Demo', () => {
-  it('calls getDemoSimulationMesh with the selected resolution', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
-    render(<MaterialRemovalPanel />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
-    })
-
-    expect(getDemoSimulationMesh).toHaveBeenCalledWith(0.5)
-  })
-
-  it('sets simulationMeshData in viewport store on success', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
-    render(<MaterialRemovalPanel />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
-    })
-
-    expect(useViewportStore.getState().simulationMeshData).toEqual(MESH2)
-  })
-
-  it('shows status text and Clear button after demo loads', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
-    render(<MaterialRemovalPanel />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
-    })
-
-    expect(screen.getByText('Showing simulated workpiece')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
-  })
-
-  it('disables both buttons while demo loads', async () => {
-    let resolve: (m: MeshData) => void = () => {}
-    vi.mocked(getDemoSimulationMesh).mockReturnValue(
-      new Promise<MeshData>((res) => { resolve = res }),
-    )
-    render(<MaterialRemovalPanel />)
-
-    fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Simulate' })).toBeDisabled()
-    })
-
-    await act(async () => { resolve(MESH2) })
-  })
-
-  it('does not call getSimulationMesh', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
-    render(<MaterialRemovalPanel />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
-    })
-
-    expect(getSimulationMesh).not.toHaveBeenCalled()
   })
 })
 
@@ -226,11 +149,11 @@ describe('MaterialRemovalPanel — Demo', () => {
 
 describe('MaterialRemovalPanel — Clear', () => {
   it('clicking Clear sets simulationMeshData to null', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
+    vi.mocked(getSimulationMesh).mockResolvedValue(MESH)
     render(<MaterialRemovalPanel />)
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
     })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
@@ -240,11 +163,11 @@ describe('MaterialRemovalPanel — Clear', () => {
   })
 
   it('Clear button and status text disappear after clearing', async () => {
-    vi.mocked(getDemoSimulationMesh).mockResolvedValue(MESH2)
+    vi.mocked(getSimulationMesh).mockResolvedValue(MESH)
     render(<MaterialRemovalPanel />)
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Demo' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate' }))
     })
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear' }))

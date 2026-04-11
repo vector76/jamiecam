@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getDemoSimulationMesh, getSimulationMesh } from '../../api/dexel'
+import { getSimulationMesh } from '../../api/dexel'
 import { useViewportStore } from '../../store/viewportStore'
 import { useProjectStore } from '../../store/projectStore'
 import { Button } from '@/components/ui/button'
@@ -10,7 +10,7 @@ const RESOLUTION_OPTIONS: Array<{ label: string; value: number }> = [
   { label: '0.05 mm (fine)', value: 0.05 },
 ]
 
-type LoadingState = 'idle' | 'simulating' | 'demo'
+type LoadingState = 'idle' | 'simulating'
 
 export function MaterialRemovalPanel() {
   const [loadingState, setLoadingState] = useState<LoadingState>('idle')
@@ -38,14 +38,6 @@ export function MaterialRemovalPanel() {
     setLoadingState('simulating')
     runSimulation(async () => {
       const mesh = await getSimulationMesh(resolution)
-      setSimulationMeshData(mesh)
-    })
-  }
-
-  function handleDemo() {
-    setLoadingState('demo')
-    runSimulation(async () => {
-      const mesh = await getDemoSimulationMesh(resolution)
       setSimulationMeshData(mesh)
     })
   }
@@ -78,16 +70,6 @@ export function MaterialRemovalPanel() {
           aria-busy={loadingState === 'simulating'}
         >
           {loadingState === 'simulating' ? 'Simulating…' : 'Simulate'}
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleDemo}
-          disabled={busy}
-          aria-busy={loadingState === 'demo'}
-          title="Run built-in demo: 100×100×20 mm block with a two-level stepped pocket"
-        >
-          {loadingState === 'demo' ? 'Loading…' : 'Demo'}
         </Button>
       </div>
       {simulationMeshData !== null && (
