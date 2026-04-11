@@ -10,7 +10,7 @@
 //!
 //! # Load
 //! 1. Open the ZIP and read `project.json`.
-//! 2. Validate `schema_version == 1`; reject anything else with a clear error.
+//! 2. Validate `schema_version` is 1 or 2; reject anything else with a clear error.
 //! 3. Reconstruct the in-memory [`Project`].  [`LoadedModel::mesh_data`] is
 //!    initialised empty — the IPC `open_model` command re-tessellates when the
 //!    viewport needs geometry.
@@ -84,9 +84,9 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
     let pf: ProjectFile = serde_json::from_str(&json_str)
         .map_err(|e| AppError::ProjectLoad(format!("cannot parse {PROJECT_JSON}: {e}")))?;
 
-    if pf.schema_version != 1 {
+    if pf.schema_version != 1 && pf.schema_version != 2 {
         return Err(AppError::ProjectLoad(format!(
-            "unsupported schema version {}; only schema version 1 is supported",
+            "unsupported schema version {}; only schema versions 1 and 2 are supported",
             pf.schema_version
         )));
     }
@@ -202,7 +202,7 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
     }
 
     let pf = ProjectFile {
-        schema_version: 1,
+        schema_version: 2,
         app_version: APP_VERSION.to_string(),
         created_at: project.created_at.clone(),
         modified_at: project.modified_at.clone(),
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(loaded.name, project.name);
         assert_eq!(loaded.description, project.description);
         assert_eq!(loaded.units, project.units);
-        assert_eq!(loaded.schema_version, project.schema_version);
+        assert_eq!(loaded.schema_version, 2);
         assert_eq!(loaded.created_at, project.created_at);
         assert_eq!(loaded.modified_at, project.modified_at);
 
@@ -347,7 +347,7 @@ mod tests {
         let loaded = load(&tmp).expect("load should succeed");
         let _ = std::fs::remove_file(&tmp);
 
-        assert_eq!(loaded.schema_version, 1);
+        assert_eq!(loaded.schema_version, 2);
         assert_eq!(loaded.units, "mm");
         assert!(loaded.source_model.is_none());
     }
@@ -834,6 +834,112 @@ mod tests {
             loaded.toolpaths[&op_id], toolpath,
             "restored toolpath must equal the original"
         );
+    }
+
+    #[test]
+    fn v2_round_trip_preserves_mode() {
+        let mut project = Project::default();
+        project.mode = crate::state::Mode::TwoD;
+        project.created_at = "2026-01-01T00:00:00Z".to_string();
+        project.modified_at = "2026-01-01T00:00:00Z".to_string();
+
+        let tmp = std::env::temp_dir().join("jcam_test_v2_round_trip_mode.jcam");
+        save(&project, &tmp).expect("save should succeed");
+        let loaded = load(&tmp).expect("load should succeed");
+        let _ = std::fs::remove_file(&tmp);
+
+        assert_eq!(loaded.mode, crate::state::Mode::TwoD);
+        assert_eq!(loaded.schema_version, 2);
+    }
+
+    #[test]
+    fn v1_schema_without_mode_defaults_to_three_d() {
+        let tmp = std::env::temp_dir().join("jcam_test_v1_no_mode.jcam");
+        {
+            let file = std::fs::File::create(&tmp).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file("project.json", opts).unwrap();
+            let json = r#"{
+                "schema_version": 1,
+                "app_version": "0.1.0",
+                "created_at": "2026-01-01T00:00:00Z",
+                "modified_at": "2026-01-01T00:00:00Z",
+                "project": { "name": "V1 No Mode", "description": "", "units": "mm" }
+            }"#;
+            zip.write_all(json.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+
+        let result = load(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+
+        let loaded = result.expect("v1 schema without mode field should load successfully");
+        assert_eq!(
+            loaded.mode,
+            crate::state::Mode::ThreeD,
+            "missing mode field should default to ThreeD"
+        );
+    }
+
+    #[test]
+    fn v2_schema_with_explicit_rotary_two_mode() {
+        let tmp = std::env::temp_dir().join("jcam_test_v2_rotary_two.jcam");
+        {
+            let file = std::fs::File::create(&tmp).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file("project.json", opts).unwrap();
+            let json = r#"{
+                "schema_version": 2,
+                "app_version": "0.0.2",
+                "created_at": "2026-01-01T00:00:00Z",
+                "modified_at": "2026-01-01T00:00:00Z",
+                "mode": "rotary_2",
+                "project": { "name": "V2 Rotary2", "description": "", "units": "mm" }
+            }"#;
+            zip.write_all(json.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+
+        let result = load(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+
+        let loaded = result.expect("v2 schema with rotary_2 mode should load successfully");
+        assert_eq!(loaded.mode, crate::state::Mode::RotaryTwo);
+    }
+
+    #[test]
+    fn unsupported_schema_v3_rejected() {
+        let tmp = std::env::temp_dir().join("jcam_test_schema_v3.jcam");
+        {
+            let file = std::fs::File::create(&tmp).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            zip.start_file("project.json", opts).unwrap();
+            let json = r#"{
+                "schema_version": 3,
+                "app_version": "0.0.2",
+                "created_at": "2026-01-01T00:00:00Z",
+                "modified_at": "2026-01-01T00:00:00Z",
+                "project": { "name": "Future", "description": "", "units": "mm" }
+            }"#;
+            zip.write_all(json.as_bytes()).unwrap();
+            zip.finish().unwrap();
+        }
+
+        let result = load(&tmp);
+        let _ = std::fs::remove_file(&tmp);
+
+        match result.expect_err("schema_version 3 should be rejected") {
+            AppError::ProjectLoad(msg) => {
+                assert!(
+                    msg.to_lowercase().contains("unsupported schema version"),
+                    "error message should contain 'unsupported schema version', got: {msg}"
+                );
+            }
+            other => panic!("expected AppError::ProjectLoad, got {other:?}"),
+        }
     }
 
     #[test]

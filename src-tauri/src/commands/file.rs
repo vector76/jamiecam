@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(snap.project_name, "Round Trip");
         let project = state.project.read().expect("read lock");
         assert_eq!(project.name, "Round Trip");
-        assert_eq!(project.schema_version, 1);
+        assert_eq!(project.schema_version, 2);
         assert!(
             !project.created_at.is_empty(),
             "created_at must survive round-trip"

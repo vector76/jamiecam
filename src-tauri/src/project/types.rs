@@ -39,7 +39,7 @@ pub struct SourceModelRef {
 /// [`super::serialization::save`] and [`super::serialization::load`].
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProjectFile {
-    /// Format version; only version `1` is supported in Phase 0.
+    /// Format version; versions `1` and `2` are supported.
     pub schema_version: u32,
     /// JamieCam version string that last saved this file (`CARGO_PKG_VERSION`).
     pub app_version: String,
