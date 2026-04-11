@@ -2,8 +2,7 @@
  * Mode2DMode — top-level component for 2D Profiling mode.
  *
  * Manages file import, curve display, project settings (stock / safe height),
- * and tool library in an editing substate. The viewing substate (G-code preview)
- * is wired in by bead-14.
+ * tool library, per-curve operations panel, and G-code generation.
  */
 
 import { useState, useEffect } from 'react'
@@ -18,24 +17,229 @@ import {
   getTwodCurves,
   setSafeHeight,
   setArtworkOrigin,
+  generate2dGcode,
 } from '../../../api/twodMode'
 import { setStock } from '../../../api/stock'
-import { deleteOperation } from '../../../api/operations'
+import { addOperation, editOperation, deleteOperation, listOperations } from '../../../api/operations'
 import { listTools, deleteTool } from '../../../api/tools'
 import { toAppError } from '../../../api/errors'
 import { useProjectStore, usePushNotification } from '../../../store/projectStore'
-import type { CurveSummary } from '../../../api/twodMode'
-import type { BoxStock, Tool } from '../../../api/types'
+import type { CurveSummary, Generate2dResult } from '../../../api/twodMode'
+import type { BoxStock, Tool, Profile2dParams, Operation } from '../../../api/types'
 
 type SubState = 'editing' | 'viewing'
+
+// ── OperationEditForm ─────────────────────────────────────────────────────────
+
+interface OperationEditFormProps {
+  opId: string
+  tools: Tool[]
+  stockTopZ: number | null
+  onEdit: (op: Operation, patch: Partial<Profile2dParams & { toolId: string }>) => Promise<void>
+  onRemove: () => void
+}
+
+function OperationEditForm({
+  opId,
+  tools,
+  stockTopZ,
+  onEdit,
+  onRemove,
+}: OperationEditFormProps) {
+  const pushNotification = usePushNotification()
+  const [allOps, setAllOps] = useState<Operation[]>([])
+
+  async function refreshOps() {
+    try {
+      const ops = await listOperations()
+      setAllOps(ops)
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to load operation')
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const ops = await listOperations()
+        if (!cancelled) setAllOps(ops)
+      } catch (e) {
+        const err = toAppError(e)
+        pushNotification(err.message ?? err.kind ?? 'Failed to load operation')
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [opId, pushNotification])
+
+  const op = allOps.find((o) => o.id === opId) ?? null
+
+  // Multi-tool: advisory when Profile2d ops use more than one distinct tool ID.
+  const profile2dToolIds = new Set(
+    allOps.filter((o) => o.type === 'profile_2d').map((o) => o.toolId),
+  )
+  const multiTool = profile2dToolIds.size > 1
+
+  if (op == null) return null
+
+  const params = op.params as Profile2dParams
+  const bottomOfCut = params.topOfCut - params.depthOfCut
+  const topOfCutBelowStock = stockTopZ != null && params.topOfCut <= stockTopZ
+
+  async function commitPatch(patch: Partial<Profile2dParams & { toolId: string }>) {
+    if (op == null) return
+    await onEdit(op, patch)
+    await refreshOps()
+  }
+
+  function numericField(
+    label: string,
+    ariaLabel: string,
+    value: number,
+    patchKey: keyof Profile2dParams,
+    opts?: { min?: number; step?: number },
+  ) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <label className="text-xs text-muted-foreground">{label}</label>
+        <input
+          type="number"
+          aria-label={ariaLabel}
+          defaultValue={value}
+          key={`${opId}-${patchKey}-${value}`}
+          onBlur={(e) => {
+            const parsed = parseFloat(e.target.value)
+            if (!isNaN(parsed)) void commitPatch({ [patchKey]: parsed })
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const parsed = parseFloat((e.target as HTMLInputElement).value)
+              if (!isNaN(parsed)) void commitPatch({ [patchKey]: parsed })
+            }
+          }}
+          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+          step={opts?.step ?? 0.1}
+          min={opts?.min}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Cut type */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">Cut type</span>
+        <div className="flex gap-3" role="radiogroup" aria-label="Cut type">
+          {(['inside', 'outside', 'on_line'] as const).map((ct) => (
+            <label key={ct} className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`cut-type-${opId}`}
+                value={ct}
+                checked={params.cutType === ct}
+                onChange={() => void commitPatch({ cutType: ct })}
+              />
+              {ct === 'inside' ? 'Inside' : ct === 'outside' ? 'Outside' : 'On-line'}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Direction */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">Direction</span>
+        <div className="flex gap-3" role="radiogroup" aria-label="Direction">
+          {(['climb', 'conventional'] as const).map((dir) => (
+            <label key={dir} className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`direction-${opId}`}
+                value={dir}
+                checked={params.direction === dir}
+                onChange={() => void commitPatch({ direction: dir })}
+              />
+              {dir === 'climb' ? 'Climb' : 'Conventional'}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Tool dropdown */}
+      <div className="flex flex-col gap-0.5">
+        <label htmlFor={`tool-select-${opId}`} className="text-xs text-muted-foreground">Tool</label>
+        <select
+          key={`${opId}-toolId-${op.toolId}`}
+          id={`tool-select-${opId}`}
+          aria-label="Tool"
+          defaultValue={op.toolId}
+          onChange={(e) => void commitPatch({ toolId: e.target.value })}
+          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+        >
+          {tools.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} (⌀{t.diameter})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Numeric fields */}
+      {numericField('Top of cut (Z)', 'Top of cut', params.topOfCut, 'topOfCut')}
+
+      {topOfCutBelowStock && (
+        <div
+          role="status"
+          className="rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs text-amber-700"
+        >
+          Top of cut is at or below stock top — check Z values.
+        </div>
+      )}
+
+      {numericField('Depth of cut', 'Depth of cut', params.depthOfCut, 'depthOfCut', { min: 0 })}
+      {numericField('Step-down', 'Step-down', params.stepDown, 'stepDown', { min: 0 })}
+      {numericField('Feed rate', 'Feed rate', params.feedRate, 'feedRate', { min: 0, step: 1 })}
+
+      {/* Bottom of cut (read-only) */}
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted-foreground">Bottom of cut</span>
+        <span className="text-xs" aria-label="Bottom of cut">{bottomOfCut.toFixed(3)}</span>
+      </div>
+
+      {multiTool && (
+        <div
+          role="status"
+          className="rounded border border-amber-400 bg-amber-50 px-2 py-1 text-xs text-amber-700"
+        >
+          Multiple tools assigned — generation will fail until one tool is used across all operations.
+        </div>
+      )}
+
+      <Button
+        size="sm"
+        variant="destructive"
+        className="w-full mt-1"
+        onClick={onRemove}
+      >
+        Remove operation
+      </Button>
+    </div>
+  )
+}
+
+// ── Mode2DMode ────────────────────────────────────────────────────────────────
 
 export function Mode2DMode() {
   const snapshot = useProjectStore((s) => s.snapshot)
   const pushNotification = usePushNotification()
 
   // ── Sub-state ─────────────────────────────────────────────────────────────
-  // NOTE: 'viewing' substate (G-code preview) is populated by bead-14.
-  const [subState] = useState<SubState>('editing')
+  const [subState, setSubState] = useState<SubState>('editing')
+
+  // ── G-code result ─────────────────────────────────────────────────────────
+  const [generate2dResult, setGenerate2dResult] = useState<Generate2dResult | null>(null)
 
   // ── Curve data ────────────────────────────────────────────────────────────
   const [curves, setCurves] = useState<CurveSummary[]>([])
@@ -46,7 +250,14 @@ export function Mode2DMode() {
   // ── Tool library ──────────────────────────────────────────────────────────
   const [tools, setTools] = useState<Tool[]>([])
 
-  // ── Pending file load — persists across confirm → unit-selection steps ────
+  // ── Selected curve ────────────────────────────────────────────────────────
+  const [selectedCurveId, setSelectedCurveId] = useState<string | null>(null)
+
+  // ── Generate state ────────────────────────────────────────────────────────
+  const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  // ── Pending file load ─────────────────────────────────────────────────────
   const [pendingPath, setPendingPath] = useState<string | null>(null)
   const [replaceConfirmOpen, setReplaceConfirmOpen] = useState(false)
   const [svgUnitModalOpen, setSvgUnitModalOpen] = useState(false)
@@ -72,6 +283,22 @@ export function Mode2DMode() {
       .map((op) => op.curveId as string),
   )
 
+  const selectedOpSummary =
+    selectedCurveId != null
+      ? (snapshot?.operations ?? []).find(
+          (op) => op.operationType === 'profile_2d' && op.curveId === selectedCurveId,
+        ) ?? null
+      : null
+
+  const hasEnabledProfile2dOp = (snapshot?.operations ?? []).some(
+    (op) => op.operationType === 'profile_2d' && op.enabled,
+  )
+
+  const stockTopZ =
+    stockFromSnapshot?.type === 'box'
+      ? stockFromSnapshot.origin.z + stockFromSnapshot.height
+      : null
+
   // ── On mount: restore state if project was loaded from disk ──────────────
   useEffect(() => {
     async function init() {
@@ -91,7 +318,7 @@ export function Mode2DMode() {
         const ts = await listTools()
         setTools(ts)
       } catch (_e) {
-        // Non-fatal — tool list starts empty
+        // Non-fatal
       }
     }
     void init()
@@ -126,13 +353,10 @@ export function Mode2DMode() {
       pushNotification(err.message ?? err.kind ?? 'Failed to load 2D file')
       return
     }
-    // loadTwodFile succeeded — delete existing operations then update UI.
-    // Read fresh state here (not the render-closure snapshot) because the
-    // async loadTwodFile call above may have allowed the snapshot to update.
-    // Use allSettled so a failed individual delete doesn't block the UI update;
-    // the backend has already accepted the new file.
     const ops = useProjectStore.getState().snapshot?.operations ?? []
     await Promise.allSettled(ops.map((op) => deleteOperation(op.id)))
+    setSelectedCurveId(null)
+    setGenerateError(null)
     setCurves(result.curves)
     setCurvePointsMap(new Map(Object.entries(result.curvePoints)))
     setUnitSystem(result.unitSystem)
@@ -155,11 +379,9 @@ export function Mode2DMode() {
     }
 
     if (curves.length > 0) {
-      // File already loaded — ask for confirmation before proceeding.
       setPendingPath(chosen)
       setReplaceConfirmOpen(true)
     } else if (chosen.toLowerCase().endsWith('.svg')) {
-      // Need unit hint before loading.
       setPendingPath(chosen)
       setSvgUnitModalOpen(true)
     } else {
@@ -199,8 +421,8 @@ export function Mode2DMode() {
 
   // ── Canvas handlers ───────────────────────────────────────────────────────
 
-  function handleCurveSelect(_id: string | null) {
-    // bead-13 adds operation creation logic here.
+  function handleCurveSelect(id: string | null) {
+    setSelectedCurveId(id)
   }
 
   async function handleOriginChange(x: number, y: number) {
@@ -278,6 +500,124 @@ export function Mode2DMode() {
     }
   }
 
+  // ── Operation handlers ────────────────────────────────────────────────────
+
+  async function handleAddOperation() {
+    if (!selectedCurveId || tools.length === 0) return
+    const params: Profile2dParams = {
+      curveId: selectedCurveId,
+      cutType: 'outside',
+      direction: 'climb',
+      topOfCut: snapshot?.safeHeight ?? 5.0,
+      depthOfCut: 3.0,
+      stepDown: 1.0,
+      feedRate: 1000.0,
+    }
+    try {
+      await addOperation({
+        name: 'Profile 2D',
+        enabled: true,
+        toolId: tools[0].id,
+        type: 'profile_2d',
+        params,
+      })
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to add operation')
+    }
+  }
+
+  async function handleEditOperation(op: Operation, patch: Partial<Profile2dParams & { toolId: string }>) {
+    const currentParams = op.params as Profile2dParams
+    const newParams: Profile2dParams = {
+      curveId: currentParams.curveId,
+      cutType: patch.cutType ?? currentParams.cutType,
+      direction: patch.direction ?? currentParams.direction,
+      topOfCut: patch.topOfCut ?? currentParams.topOfCut,
+      depthOfCut: patch.depthOfCut ?? currentParams.depthOfCut,
+      stepDown: patch.stepDown ?? currentParams.stepDown,
+      feedRate: patch.feedRate ?? currentParams.feedRate,
+    }
+    try {
+      await editOperation(op.id, {
+        name: op.name,
+        enabled: op.enabled,
+        toolId: patch.toolId ?? op.toolId,
+        type: 'profile_2d',
+        params: newParams,
+      })
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to update operation')
+    }
+  }
+
+  async function handleRemoveOperation(opId: string) {
+    try {
+      await deleteOperation(opId)
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to remove operation')
+    }
+  }
+
+  // ── Generate G-code ───────────────────────────────────────────────────────
+
+  async function handleGenerate() {
+    setGenerating(true)
+    setGenerateError(null)
+    try {
+      const result = await generate2dGcode('grbl')
+      setGenerate2dResult(result)
+      setSubState('viewing')
+    } catch (e) {
+      const err = toAppError(e)
+      setGenerateError(err.message ?? err.kind ?? 'Generation failed')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  // ── Operations panel renderer ─────────────────────────────────────────────
+
+  function renderOperationsPanel() {
+    if (selectedCurveId == null) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Click a closed curve on the canvas to assign a cut operation.
+        </p>
+      )
+    }
+
+    if (selectedOpSummary == null) {
+      return (
+        <div className="flex flex-col gap-2">
+          <Button
+            size="sm"
+            className="w-full"
+            disabled={tools.length === 0}
+            onClick={() => void handleAddOperation()}
+          >
+            Add operation
+          </Button>
+          {tools.length === 0 && (
+            <p className="text-xs text-muted-foreground">Add a tool to the project first.</p>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <OperationEditForm
+        opId={selectedOpSummary.id}
+        tools={tools}
+        stockTopZ={stockTopZ}
+        onEdit={handleEditOperation}
+        onRemove={() => void handleRemoveOperation(selectedOpSummary.id)}
+      />
+    )
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -312,6 +652,24 @@ export function Mode2DMode() {
             </Button>
           </div>
 
+          {subState === 'viewing' && generate2dResult && (
+            <div className="px-3 py-3 flex flex-col gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => setSubState('editing')}
+              >
+                ← Back to Edit
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                <p>Points: {generate2dResult.stats.totalPointCount}</p>
+                <p>Passes: {generate2dResult.stats.totalPassCount}</p>
+                <p>Path: {generate2dResult.stats.totalPathLengthMm.toFixed(1)} mm</p>
+              </div>
+            </div>
+          )}
+
           {subState === 'editing' && (
             <>
               {/* File import panel */}
@@ -330,6 +688,11 @@ export function Mode2DMode() {
                     </p>
                   )}
                 </div>
+              </SidebarSection>
+
+              {/* Operations panel */}
+              <SidebarSection title="Operation">
+                {renderOperationsPanel()}
               </SidebarSection>
 
               {/* Tool library panel */}
@@ -409,6 +772,26 @@ export function Mode2DMode() {
                   </div>
                 </div>
               </SidebarSection>
+
+              {/* Generate G-code button */}
+              <div className="px-3 py-3 border-t border-border">
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={generating || curves.length === 0 || !hasEnabledProfile2dOp}
+                  onClick={() => void handleGenerate()}
+                >
+                  {generating ? 'Generating…' : 'Generate G-code'}
+                </Button>
+                {generateError && (
+                  <div
+                    role="alert"
+                    className="mt-2 rounded border border-red-400 bg-red-50 px-2 py-1.5 text-xs text-red-700"
+                  >
+                    {generateError}
+                  </div>
+                )}
+              </div>
             </>
           )}
 

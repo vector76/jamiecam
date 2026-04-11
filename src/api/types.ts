@@ -315,8 +315,8 @@ export interface Operation {
   name: string
   enabled: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams | Profile2dParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
   workpieceMaterial?: string
@@ -332,8 +332,8 @@ export interface OperationInput {
   name: string
   enabled?: boolean
   toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams
+  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
+  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams | Profile2dParams
   spindleSpeedOverride?: number | null
   feedRateOverride?: number | null
   workpieceMaterial?: string
