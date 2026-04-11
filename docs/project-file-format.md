@@ -56,8 +56,9 @@ only when at least one toolpath has been computed and cached.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "app_version": "0.1.0",
+  "mode": "3d",
   "created_at": "2025-01-15T10:30:00Z",
   "modified_at": "2025-01-15T14:22:00Z",
   "project": { ... },
@@ -77,8 +78,24 @@ only when at least one toolpath has been computed and cached.
 |---|---|---|
 | `schema_version` | integer | Incremented on breaking format changes |
 | `app_version` | string | JamieCam version that last saved this file |
+| `mode` | string | Project mode, set at creation time (see below) |
 | `created_at` | ISO 8601 | Creation timestamp (UTC) |
 | `modified_at` | ISO 8601 | Last save timestamp (UTC) |
+
+**`mode`** is a required field set when the project is created. It cannot be
+changed after creation. The mode determines which operation types are valid for
+the project, which file formats can be imported as the source model, and which
+UI paradigm (viewport configuration, panels, and tools) is presented to the user.
+
+| Value | Description |
+|---|---|
+| `"gcode_viewer"` | G-code viewer/simulation |
+| `"2d"` | 2D artwork -- profile, pocket, drill from SVG/DXF |
+| `"2_5d"` | 2.5D -- V-carving, inlay, signs from 2D artwork |
+| `"3d"` | 3D -- heightmaps, STL meshes, or STEP solid models (3-axis) |
+| `"rotary_2"` | 2+rotary -- X, Z, theta lathe-like operations |
+| `"rotary_3"` | 3+rotary -- XYZ + rotary axis |
+| `"5_axis"` | 5-axis -- fully arbitrary tool position and orientation |
 
 ---
 
@@ -88,7 +105,8 @@ only when at least one toolpath has been computed and cached.
 "project": {
   "name": "Bracket v3",
   "description": "Aluminum mounting bracket, 6061-T6",
-  "units": "metric"
+  "units": "metric",
+  "mode": "3d"
 }
 ```
 
@@ -96,12 +114,32 @@ only when at least one toolpath has been computed and cached.
 are stored in the project's units. The binary toolpath format always stores in mm
 regardless of project units; conversion is applied at export time.
 
+`mode`: Duplicated here from the top level for convenience when inspecting the
+`project` object in isolation. Must always match the top-level `mode` value.
+See the top-level field table for valid values. This field is immutable after
+project creation.
+
 ---
 
 ### `source_model`
 
 The source model file is referenced, not embedded by default. The user may
 choose to embed it (for portability when sharing the project).
+
+The meaning of the source model varies by project mode:
+
+| Mode | Source model content |
+|---|---|
+| `gcode_viewer` | G-code file (`.nc`, `.gcode`, `.tap`) |
+| `2d`, `2_5d` | 2D artwork file (SVG, DXF) |
+| `3d` | Heightmap image (PNG, TIFF, raw), STL mesh, or STEP solid model |
+| `rotary_2` | SVG, DXF, heightmap image, STL mesh, or STEP solid model |
+| `rotary_3` | Solid model (STEP, IGES), SVG, DXF, heightmap image, STL mesh |
+| `5_axis` | Solid model (STEP, IGES), STL mesh |
+
+The `format` field values expand accordingly beyond the original STEP/IGES/STL
+set to include `"gcode"`, `"svg"`, `"dxf"`, `"png"`, `"tiff"`, and `"raw"`
+depending on the project mode.
 
 ```json
 "source_model": {
@@ -118,7 +156,7 @@ choose to embed it (for portability when sharing the project).
 | Field | Description |
 |---|---|
 | `filename` | Bare filename, for display |
-| `format` | `"step"`, `"iges"`, `"stl"`, `"obj"` |
+| `format` | `"step"`, `"iges"`, `"stl"`, `"obj"`, `"gcode"`, `"svg"`, `"dxf"`, `"png"`, `"tiff"`, `"raw"` (valid values depend on mode) |
 | `absolute_path` | Full path at last save; may not exist on another machine |
 | `relative_path` | Path relative to the `.jcam` file; preferred for portability |
 | `sha256` | Hash of the model file contents at last load |
@@ -257,6 +295,13 @@ For `"ball_nose"`: `corner_radius` == `diameter / 2`; redundant but explicit.
 ### `operations`
 
 An ordered array of machining operations. Program order follows array order.
+
+The available operation types depend on the project mode. For example, `2d`
+projects support `contour`, `pocket`, and `drill`; `3d` projects add `parallel`,
+`scallop`, and `flowline`; `5_axis` projects add `five_axis_point` and `swarf`.
+The `gcode_viewer` mode has no operations array (toolpaths come directly from
+the loaded G-code). Attempting to add an operation type not valid for the
+project's mode is rejected at the application layer.
 
 ```json
 "operations": [
@@ -868,10 +913,13 @@ const _: () = assert!(std::mem::size_of::<SimViolationRecord>() == 32);
 | `schema_version` | Change |
 |---|---|
 | 1 | Initial format |
+| 2 | Added required `mode` field (top-level and in `project` object) |
 
 Versions are incremented only on **breaking changes** — fields removed or
 semantics changed. Adding optional fields is non-breaking and does not
-increment the version.
+increment the version. The `mode` field is required (not optional), so its
+addition constitutes a breaking change and requires a schema version bump.
+Migration from v1 to v2 would need to infer or prompt the user for the mode.
 
 ### Migration Chain
 
@@ -962,6 +1010,7 @@ Auto-save files older than 30 days are deleted on launch.
 pub struct ProjectFile {
     pub schema_version: u32,
     pub app_version:    String,
+    pub mode:           ProjectMode,
     pub created_at:     DateTime<Utc>,
     pub modified_at:    DateTime<Utc>,
     pub project:        ProjectMeta,
@@ -1072,4 +1121,4 @@ file launches JamieCam and opens the project.
 ---
 
 *Document status: Draft*
-*Related documents: `system-architecture.md`, `toolpath-engine.md`, `gcode-postprocessor.md`*
+*Related documents: `system-architecture.md`, `toolpath-engine.md`, `gcode-postprocessor.md`, `viewport-design.md`*

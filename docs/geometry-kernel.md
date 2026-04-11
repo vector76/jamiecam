@@ -10,6 +10,34 @@ isolates the Rust codebase from C++ ABI details.
 Supplementary geometry (2D polygon operations) is handled by **Clipper2**, called
 through the same C wrapper mechanism.
 
+**Important:** OCCT is **required by Mode 7** (5-axis) and **optionally used
+by Modes 4-6** for STEP file import. Modes 1-3 have their own geometry
+pipelines that do not depend on OCCT:
+
+- Mode 1 (G-code viewer) uses a pure-Rust G-code parser and the dexel engine.
+- Modes 2-3 (2D / 2.5D) use SVG/DXF parsing crates and Clipper2.
+- Mode 4 (3D) uses heightmaps, STL meshes, or optionally STEP via OCCT.
+- Mode 5 (2+rotary) uses SVG/DXF, heightmaps, STL, or optionally STEP via OCCT.
+- Mode 6 (3+rotary) uses SVG or optionally STEP via OCCT.
+
+If you are working on modes 1-3, this document is not directly relevant.
+See `technology-stack.md` for mode-specific geometry dependencies.
+
+---
+
+## Mode Applicability
+
+| Component | Modes that use it |
+|---|---|
+| OCCT B-rep kernel (STEP/IGES import, surface evaluation, feature detection) | 4 (optional), 5 (optional), 6 (optional), 7 |
+| OCCT tessellation (B-rep to triangle mesh) | 4 (optional), 5 (optional), 6 (optional), 7 |
+| Clipper2 (2D polygon offset, boolean operations) | 2, 3, 4 (optional), 5 (optional), 6 (optional), 7 |
+| C wrapper / handle registry (for OCCT objects) | 4 (optional), 5 (optional), 6 (optional), 7 |
+| Rust safe wrapper (`geometry/safe.rs`) | 4 (optional), 5 (optional), 6 (optional), 7 |
+
+Clipper2 is shared more broadly than OCCT -- it is used by any mode that performs 2D
+polygon operations (profile offsets, pocket clearing, Z-level contour offsets).
+
 ---
 
 ## OCCT Architecture
@@ -786,18 +814,24 @@ pub enum GeometryError {
 
 ## Supplementary: Clipper2
 
-Clipper2 handles all **2D polygon operations**. It is used by:
-- Profile operation: offset the input contour by tool radius
-- Pocket clearing: successive inward offsets to fill area
-- Z-level toolpaths: offset the Z-section curves by tool radius
-- Rest machining: subtract previous tool's swept area from stock boundary
+Clipper2 handles all **2D polygon operations**. It is used by modes 2, 3, and 5-7 --
+any mode that performs 2D polygon manipulation:
+
+- Profile operation: offset the input contour by tool radius (modes 2, 3, 5-7)
+- Pocket clearing: successive inward offsets to fill area (modes 2, 3, 5-7)
+- Z-level toolpaths: offset the Z-section curves by tool radius (modes 5-7)
+- Rest machining: subtract previous tool's swept area from stock boundary (modes 2, 3, 5-7)
+
+Unlike OCCT, Clipper2 has no heavy build dependency and is always available. Modes 2-3
+use Clipper2 as their primary geometry engine (combined with SVG/DXF parsing), without
+needing OCCT at all.
 
 Clipper2 is wrapped in the same `cam_geometry.cpp` and exposed via the
 `cg_poly_*` functions in the C API. Clipper2 operates in integer coordinates
-internally; the wrapper scales by 1e6 (input in mm → internal in nanometers)
+internally; the wrapper scales by 1e6 (input in mm to internal in nanometers)
 to preserve precision.
 
 ---
 
-*Document status: Draft*
-*Related documents: `technology-stack.md`, `system-architecture.md`, `toolpath-engine.md`*
+*Document status: Draft -- updated for mode-centric architecture (OCCT scoped to modes 5-7).*
+*Related documents: `technology-stack.md`, `system-architecture.md`, `toolpath-engine.md`, `cutting-simulation.md`*

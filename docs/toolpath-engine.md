@@ -2,114 +2,91 @@
 
 ## Overview
 
-The toolpath engine transforms an operation definition (strategy, tool, feeds, geometry
-selection) into an ordered sequence of annotated 3D points — the toolpath — that can
-then be post-processed into G-code. It lives entirely in Rust and runs on the Rayon
-thread pool for parallelism.
+The toolpath engine transforms an operation definition (strategy, tool, feeds,
+geometry source) into an ordered sequence of annotated 3D points -- the toolpath --
+that can then be post-processed into G-code. It lives entirely in Rust and runs
+on the Rayon thread pool for parallelism.
 
 The engine is structured as a pipeline. Each stage has a clean input/output contract
-so stages can be tested in isolation and swapped independently.
+so stages can be tested in isolation. The pipeline is shared across all modes;
+what varies is the **geometry source** feeding into it and which **operations**
+are available.
 
 ```
-Operation Definition
-        │
-        ▼
-┌───────────────────┐
-│ Feature Extraction │  identify machinable geometry from B-rep
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│ Region Computation │  compute 2D/3D cutting boundaries + rest material
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│  Pass Generation  │  produce ordered cut point sequences
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│     Linking       │  connect passes with rapids, lead-in/out, retracts
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│Collision Detection│  gouge check, holder clearance, tilt correction
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│ Feed/Speed Assign │  annotate each point with feed rate and spindle speed
-└────────┬──────────┘
-         │
-         ▼
+Mode-Specific Geometry Source
+        |
+        v
++-------------------+
+| Feature Extraction |  interpret geometry per mode
++--------+----------+
+         |
+         v
++-------------------+
+| Region Computation |  cutting boundaries + rest material
++--------+----------+
+         |
+         v
++-------------------+
+|  Pass Generation  |  ordered cut point sequences
++--------+----------+
+         |
+         v
++-------------------+
+|     Linking       |  rapids, lead-in/out, retracts
++--------+----------+
+         |
+         v
++-------------------+
+|Collision Detection|  gouge check, holder clearance (modes 5-7 primarily)
++--------+----------+
+         |
+         v
++-------------------+
+| Feed/Speed Assign |  feed rate and spindle speed per point
++--------+----------+
+         |
+         v
    Toolpath (geometric)
-         │
-         │  ┌──────────────────────────────────────────────────┐
-         └─►│  Simulation Engine  (see cutting-simulation.md)  │
-            │  • per-point physics prediction                   │
-            │  • violation detection and classification         │
-            │  • feed scaling / spring pass injection           │
-            └─────────────────────┬────────────────────────────┘
-                                  │
-                                  ▼
-                     Toolpath (physics-optimized)
+         |
+         +->  Simulation Engine (see cutting-simulation.md)
+              dexel removal, physics prediction, feed scaling
+                        |
+                        v
+              Toolpath (physics-optimized)
 ```
 
 ---
 
 ## Core Data Types
 
+These types are shared across all modes. Every operation produces a `Toolpath`
+composed of `Pass` and `CutPoint` values.
+
 ```rust
-/// A single commanded point in the toolpath.
 pub struct CutPoint {
-    /// Tool tip position in WCS, Z-up (mm).
-    pub position: Vector3<f64>,
-
-    /// Tool axis unit vector (Z-up). For 3-axis, always (0, 0, 1).
-    /// For 5-axis, defines the orientation of the spindle.
-    pub orientation: Vector3<f64>,
-
-    /// The type of motion to this point.
+    pub position: Vector3<f64>,       // tool tip in WCS, Z-up (mm)
+    pub orientation: Vector3<f64>,    // tool axis; (0,0,1) for 3-axis
     pub feed_type: FeedType,
-
-    /// Feed rate to this point (mm/min). 0.0 = rapid.
-    pub feed_rate: f64,
-
-    /// Spindle speed (RPM). None = unchanged from previous.
-    pub spindle_speed: Option<f64>,
+    pub feed_rate: f64,               // mm/min; 0.0 = rapid
+    pub spindle_speed: Option<f64>,   // RPM; None = unchanged
 }
 
 pub enum FeedType {
-    Rapid,
-    Cutting,
-    Plunge,       // vertical entry into material
-    Ramp,         // angled entry
-    Helix,        // circular ramp entry
-    LeadIn,       // approach arc/line before engaging material
-    LeadOut,      // departure arc/line after leaving material
-    Dwell(f64),   // pause in seconds (for boring, chip clearing)
+    Rapid, Cutting, Plunge, Ramp, Helix,
+    LeadIn, LeadOut, Dwell(f64),
 }
 
-/// A connected sequence of CutPoints representing one pass.
 pub struct Pass {
     pub points: Vec<CutPoint>,
     pub kind: PassKind,
-    pub z_depth: Option<f64>,   // for Z-level passes
+    pub z_depth: Option<f64>,
 }
 
 pub enum PassKind {
-    Roughing,
-    SemiFinishing,
-    Finishing,
-    SpringPass,   // light finishing pass to remove deflection error (inserted by simulation optimizer)
-    LeadIn,
-    LeadOut,
-    Link,         // rapid move connecting passes
+    Roughing, SemiFinishing, Finishing, SpringPass,
+    LeadIn, LeadOut, Link,
 }
 
-/// The complete computed toolpath for one operation.
 pub struct Toolpath {
     pub operation_id: OperationId,
     pub tool_id: ToolId,
@@ -123,543 +100,329 @@ pub struct ToolpathStats {
     pub rapid_length_mm: f64,
     pub estimated_duration: Duration,
     pub point_count: usize,
-    pub max_scallop_height_mm: f64,  // computed for finishing ops
+    pub max_scallop_height_mm: f64,
 }
 ```
 
 ---
 
-## Operation Taxonomy
+## Operations by Mode
 
-Operations are organized into four tiers reflecting increasing geometric complexity.
-Development follows this order.
+### Mode 1 -- G-code Viewer
 
-```
-Tier 1: 2D          ── Z is fixed during each cut pass
-Tier 2: 2.5D        ── Z steps between passes; constant during each pass
-Tier 3: 3D Surface  ── 3 simultaneous axes, tool normal varies
-Tier 4: 5-Axis      ── 5 simultaneous axes, tool can tilt arbitrarily
-```
+Mode 1 has **no toolpath generation**. It consumes G-code produced externally.
+The G-code parser converts the file into `MotionSegment` values that feed
+directly into the viewport for visualization and into the dexel engine for
+material removal simulation.
 
-### Tier 1 — 2D Operations
+---
+
+### Mode 2 -- 2D Operations
+
+Input is 2D vector artwork (SVG or DXF). Operations cut at fixed Z depths.
+**Geometry source:** `usvg` (SVG) or `dxf` crate parses artwork into
+`Vec<Polyline>` and `Vec<ClosedRegion>`. No OCCT involved.
 
 #### Profile / Contour
 
-Follows a 2D boundary at one or more Z depths. The dominant 2D operation.
-
-```
-Input:   closed or open 2D curve (from selected edge loop, DXF, or SVG)
-         cutting side (left / right / on)
-         depth parameters
-Output:  offset curve at tool radius, duplicated per depth level
-```
-
-Parameters:
-- Depth: total depth, step-down per level
-- Tool compensation: computer (pre-compensated) or controller (G41/G42)
-- Multiple passes: roughing offset + finishing offset
-- Tabs: leave material bridges to hold part (for through-cuts)
-
-Offset algorithm: Clipper2 (C++ library, called via Rust FFI). Clipper2 handles
-self-intersecting offsets and island avoidance robustly.
+Follows a 2D boundary at one or more Z depths. Parameters: cutting side
+(left/right/on), total depth, step-down, roughing + finishing offsets, tabs for
+through-cuts. Offset algorithm: Clipper2 via Rust FFI.
 
 #### Pocket Clearing
 
-Removes all material inside a closed boundary down to a specified floor depth.
-
-```
-Input:   outer boundary polygon(s), island polygon(s)
-         floor depth, step-down, tool
-Output:  area-filling passes at each Z level
-```
-
-Strategies:
-
-| Strategy | Description | Best for |
-|---|---|---|
-| Offset (conventional) | Inward-spiraling offset contours | General pocketing |
-| Offset (climb) | Outward-spiraling contours | Finish walls |
-| Parallel (zig) | Uni-directional raster | Wide open pockets |
-| Parallel (zig-zag) | Bi-directional raster | Fast roughing |
-| Adaptive (trochoidal) | Constant engagement arc | Hard materials, long tools |
-
-Adaptive clearing maintains a constant tool engagement angle (default 30–60°)
-by computing trochoidal loops wherever the engagement would exceed the target.
-Algorithm: compute cutter contact region at each path position; insert circular
-detour when engagement exceeds threshold.
-
-Entry methods:
-- Helical ramp (preferred: minimum axial load)
-- Linear ramp (where helical diameter doesn't fit)
-- Pre-drilled hole (no ramp, plunges to depth)
-- Open side (direct lateral entry for open pockets)
-
-#### Drilling
-
-Point operations at discrete X/Y locations.
-
-```
-Input:   list of hole centers + diameters (auto-detected from model circles/arcs
-         or manually placed), depth per hole
-Output:  approach + cycle + retract sequence per hole
-```
-
-Cycle types:
-
-| Cycle | Description | G-code |
-|---|---|---|
-| Spot | Partial depth, chamfer only | G81 |
-| Drill | Full depth, single plunge | G81 |
-| Peck | Full depth, pecking retract for chip clearing | G83 |
-| Chip-break | Partial retract without full withdrawal | G73 |
-| Boring | Single point boring, precision diameter | G85/G86 |
-| Reaming | Multi-flute, finished hole | G85 |
-| Tapping | Synchronized feed/speed for threads | G84 |
-
-Hole sorting: nearest-neighbor (TSP approximation) by default to minimize
-rapid travel. Alternative: sort by diameter, by Z depth.
-
-Auto-detection: OCCT identifies cylindrical faces and extracts center axis
-position, diameter, and depth. User confirms and assigns drill cycles.
-
----
-
-### Tier 2 — 2.5D Operations
-
-#### Z-Level Roughing
-
-Horizontal slicing of the part volume into layers. Each layer is cleared
-using pocket-filling passes. The primary roughing strategy for most parts.
-
-```
-Input:   part solid, stock solid, step-down, tool
-Output:  one pocket-fill pass set per Z level
-```
-
-Remaining material tracking: each level clips the cutting boundary to the
-remaining stock above and around. Implemented as 2D polygon clipping
-(Clipper2) of the model's horizontal cross-section at each Z.
-
-Helical entry is generated per level when the start point of the pass is
-inside material.
-
-#### Adaptive Z-Level Roughing
-
-Combines Z-level slicing with per-level adaptive (trochoidal) clearing.
-Preferred for hard materials or when using long-reach tooling.
-
-#### 3D Contour (Z-Level Finishing)
-
-Follows the surface at multiple Z depths — used to finish vertical and
-near-vertical walls after roughing.
-
-```
-Input:   surface faces (from model), Z step-down, tolerance
-Output:  contour pass at each Z level (intersection of Z plane with surface)
-```
-
-Each contour is the intersection of a horizontal plane with the part surface.
-Computed via OCCT `BRepAlgoAPI_Section`. The resulting curves are offset by
-tool radius normal to the surface.
-
----
-
-### Tier 3 — 3D Surface Operations
-
-All Tier 3 operations drive the ball-nose or tapered ball-nose tip along the
-surface. Tool orientation is always (0, 0, 1) — vertical spindle.
-
-#### Parallel (Raster) Finishing
-
-Cutting planes at constant X or Y spacing intersect the surface. Intersection
-curves become the cut passes.
-
-```
-Input:   surface faces, cutting angle (0° = X-parallel), stepover, tolerance
-Output:  passes at even spacing in the chosen direction
-```
-
-Scallop height for a ball-nose tool on a slope of angle θ:
-```
-h = R - √(R² - (s/2)²) / cos(θ)
-```
-where `R` = ball radius, `s` = stepover. Scallop increases on steep faces.
-Parallel finishing is most suited to shallow (< 30°) regions.
-
-#### Scallop (Constant Scallop Height) Finishing
-
-Each pass is offset from the previous by the amount that keeps scallop height
-constant regardless of slope. Delivers uniform surface finish.
-
-```
-Input:   surface faces, target scallop height, tolerance
-Output:  variable-spacing passes that maintain constant scallop
-```
-
-Algorithm:
-1. Start from a seed curve (boundary or user-defined)
-2. For each point on the current pass, compute the surface normal
-3. Step perpendicular to the pass direction by the slope-corrected stepover:
-   `s_local = 2 × √(2Rh - h²) / cos(θ)`
-4. Project stepped point back onto surface
-5. Repeat until surface is covered
-
-Implemented using OCCT surface evaluation: `BRepAdaptor_Surface` for normals
-and `GeomAPI_ProjectPointOnSurf` for projection.
-
-#### Flowline Finishing
-
-Follows the UV parameter directions of NURBS surfaces. Produces the most
-natural-looking finish on aerodynamic and freeform surfaces.
-
-```
-Input:   NURBS surface face(s), U or V direction, stepover
-Output:  passes along iso-parameter curves of the surface
-```
-
-Requires surfaces with well-defined parameterization. OCCT's
-`BRepAdaptor_Surface::UParameter` / `VParameter` methods provide the curves.
-Problematic for faces with singularities (trimmed, degenerate edges).
-
-#### Pencil Milling
-
-Detects and machines concave corner regions (fillets, junctions between faces)
-where a larger tool could not reach. Typically run as a finishing pass after
-scallop or parallel.
-
-```
-Input:   surface faces, tool radius
-Output:  trace curves along all concave contact regions
-```
-
-Algorithm: compute the locus of tool center points where the tool simultaneously
-contacts two faces. OCCT `BRepOffsetAPI_OffsetShape` and distance computations
-identify these regions. The resulting curves are sorted and linked.
-
----
-
-### Tier 4 — 5-Axis Operations
-
-5-axis operations control the tool's orientation vector simultaneously with its
-position. The tool's Z-axis aligns with the `orientation` field of each `CutPoint`.
-
-#### Tool Orientation Strategies
-
-These strategies apply across all 5-axis operations:
+Removes material inside a closed boundary down to a floor depth.
 
 | Strategy | Description |
 |---|---|
-| Fixed tilt | Tool tilts at a fixed lead/lag angle relative to cut direction |
-| Fixed world axis | Tool tilts toward a fixed world vector (e.g., tilted from Z) |
-| Normal to surface | Tool axis = surface normal (true 5-axis contact) |
-| Smoothed normal | Normal to surface, Gaussian-smoothed to reduce axis motion |
-| Auto-tilt | Minimal tilt away from gouge while keeping surface contact |
-| Swarf | Tool side follows a ruled surface (see below) |
+| Offset (conventional) | Inward-spiraling offset contours |
+| Offset (climb) | Outward-spiraling contours |
+| Parallel (zig/zig-zag) | Uni- or bi-directional raster |
+| Adaptive (trochoidal) | Constant engagement arc for hard materials |
 
-#### 5-Axis Point Milling
+Entry methods: helical ramp, linear ramp, pre-drilled hole, open side.
 
-The ball-nose tip contacts the surface at a point. Tool orientation varies
-continuously to maintain a desired lead/lag angle or to avoid collision.
+#### Drilling
 
-```
-Input:   surface faces, orientation strategy, lead angle, lag angle, tolerance
-Output:  toolpath with varying CutPoint.orientation per point
-```
+Point operations at discrete X/Y locations (auto-detected from circles in
+artwork, or manually placed). Cycle types: spot, drill, peck, chip-break,
+boring, reaming, tapping. Hole sorting: nearest-neighbor TSP approximation.
 
-Base path is computed identically to Tier 3 (parallel, scallop, or flowline).
-Then each path point's orientation is computed from the surface normal at that
-point, modified by the chosen tilt strategy.
+#### Key Refactoring Point: Geometry-Source Independence
 
-Singularity handling: when the surface normal is exactly aligned with Z (flat
-top surface), a small fixed lead angle is applied to avoid gimbal lock issues
-on machine tools with A/C or B/C axis configurations.
+The existing codebase implements profile, pocket, and drill algorithms through
+OCCT face selection. In the mode-centric architecture, mode 2 needs these
+**same algorithms** driven by SVG/DXF paths instead.
 
-#### Swarf Milling (Ruled Surface)
-
-The side (flank) of a cylindrical or tapered tool follows a ruled surface —
-a surface generated by sweeping a straight line. One machining pass covers
-the full depth of the ruled surface, eliminating scallop entirely.
+The core algorithms (Clipper2 offset, boolean + fill, hole sorting) are
+**geometry-source-agnostic** -- they operate on 2D polylines regardless of
+origin. The refactoring is in the **input pipeline**, not the algorithms:
 
 ```
-Input:   ruled surface face(s), tool (cylindrical or tapered), tolerance
-Output:  single-pass path with orientation = ruling direction at each point
+Current:   OCCT face --> extract boundary --> Clipper2 --> toolpath
+Mode 2:    SVG/DXF   --> parse paths      --> Clipper2 --> toolpath
+                                               ^
+                                     Same algorithm from here on
 ```
 
-Algorithm:
-1. OCCT identifies the ruling direction at each parameter point on the surface
-2. Tool center is positioned so the tool side is tangent to the surface
-3. The offset accounts for tool taper angle
-4. Over/undercut check: verify tool side doesn't gouge adjacent faces
+The `planner.rs` dispatcher should accept `Vec<Polyline>` rather than an OCCT
+face handle. Both OCCT face extraction and SVG/DXF parsing produce this type.
 
-Primary use: impeller blades, turbine vanes, mold side walls.
+---
 
-#### Multi-Axis Contour
+### Mode 3 -- 2.5D Operations (V-Carve)
 
-5-axis equivalent of Z-level contour finishing. The tool axis tilts to maintain
-a constant engagement angle with steep walls, allowing a side-cutting strategy
-on walls that 3-axis cannot reach cleanly.
+Same 2D vector input as mode 2, but the toolpath is 3D -- a V-bit descends to
+a depth that varies with the local width of each shape.
 
-#### Future: Port Milling, Turbine Blade (5-axis specialty operations)
+**Standard V-carve:** The tool tip traces the **medial axis** at varying depths.
+For V-bit included angle alpha and local half-width w/2:
+`depth = (w/2) / tan(alpha/2)`. Initial implementation: progressive inward
+offset via Clipper2. Future: exact medial axis via Straight Skeleton.
 
-Specialized templates for common 5-axis part families. Planned for post-v1.
+**Flat-bottom V-carve:** Flat endmill clears the center area first when width
+exceeds V-bit reach; V-bit carves the edges to full profile depth.
+
+**Inlay:** Two pieces cut from the same artwork -- female pocket (V-carve) and
+male inlay (mirror, offset inward by glue gap).
+
+**Paint-fill:** Same V-carve geometry with a metadata flag for filled rendering.
+
+---
+
+### Mode 4 -- 3D Operations
+
+3-axis surface machining reachable from the top only (Z+ access, no
+undercuts). Input is a heightmap, STL mesh, or STEP solid model. Heightmaps
+are loaded into a `HeightmapGrid`; STL meshes are parsed into a triangle
+mesh for ray-cast Z sampling; STEP models are imported via OCCT (optional).
+
+**Parallel (raster) finishing:** Constant-spacing scan lines, Z sampled from
+height field at each point.
+
+**Scallop finishing:** Variable spacing for constant scallop height regardless
+of local slope.
+
+**Roughing passes:** Coarse Z-level passes for deep reliefs.
+
+#### The SurfaceModel Trait
+
+Mode 4's parallel and scallop algorithms are the **same math** as mode 7's 3D
+surface operations, but on a height field instead of OCCT surfaces. A trait
+abstracts over both:
+
+```rust
+pub trait SurfaceModel: Send + Sync {
+    fn sample_z(&self, x: f64, y: f64) -> f64;
+    fn normal_at(&self, x: f64, y: f64) -> Vector3<f64>;
+    fn bounds(&self) -> BoundingBox2D;
+}
+
+struct HeightmapSurface { grid: HeightmapGrid }  // bilinear interpolation
+struct MeshSurface      { mesh: TriangleMesh }   // ray-cast Z sampling
+struct OcctFaceSurface  { face: OcctFaceHandle }  // OCCT BRepAdaptor_Surface
+```
+
+The `surface.rs` operations module is parameterized over `impl SurfaceModel`.
+Mode 4 passes `HeightmapSurface`, `MeshSurface`, or `OcctFaceSurface`
+depending on input; mode 7 passes `OcctFaceSurface`. Algorithms are
+identical -- only surface evaluation changes. Heightmap evaluation is
+extremely fast (array lookup); mesh ray casting is moderate; OCCT surface
+evaluation is slowest but most precise.
+
+---
+
+### Modes 5-6 -- Rotary Operations
+
+**Mode 5 (2+rotary, X/Z/theta):** Machine has X, Z, and A (rotation around X).
+No independent Y -- achieved by rotating the stock. Input: SVG/DXF artwork,
+heightmaps, STL meshes, or STEP models. Operations: roughing/finishing from
+revolved profile, fluting, cylindrical relief (wrapped heightmap), indexing
+(2D ops on unwrapped surface). A coordinate transformer converts XZ+angle to
+Cartesian; `CutPoint` stays Cartesian, post-processor converts to X/Z/A.
+
+**Mode 6 (3+rotary, XYZ+A):** Four simultaneous axes. Standard 3D surface
+operations extended with tool tilt around the rotary axis. Simpler kinematics
+than 5-axis: `A = atan2(-tool_axis_x, tool_axis_z)`. Uses `CutPoint.orientation`
+same as mode 7.
+
+---
+
+### Mode 7 -- 5-Axis Operations
+
+OCCT geometry. All 3D surface operations and full 5-axis operations.
+
+#### 3D Surface Operations (3-axis, vertical spindle)
+
+Uses `SurfaceModel` trait with `OcctFaceSurface`.
+
+**Parallel finishing:** Constant-spacing cutting planes intersect the surface.
+Scallop: `h = R - sqrt(R^2 - (s/2)^2) / cos(theta)`. Best for shallow regions.
+
+**Scallop finishing:** Variable spacing maintaining constant scallop height via
+slope-corrected stepover: `s = 2 * sqrt(2Rh - h^2) / cos(theta)`.
+
+**Flowline finishing:** Follows UV parameter directions of NURBS surfaces.
+
+**Pencil milling:** Traces concave corner regions where larger tools cannot reach.
+
+**Z-level roughing:** Horizontal slicing, each layer cleared via Clipper2 polygon
+clipping of model cross-sections.
+
+#### 5-Axis Operations
+
+Tool orientation varies continuously. Strategies: fixed tilt, fixed world axis,
+surface normal, smoothed normal, auto-tilt, swarf.
+
+**Point milling:** Ball-nose contacts surface; orientation from surface normal +
+tilt strategy. Singularity handling for flat-top surfaces.
+
+**Swarf milling:** Tool flank follows a ruled surface. One pass covers full depth.
+For impeller blades, turbine vanes, mold walls.
+
+**Multi-axis contour:** 5-axis Z-level finishing with tilting engagement angle.
 
 ---
 
 ## Linking
 
-Linking connects the cut passes into a continuous program by inserting rapids,
-retracts, lead-in motions, and lead-out motions between passes.
+Linking connects passes into a continuous program. Shared across modes 2-7.
 
 ### Retract Strategies
 
-| Strategy | Description | When to use |
-|---|---|---|
-| Fixed Z | Retract to a user-defined Z height | Simple setups |
-| Clearance plane | Retract to Z = stock top + clearance | Multi-level ops |
-| Safe sphere | Retract to a sphere of radius R around part center | Complex 3D parts |
-| Minimal | Just clear the next obstacle (computed) | Cycle-time optimization |
+| Strategy | Description |
+|---|---|
+| Fixed Z | Retract to user-defined Z |
+| Clearance plane | Z = stock top + clearance (default) |
+| Safe sphere | Sphere of radius R around part center |
+| Minimal | Computed obstacle clearance (deferred) |
 
-Default: Clearance plane. Minimal retract is deferred to a later version.
+### Lead-In / Lead-Out
 
-### Lead-In / Lead-Out Styles
+| Style | Geometry |
+|---|---|
+| Linear | Tangent extension, straight line |
+| Arc | Circular arc tangent to cut direction (default for profiles) |
+| Helical | Arc + ramp descent |
+| Ramp | Angled linear descent |
 
-Lead-in and lead-out motions smooth the tool's entry and exit from material,
-reducing witness marks and entry shock.
-
-| Style | Description | Geometry |
-|---|---|---|
-| None | Direct plunge to start | Not recommended |
-| Linear | Tangent extension of the first cut move | Straight line |
-| Arc | Circular arc, tangent to cut direction | G2/G3 |
-| Helical | Arc + ramp descent simultaneously | 3D arc |
-| Ramp | Angled linear descent | Straight line, angled in Z |
-
-Arc lead-in is the default for profile and contour operations. Lead radius
-defaults to 40% of tool diameter.
+Lead radius defaults to 40% of tool diameter.
 
 ### Linking Algorithm
 
-```
-for each ordered pair of consecutive passes (prev, next):
-
-  1. Generate lead-out from prev.last_point
-     (arc or linear extending beyond the exit)
-
-  2. Compute retract point above lead-out end
-     (using chosen retract strategy)
-
-  3. Rapid to point above lead-in start of next
-
-  4. Feed down to lead-in start (plunge or ramp)
-
-  5. Generate lead-in to next.first_point
-
-  6. Append [lead-out, retract, rapid, descend, lead-in] as Link Pass
-```
-
-Pass ordering is optimized before linking to minimize total rapid travel.
-Nearest-neighbor sort applied within each Z level.
+For each consecutive pass pair: generate lead-out, retract, rapid to next lead-in
+start, descend, generate lead-in. Pass ordering optimized by nearest-neighbor
+sort within each Z level to minimize rapid travel.
 
 ---
 
 ## Collision Detection
 
-### Gouge Detection (3-axis)
+Applies primarily to **modes 5-7** where tool body and orientation create
+collision risk. Modes 2-4 have fixed vertical orientation; collision is limited
+to gouge detection.
 
-For 3-axis: the tool tip must never penetrate the part surface.
+**Gouge detection (3-axis):** Verify tool tip Z >= surface Z at each XY. For
+height fields: direct grid lookup. For OCCT: `BRepExtrema_DistShapeShape`.
+Violations resolved by lifting or reported as errors.
 
-After pass generation, each `CutPoint.position` is verified:
-- The point must lie on or above the surface at its XY location
-- Implemented as: compute Z of surface at (X, Y) using OCCT
-  `BRepExtrema_DistShapeShape` and verify tool tip Z ≥ surface Z
+**Gouge detection (5-axis):** Full tool body check. Tool discretized into N
+cylindrical discs; each disc's distance to surface verified. Auto-tilt adjusts
+orientation by minimum rotation to clear.
 
-Violations are flagged with their location and severity. Options:
-- Lift the path to clear (adjust Z)
-- Report error and stop (for operations where lifting would change intent)
-
-### Gouge Detection (5-axis)
-
-For 5-axis the full tool body — not just the tip — must not intersect the part.
-
-The tool is discretized into N cylindrical discs along its axis. Each disc
-center's distance to the part surface is computed. If distance < disc radius,
-a gouge is detected at that disc's axial position.
-
-For each gouging point, the `auto-tilt` strategy adjusts the tool orientation
-by the minimum rotation needed to bring the tool body clear.
-
-### Holder Collision Detection
-
-The tool holder body (above the flute) is represented as a simplified solid
-(cylinder + truncated cone). Collision with the part and any declared fixtures
-is checked after gouge detection.
-
-Holder collision is reported with:
-- Collision location
-- Minimum required flute length (so the user can adjust stick-out)
-
-Automatic resolution is not attempted for holder collisions — the user must
-either increase stick-out, change tool, or adjust the operation.
+**Holder collision (modes 5-7):** Simplified holder solid (cylinder + cone)
+checked against part and fixtures. Reported with collision location and minimum
+required flute length. No automatic resolution.
 
 ---
 
 ## Feed and Speed Assignment
 
-Each `CutPoint` is annotated with a feed rate and spindle speed. Sources
-in priority order:
+Shared across all modes. Sources in priority order:
+1. Per-point override (engagement-based, for adaptive clearing)
+2. Operation-level override (user explicit values)
+3. Tool definition defaults
+4. Material library lookup
 
-1. Per-point override (computed for adaptive clearing — feed varies by engagement)
-2. Operation-level override (user sets explicit values in operation params)
-3. Tool definition defaults (stored in tool library)
-4. Material library lookup (tool material + workpiece material + operation type)
+### Feed Scaling
 
-### Feed Scaling by Motion Type
-
-Applied as multipliers on the base cutting feed rate:
-
-| Motion type | Default multiplier |
+| Motion type | Multiplier |
 |---|---|
-| Cutting | 1.0× |
-| Plunge | 0.3× |
-| Ramp / helix entry | 0.5× |
-| Lead-in / lead-out | 0.5× |
-| Rapid | machine max (not annotated in feedrate) |
+| Cutting | 1.0x |
+| Plunge | 0.3x |
+| Ramp / helix | 0.5x |
+| Lead-in / lead-out | 0.5x |
 
-### Adaptive Feed (Engagement-Based)
+**Adaptive feed:** For trochoidal clearing,
+`feed = base_feed * (target_engagement / theta_e)`, clamped to [0.2x, 1.5x].
 
-For adaptive clearing operations, feed rate varies per-point based on the
-instantaneous tool engagement angle θ_e:
+**Rotary feed (modes 5-6):** Post-processor converts surface speed to angular
+rate based on current diameter.
 
-```
-feed = base_feed × (target_engagement / θ_e)
-```
-
-Clamped to [0.2×, 1.5×] of base feed. This maintains constant chip load
-across changing path geometry.
-
-> **Note:** Feed and speed values assigned by this stage are *initial* values based
-> on geometry and material lookup. The simulation optimizer (see `cutting-simulation.md`)
-> may override per-point feed rates and insert `SpringPass` entries after running the
-> physics simulation. The optimizer produces a new `Toolpath` struct; the geometric
-> cache key is not affected by optimizer changes.
+> Feed/speed values are initial. The simulation optimizer may override per-point
+> rates and insert `SpringPass` entries after physics simulation.
 
 ---
 
-## Chord Tolerance and Path Smoothing
+## Chord Tolerance and Arc Fitting
 
-### Chord Tolerance
+All curves linearized to `CutPoint` sequences. Chord tolerance: 0.01mm finishing,
+0.05mm roughing. Arc fitting replaces chord sequences with G2/G3 arc moves
+(tolerance: 10% of chord tolerance), reducing G-code size and improving finish.
 
-All curves are linearized to straight `CutPoint` sequences. The chord tolerance
-controls the maximum deviation from the true curve:
-
-```
-            true curve
-           ╭──────────╮
-          ╱      │     ╲
-         │  chord│      │
-          ╲      │ tol ╱
-           ╰──────────╯
-            linearized chord
-```
-
-Default: 0.01mm for finishing, 0.05mm for roughing.
-
-### Arc Fitting
-
-For controllers that support G2/G3 arc moves (most do), sequences of short
-linear segments that approximate an arc are detected and replaced with a single
-arc move. This reduces G-code file size dramatically for circular features and
-improves surface finish (controller interpolates smoothly rather than executing
-thousands of micro-moves).
-
-Arc fitting tolerance: 10% of chord tolerance.
-
-### Path Smoothing
-
-Optional post-pass Gaussian smoothing of the point sequence to reduce
-direction changes. Useful for high-speed machining where abrupt direction
-changes cause dynamic errors. Implemented as a moving weighted average of
-position vectors, applied along the path.
-
-Not applied to 2D profile operations (would alter the intended geometry).
-Applied by default to 3D surface and 5-axis operations.
+Optional Gaussian path smoothing for 3D/5-axis operations (modes 4 and 7).
+Not applied to 2D profiles (would alter geometry).
 
 ---
 
-## Development Roadmap
-
-Operations will be implemented in tier order. Each tier is a releasable milestone.
-
-### Phase 1 — Core 2D (MVP)
-
-- [ ] Profile / Contour (single depth, fixed Z)
-- [ ] Pocket clearing (offset strategy only)
-- [ ] Drilling (drill and peck cycles)
-- [ ] Basic linking (fixed-Z retract, linear lead-in/out)
-- [ ] Fixed feeds (no adaptive, no material library)
-- [ ] Gouge detection (3-axis, report only)
-
-### Phase 2 — 2.5D and Roughing
-
-- [ ] Multi-level profile (step-down)
-- [ ] Z-level roughing
-- [ ] Adaptive / trochoidal clearing
-- [ ] Arc lead-in / lead-out
-- [ ] Helical entry
-- [ ] Hole sorting (nearest-neighbor)
-- [ ] Arc fitting in output
-
-### Phase 3 — 3D Surface
-
-- [ ] Parallel (raster) finishing
-- [ ] Scallop finishing
-- [ ] Pencil milling
-- [ ] Flowline finishing
-- [ ] Gouge detection + auto-lift
-- [ ] Material library for feeds/speeds
-- [ ] Rest machining (identify what prior tool left)
-
-### Phase 4 — 5-Axis
-
-- [ ] Tool orientation strategies (fixed tilt, surface normal, smoothed normal)
-- [ ] 5-axis point milling
-- [ ] Swarf milling (ruled surface)
-- [ ] Holder collision detection
-- [ ] Auto-tilt for collision avoidance
-- [ ] Multi-axis contour
-
-### Phase 5 — Advanced (Post-v1)
-
-- [ ] Machine kinematics model (A/C, B/C table configurations)
-- [ ] Inverse kinematics for specific machine types
-- [ ] Machine collision checking (full machine envelope)
-- [ ] Barrel / oval-form tool support
-- [ ] Minimum-time linking (minimal retract)
-- [ ] Engagement-based adaptive feed (all operation types)
-
----
-
-## Rust Module Responsibilities (recap)
+## Rust Module Responsibilities
 
 ```
 toolpath/
-├── planner.rs         dispatches to the correct operation module;
-│                      owns the pipeline stages in order
-├── types.rs           CutPoint, Pass, Toolpath, ToolpathStats, FeedType
-├── linking.rs         retract strategy, lead-in/out generation, pass ordering
-├── collision.rs       gouge check (3-axis + 5-axis), holder check, auto-tilt
-├── feeds.rs           feed/speed annotation, engagement-based scaling
-├── arc_fit.rs         detect and replace chord sequences with arc moves
-├── smoothing.rs       Gaussian path smoothing
-└── operations/
-    ├── contour.rs     Profile, Z-level contour
-    ├── pocket.rs      Pocket clearing (offset, parallel, adaptive)
-    ├── drill.rs       Drilling cycle generation
-    ├── surface.rs     Parallel, scallop, flowline, pencil
-    └── five_axis.rs   Point milling, swarf, multi-axis contour
++-- planner.rs         dispatches to operation module; accepts abstract
+|                      geometry source (polylines, heightmap, or OCCT faces)
++-- types.rs           CutPoint, Pass, Toolpath, ToolpathStats, FeedType
++-- linking.rs         retract, lead-in/out, pass ordering
++-- collision.rs       gouge check (3-axis + 5-axis), holder, auto-tilt
++-- feeds.rs           feed/speed annotation, engagement scaling
++-- arc_fit.rs         chord-to-arc replacement
++-- smoothing.rs       Gaussian path smoothing
++-- surface_model.rs   SurfaceModel trait
++-- operations/
+    +-- contour.rs     Profile (accepts Vec<Polyline>)
+    +-- pocket.rs      Pocket clearing (offset, parallel, adaptive)
+    +-- drill.rs       Drilling cycles
+    +-- vcarve.rs      Medial axis V-carve, flat-bottom, inlay
+    +-- surface.rs     Parallel, scallop, flowline, pencil (generic over SurfaceModel)
+    +-- five_axis.rs   Point milling, swarf, multi-axis contour
+    +-- rotary.rs      Rotary profile, fluting, cylindrical relief
+
+modes/
++-- mode_2d/           SVG/DXF --> Vec<Polyline> for contour/pocket/drill
++-- mode_25d/          Same input + medial axis for vcarve.rs
++-- mode_3d/           Heightmap --> HeightmapSurface for surface.rs
++-- rotary/            Coordinate transforms, cylindrical unwrap
++-- five_axis/         OCCT face selection --> OcctFaceSurface
 ```
+
+---
+
+## Development Approach by Mode
+
+Each mode is a releasable milestone:
+
+1. **Mode 2 (2D):** Profile, pocket, drilling with SVG/DXF. Basic linking. No
+   OCCT. Validates geometry-source-agnostic refactoring of Clipper2 algorithms.
+2. **Mode 3 (2.5D):** V-carve variants. Builds on mode 2's SVG/DXF pipeline.
+3. **Mode 4 (3D):** Parallel/scallop on heightmaps, STL meshes, and STEP
+   models. Introduces `SurfaceModel` trait with `HeightmapSurface`,
+   `MeshSurface`, and `OcctFaceSurface` implementations.
+4. **Modes 5-6 (rotary):** Coordinate transforms, post-processor rotary support.
+   Reuses mode 4's heightmap/mesh engine and mode 2's SVG/DXF pipeline.
+5. **Mode 7 (5-axis):** Full 3D/5-axis via OCCT. `OcctFaceSurface` implementation.
+   Holder collision detection.
 
 ---
 
 *Document status: Draft*
-*Related documents: `system-architecture.md`, `geometry-kernel.md`, `gcode-postprocessor.md`*
+*Related documents: `system-architecture.md`, `modes-overview.md`, `geometry-kernel.md`, `gcode-postprocessor.md`, `cutting-simulation.md`*

@@ -33,9 +33,39 @@ not just a geometrically valid toolpath but a *physically validated* one.
                                     Validated Toolpath ──► Machine ──► Part
 ```
 
-The simulation engine is not a post-processing step — it is an integral part
+The simulation engine is not a post-processing step -- it is an integral part
 of toolpath generation, running iteratively until the toolpath satisfies all
 physical constraints.
+
+---
+
+## Relationship to Mode Architecture
+
+The simulation engine is shared infrastructure that serves all seven modes, but
+different modes consume different layers of the simulation stack.
+
+**Basic dexel simulation (material removal visualization)** is shared across all
+modes. It provides the visual feedback of material being removed as the tool moves
+along a toolpath. This is the foundation of mode 1 (G-code viewer/simulation) and
+is available to every other mode as well.
+
+**Physics layers (forces, deflection, thermal, structural, chatter)** are an
+advanced capability that modes adopt incrementally based on need:
+
+| Mode | Dexel sim | Physics layers | Notes |
+|---|---|---|---|
+| 1 -- G-code viewer | Primary consumer | Optional | Core purpose is visualizing G-code; physics layers provide force/deflection overlays if a material and tool are defined |
+| 2 -- 2D | Yes | Basic (L1-L3) sufficient | Fixed-depth ops; forces are predictable; deflection matters for finishing |
+| 3 -- 2.5D | Yes | Basic (L1-L3) sufficient | V-bit Z movements add modest complexity |
+| 4 -- 3D | Yes | Basic (L1-L3) sufficient | Heightmap machining; forces vary with depth |
+| 5 -- 2+rotary | Yes | Full stack valuable | Lathe-like ops; forces and chatter are significant concerns |
+| 6 -- 3+rotary | Yes | Full stack valuable | 4-sided milling; structural analysis matters for part rigidity |
+| 7 -- 5-axis | Yes | Full stack essential | Highest forces, most complex geometry, thin features common |
+
+For modes 2-4, the basic simulation (dexel visualization + layers 1-3) is sufficient
+for the initial implementation. The full physics stack (layers 4-6) is most valuable
+for modes 5-7, where cutting forces are higher, part geometry is more complex, and
+thin-feature breakage is a real concern.
 
 ---
 
@@ -232,8 +262,9 @@ is updated as each pass is simulated. This can use:
 - **Voxel model**: accurate for multi-axis but memory-intensive
 - **Exact B-rep**: most accurate but slow to update
 
-For Phase 1, a dexel model is used. The voxel model is introduced in Phase 2
-of simulation development.
+Initially, a dexel model is used (sufficient for modes 1-4 and the linear axes of
+modes 5-7). The voxel model is introduced in Tier 3 for rotary and multi-axis modes
+where the dexel Z-map representation is insufficient.
 
 **Thin feature detection:**
 
@@ -814,7 +845,10 @@ simulation/
 
 ## Implementation Phasing
 
-### Phase 1: Force and Deflection (foundational)
+Implementation follows the simulation layers, with each tier adding capability that
+benefits progressively more advanced modes.
+
+### Tier 1: Dexel Visualization and Basic Physics (all modes)
 
 - [ ] Material database (TOML format, ~10 common materials)
 - [ ] Machine model (TOML format)
@@ -830,11 +864,15 @@ simulation/
 - [ ] Simulation panel with time-series charts
 - [ ] `.sim.bin` cache format
 
+**Modes served:** All modes benefit. Mode 1 (G-code viewer) is the primary consumer
+of the dexel visualization. Modes 2-4 get force/deflection validation for their
+toolpaths. Modes 5-7 get the foundation that later tiers build on.
+
 **User value:** Finishing passes have predictable accuracy. Feed rates are
 automatically reduced where forces spike (entry, corners, full-width cuts).
 Spring passes are suggested or auto-added where deflection exceeds tolerance.
 
-### Phase 2: Thermal and Structural
+### Tier 2: Thermal and Structural (modes 2-7)
 
 - [ ] Layer 4: thermal model (heat partition, temperature accumulation)
 - [ ] Layer 5: thin feature detection from as-machined geometry
@@ -845,19 +883,28 @@ Spring passes are suggested or auto-added where deflection exceeds tolerance.
 - [ ] Breakage risk assessment and grain-angle tear-out
 - [ ] Extended material database (woods, plastics, steels)
 
+**Modes served:** Modes 2-4 gain thermal awareness and tab mark mitigation. Modes 5-7
+benefit most from structural analysis, where complex 3D parts frequently have thin
+features at risk of deflection or breakage.
+
 **User value:** Thin features are machined safely. Wood grain direction affects
 toolpath sequencing automatically. Tab faces are clean.
 
-### Phase 3: Chatter and Advanced
+### Tier 3: Chatter and Advanced (primarily modes 5-7)
 
 - [ ] Layer 6: stability lobe computation
 - [ ] Chatter risk heatmap
 - [ ] Spindle speed optimizer (recommend stable lobe)
-- [ ] Voxel as-machined geometry (replaces dexel for multi-axis)
+- [ ] Voxel as-machined geometry (replaces dexel for rotary and multi-axis modes)
 - [ ] Full beam/plate FEA for complex thin-wall features
 - [ ] Composite material model (fiber-reinforced)
 - [ ] Tool wear accumulation model (Taylor's equation)
 - [ ] Remaining tool life prediction
+
+**Modes served:** Primarily modes 5-7, where chatter is a significant concern due to
+higher cutting forces, longer tool stickout, and more complex engagement geometry.
+The voxel as-machined geometry tracker replaces the dexel model for rotary and
+multi-axis modes where the dexel Z-map representation is insufficient.
 
 **User value:** Chatter is predicted and avoided without manual stability lobe
 charts. Tool life is tracked and replacement is predicted before failure.
@@ -866,8 +913,8 @@ charts. Tool life is tracked and replacement is predicted before failure.
 
 ## Relationship to Existing Architecture
 
-The simulation engine is a new top-level module in the Rust backend. Its
-position in the overall pipeline:
+The simulation engine is a top-level module in the Rust backend, shared across all
+modes. Its position in the overall pipeline:
 
 ```
 Toolpath Engine  ──►  Simulation Engine  ──►  Optimizer  ──►  Post-Processor
@@ -876,6 +923,17 @@ Toolpath Engine  ──►  Simulation Engine  ──►  Optimizer  ──►  
                               (iteration until converged)
 ```
 
+Every mode produces toolpaths; every toolpath can be fed through the simulation
+engine. The difference is which simulation layers are active:
+
+- **Mode 1** (G-code viewer): Dexel visualization is always on. Physics layers
+  are optional and depend on whether the user has defined a material and tool.
+- **Modes 2-4**: Tier 1 (dexel + basic physics) runs by default. Tier 2
+  (thermal, structural) is available when the user enables it or when the
+  simulation detects risk conditions.
+- **Modes 5-7**: All tiers are relevant. The full physics stack runs by default
+  for finishing operations; roughing uses at least Tier 1.
+
 **Changes to `system-architecture.md`:** The IPC command inventory gains
 `run_simulation(operation_id)`, `get_simulation_data(operation_id)`, and
 `apply_optimization(operation_id, actions[])`. New events:
@@ -883,15 +941,16 @@ Toolpath Engine  ──►  Simulation Engine  ──►  Optimizer  ──►  
 
 **Changes to `project-file-format.md`:** The `cache` block gains a
 `simulation_key` and `sim_binary_file` alongside the existing toolpath key.
-`CacheState` tracks simulation validity separately from toolpath validity —
+`CacheState` tracks simulation validity separately from toolpath validity --
 a toolpath recompute always invalidates the simulation; a physics limits change
 invalidates the simulation but not the toolpath geometry.
 
-**Changes to `development-roadmap.md`:** Simulation Phase 1 runs in parallel
-with toolpath Phase 2 (2.5D), since the force/deflection model does not depend
-on 3D surface machining capabilities.
+**Simulation Tier 1 development** can proceed independently of any specific mode's
+toolpath engine, since the force/deflection model operates on generic toolpath
+point sequences. This makes the basic simulation available to modes as soon as they
+can produce toolpaths.
 
 ---
 
-*Document status: Draft*
-*Related documents: `toolpath-engine.md`, `system-architecture.md`, `project-file-format.md`, `development-roadmap.md`*
+*Document status: Draft -- updated for mode-centric architecture.*
+*Related documents: `toolpath-engine.md`, `system-architecture.md`, `project-file-format.md`, `technology-stack.md`, `geometry-kernel.md`*

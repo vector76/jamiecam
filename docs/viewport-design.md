@@ -2,10 +2,52 @@
 
 ## Overview
 
-The 3D viewport is a Three.js scene rendered in a WebGL canvas inside the Tauri
-webview. It is responsible for displaying the workpiece model, stock, fixtures,
-toolpaths, and tool simulation. It is a pure display layer — all geometry data
-originates in Rust and is pushed to the viewport via the IPC bridge.
+The viewport is the primary visualization layer in JamieCam, rendered inside the
+Tauri webview. It is a pure display layer -- all geometry data originates in Rust
+and is pushed to the viewport via the IPC bridge. The viewport paradigm varies
+by project mode: some modes use a full 3D Three.js scene, while others use a
+dedicated 2D canvas with optional 3D preview.
+
+---
+
+## Viewport Paradigms by Mode
+
+Different project modes have fundamentally different viewport needs. The mode
+(set at project creation time) determines which viewport configuration is active.
+
+| Mode | Primary Viewport | Description |
+|---|---|---|
+| G-code viewer | 3D | Standard 3D viewport showing tool motion and material removal |
+| 2D | 2D canvas | Pan/zoom on XY plane. Paths and operations as colored overlays. 3D preview on demand. |
+| 2.5D | 2D canvas + 3D preview | Like 2D, but 3D preview shows V-carved depth. |
+| 3D | 3D | Heightmap as displaced PlaneGeometry; STL/STEP as triangle mesh. Toolpath overlay. |
+| 2+rotary | 3D + unwrapped 2D | 3D shows cylindrical workpiece; side panel shows unwrapped flat view for artwork placement. |
+| 3+rotary | 3D | Standard 3D with rotary axis visualization. |
+| 5-axis | 3D | Full 3D with tool orientation indicators. |
+
+### 2D Canvas Viewport (modes: 2D, 2.5D)
+
+For 2D and 2.5D projects, the primary viewport is a dedicated 2D rendering
+surface rather than the full 3D scene. Implementation options include Three.js
+with an orthographic camera locked to Z-down, or a standalone 2D canvas library.
+
+Key characteristics:
+
+- **No OrbitControls** -- only pan (drag) and zoom (scroll wheel) on the XY plane.
+- **Source artwork** (SVG/DXF paths) displayed as the base layer.
+- **Operations shown as colored vector overlays** on the artwork, using the same
+  operation color palette as the 3D toolpath visualization.
+- **"3D Preview" toggle** generates a simple extruded or V-carved mesh and
+  switches to a Three.js 3D viewport for visualization. This is a preview mode,
+  not the primary editing surface.
+- **No OCCT tessellation needed** -- geometry comes directly from SVG/DXF paths,
+  not from solid model topology.
+
+### 3D Viewport (all other modes)
+
+The remaining sections of this document describe the 3D viewport in detail. This
+applies directly to the G-code viewer, 3D (heightmap), 2+rotary, 3+rotary, and
+5-axis modes. It also applies to the 3D preview toggle in 2D/2.5D modes.
 
 ---
 
@@ -90,6 +132,13 @@ THREE.Scene
     ├── MeasurementLabels     (CSS2DObject — HTML labels for dimensions)
     └── SelectionOutline      (post-process or additive highlight)
 ```
+
+The full scene graph above applies to 3D modes (G-code viewer, 3D, 2+rotary,
+3+rotary, 5-axis). For 2D/2.5D modes, the primary canvas uses a simpler
+structure: a base artwork layer, operation overlay layers, and a cursor/selection
+layer. When the 3D preview toggle is active in 2D/2.5D modes, a subset of the
+3D scene graph is used (typically WorldGroup with a generated mesh and
+ToolpathGroup, without ModelGroup or SimulationOverlay).
 
 ---
 
@@ -279,10 +328,19 @@ configurable (default: every 10mm of path length). Hidden for 3-axis operations.
 
 ### Selectable Entities
 
+The selection model depends on the project mode. Face and edge selection on
+solid model topology applies to modes that work with STEP/IGES models (rotary_2,
+rotary_3, 5_axis). Modes 2D and 2.5D use path/region selection on the imported
+SVG/DXF artwork instead -- the user selects vector paths or enclosed regions to
+define machining areas. The G-code viewer and 3D (heightmap) modes have limited
+selection (primarily toolpath clicking and WCS repositioning).
+
 | Entity | How selected | Used for |
 |---|---|---|
-| Model face | Left-click on shaded face | Defining machining regions |
-| Model edge | Left-click near edge (edge detection) | Contour selection |
+| Model face | Left-click on shaded face | Defining machining regions (3D/rotary/5-axis modes) |
+| Model edge | Left-click near edge (edge detection) | Contour selection (3D/rotary/5-axis modes) |
+| Artwork path | Left-click on vector path | Selecting paths for operations (2D/2.5D modes) |
+| Artwork region | Left-click inside enclosed area | Selecting pocketing regions (2D/2.5D modes) |
 | Toolpath / operation | Left-click on a toolpath line | Selects operation in panel |
 | WCS origin | Click + drag on WCS indicator | Repositioning WCS |
 
@@ -315,7 +373,11 @@ rectangle.
 
 ## Simulation Mode
 
-Simulation animates the tool moving along a computed toolpath.
+Simulation animates the tool moving along a computed toolpath. Simulation
+playback works across all modes, but the visualization differs: 3D modes show
+the full tool mesh animation in the Three.js scene, while 2D/2.5D modes show
+the tool position as a marker on the 2D canvas (with optional 3D preview for
+full visualization).
 
 ### Tool Geometry
 
@@ -498,4 +560,4 @@ Rendered as WebGL geometry overlaid on the scene (no depth test):
 ---
 
 *Document status: Draft*
-*Related documents: `technology-stack.md`, `system-architecture.md`, `toolpath-engine.md`*
+*Related documents: `technology-stack.md`, `system-architecture.md`, `toolpath-engine.md`, `project-file-format.md`*

@@ -2,9 +2,21 @@
 
 ## Overview
 
-JamieCam is a cross-platform CAM (Computer-Aided Manufacturing) application targeting
-2D, 2.5D, and full 5-axis toolpath generation. The architecture is designed around a
-hard separation between the UI layer (web technologies) and the compute layer (Rust/C++),
+JamieCam is a cross-platform CAM (Computer-Aided Manufacturing) application built
+around a **mode-centric architecture** with seven independent modes:
+
+1. **G-code viewer/simulation** -- load and visualize G-code, material removal sim
+2. **2D** -- 2D artwork (SVG/DXF), fixed-depth ops (profile, pocket, drill)
+3. **2.5D** -- 2D artwork + V-bit Z movements for corners, signs, inlay
+4. **3D** -- topographic maps, heightmaps, lithophanes
+5. **2+rotary** -- X, Z, theta lathe-like
+6. **3+rotary** -- XYZ + rotary, 4-sided milling
+7. **5-axis** -- fully arbitrary position and orientation
+
+Each mode is a self-contained workflow with its own geometry pipeline, UI panels, and
+toolpath strategies. Shared infrastructure (tool library, post-processor, G-code parser,
+dexel simulation engine) serves all modes. The architecture is designed around a hard
+separation between the UI layer (web technologies) and the compute layer (Rust/C++),
 with offline-first operation and a future web deployment path.
 
 ---
@@ -129,7 +141,13 @@ async tasks, streaming progress events back to the frontend via `window.emit()`.
 
 OCCT is the industry-standard open-source B-rep geometry kernel. It is written in C++
 and required for robust handling of STEP/IGES files and for surface-based toolpath
-operations needed by 5-axis machining.
+operations needed by rotary and 5-axis machining.
+
+**OCCT is required by Mode 7** (5-axis) and **optionally used by Modes 4-6** for
+STEP file import. Modes 1-3 do not depend on OCCT in any way -- they use lighter
+geometry pipelines described below. The application can be built and run for
+modes 1-3 without OCCT
+installed on the system.
 
 ### Integration Strategy
 
@@ -159,12 +177,47 @@ This isolation means:
 | Face / edge classification | Identifying machinable features |
 | Intersection computation | Tool-surface contact point calculation |
 
+### Mode-Specific Geometry Dependencies
+
+Each mode has its own geometry pipeline. Only Mode 7 requires the full OCCT kernel;
+Modes 4-6 use OCCT optionally for STEP import.
+
+**Mode 1: G-code viewer/simulation**
+- G-code parser (pure Rust) -- no geometry kernel needed
+- Dexel engine for material removal visualization
+
+**Modes 2-3: 2D and 2.5D**
+- SVG parsing via `usvg` crate (Rust)
+- DXF parsing via `dxf` crate (Rust)
+- Clipper2 (C++) for 2D polygon offsetting, boolean operations, and pocket clearing
+- No OCCT dependency
+
+**Mode 4: 3D**
+- Image loading for heightmap input (Rust `image` crate)
+- STL/OBJ mesh parsing (Rust)
+- STEP import via OCCT (optional -- only needed when user imports STEP files)
+- Clipper2 for Z-level roughing on mesh/STEP models (optional)
+
+**Mode 5: 2+rotary**
+- SVG/DXF parsing (same as Modes 2-3)
+- Heightmap loading (same as Mode 4)
+- STL mesh parsing (Rust)
+- STEP import via OCCT (optional)
+- Rotary coordinate transform
+- Clipper2 for SVG/DXF offset operations (optional)
+
+**Modes 6-7: 3+rotary and 5-axis**
+- Full OCCT kernel for B-rep solid import (STEP/IGES), surface evaluation,
+  feature detection, and intersection computation (optional for Mode 6,
+  required for Mode 7)
+- Clipper2 for 2D polygon operations (Z-level offsets, pocket clearing)
+
 ### Supplementary Geometry Libraries
 
-| Library | Purpose |
-|---|---|
-| `Clipper2` (C++) | 2D polygon offsetting for pocket clearing passes |
-| `libfive` (optional) | Implicit surface representation for adaptive strategies |
+| Library | Purpose | Used by modes |
+|---|---|---|
+| `Clipper2` (C++) | 2D polygon offsetting, boolean operations, pocket clearing | 2, 3 (required); 4-6 (optional); 7 |
+| `libfive` (optional) | Implicit surface representation for adaptive strategies | 5-7 |
 
 ---
 
@@ -179,22 +232,57 @@ is described by a configuration file (TOML) that defines:
 - Header / footer templates
 - Canned cycle support
 
-Built-in post-processors (planned): Fanuc, Heidenhain, Siemens 840D, Mach4, LinuxCNC.
+Built-in post-processor: GRBL. Additional controller configs planned for future
+releases.
 
 ---
 
 ## File Format Support
 
-### Input
+### Input (organized by mode)
+
+**Mode 1: G-code viewer/simulation**
+
+| Format | Handler | Notes |
+|---|---|---|
+| G-code (.nc, .ngc, .tap, .gcode) | Rust (native parser) | Any standard G-code dialect |
+
+**Modes 2-3: 2D and 2.5D**
+
+| Format | Handler | Notes |
+|---|---|---|
+| SVG (.svg) | Rust (`usvg` crate) | 2D profile/artwork input |
+| DXF (.dxf) | Rust (`dxf` crate) | 2D drawing input |
+
+**Mode 4: 3D**
+
+| Format | Handler | Notes |
+|---|---|---|
+| PNG / JPEG / TIFF | Rust (`image` crate) | Heightmap / lithophane source images |
+| STL (.stl) | Rust (native) | Mesh-only, no topology |
+| OBJ (.obj) | Rust (native) | Mesh-only |
+| STEP (.stp, .step) | OCCT (optional) | Solid model, requires OCCT |
+
+**Mode 5: 2+rotary**
+
+| Format | Handler | Notes |
+|---|---|---|
+| SVG (.svg) | Rust (`usvg` crate) | Artwork unwrapped onto cylinder |
+| DXF (.dxf) | Rust (`dxf` crate) | Drawing unwrapped onto cylinder |
+| PNG / JPEG / TIFF | Rust (`image` crate) | Cylindrical heightmap |
+| STL (.stl) | Rust (native) | Mesh-only, no topology |
+| STEP (.stp, .step) | OCCT (optional) | Solid model, requires OCCT |
+
+**Modes 6-7: 3+rotary and 5-axis**
 
 | Format | Handler | Notes |
 |---|---|---|
 | STEP (.stp, .step) | OCCT | Primary solid model format |
 | IGES (.igs, .iges) | OCCT | Legacy solid model format |
+| SVG (.svg) | Rust (`usvg` crate) | Mode 6 only: surface wrapping |
+| PNG / JPEG / TIFF | Rust (`image` crate) | Mode 6 only: heightmap |
 | STL (.stl) | Rust (native) | Mesh-only, no topology |
 | OBJ (.obj) | Rust (native) | Mesh-only |
-| DXF (.dxf) | Rust (`dxf` crate) | 2D drawing input |
-| SVG (.svg) | Rust (`svg` crate) | 2D profile input |
 
 ### Output
 
@@ -236,6 +324,12 @@ OCCT is built once as a set of static libraries and cached. The C wrapper is com
 as a static library linked into the Rust binary. The final distributable is a single
 native executable with the frontend assets embedded.
 
+**Optional OCCT dependency:** OCCT can be made an optional build dependency via a Cargo
+feature flag. When OCCT is not present, modes 1-4 build and run fully -- only modes
+5-7 (rotary and 5-axis) require OCCT. This simplifies the development setup for
+contributors working on the simpler modes and reduces CI build times for changes that
+do not touch OCCT-dependent code.
+
 ---
 
 ## Web Deployment Path
@@ -264,4 +358,5 @@ The architecture preserves a future web deployment option:
 
 ---
 
-*Document status: Draft — decisions marked TBD are open for discussion.*
+*Document status: Draft -- updated for mode-centric architecture. Decisions marked TBD are open for discussion.*
+*Related documents: `geometry-kernel.md`, `cutting-simulation.md`, `system-architecture.md`*

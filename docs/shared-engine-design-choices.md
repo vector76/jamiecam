@@ -117,8 +117,9 @@ than a full voxel grid.
 - Speed: updating a dexel column is O(spans), which is typically O(1) for
   3-axis work. Updating a voxel column requires scanning all Z voxels in the
   affected range.
-- The existing `cutting-simulation.md` design document already specifies dexels
-  for Phase 1 and voxels for Phase 2 (multi-axis), consistent with this choice.
+- The existing `cutting-simulation.md` design document specifies dexels for
+  3-axis work (modes 1-4) and voxels for multi-axis (modes 5-7), consistent
+  with this choice.
 
 **Trade-off accepted**: Dexels cannot represent material that overhangs in Z
 (e.g., undercuts from 4/5-axis machining). This is acceptable because the

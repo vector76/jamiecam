@@ -767,4 +767,4 @@ workflow's `env:` block and can be inspected in `.github/workflows/ci.yml`.
 ---
 
 *Document status: Draft*
-*Related documents: `technology-stack.md`, `development-roadmap.md`*
+*Related documents: `technology-stack.md`, `roadmap.md`*
