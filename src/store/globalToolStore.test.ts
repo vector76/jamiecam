@@ -53,6 +53,8 @@ const SNAPSHOT: ProjectSnapshot = {
   filePath: null,
   dirty: false,
   mode: '3d',
+  safeHeight: null,
+  artworkOrigin: [0, 0] as [number, number],
 }
 
 // ── Setup ────────────────────────────────────────────────────────────────────

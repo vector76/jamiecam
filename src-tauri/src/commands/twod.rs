@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
+use tauri::Emitter;
 
 use crate::error::AppError;
 use crate::models::twod::{
@@ -215,11 +216,130 @@ pub async fn get_2d_curves(
     get_2d_curves_inner(&state.project)
 }
 
+// ── set_safe_height / get_safe_height ────────────────────────────────────────
+
+/// Testable inner logic for [`set_safe_height`].
+///
+/// Sets (or clears, when `None`) the project's safe height for 2D Profiling mode.
+pub fn set_safe_height_inner(
+    height: Option<f64>,
+    project_lock: &RwLock<Project>,
+) -> Result<(), AppError> {
+    let mut project = write_project(project_lock)?;
+    project.safe_height = height;
+    Ok(())
+}
+
+/// Testable inner logic for [`get_safe_height`].
+///
+/// Returns the current safe height, or `None` if unset.
+pub fn get_safe_height_inner(project_lock: &RwLock<Project>) -> Result<Option<f64>, AppError> {
+    let project = read_project(project_lock)?;
+    Ok(project.safe_height)
+}
+
+/// Set (or clear) the safe height for 2D Profiling mode rapid moves.
+///
+/// Pass `null` from the frontend to clear the safe height.
+#[tauri::command]
+pub async fn set_safe_height(
+    height: Option<f64>,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    set_safe_height_inner(height, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    crate::menu::update_save_enabled(&app, true);
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
+}
+
+/// Return the current safe height for 2D Profiling mode, or `null` if unset.
+#[tauri::command]
+pub async fn get_safe_height(state: tauri::State<'_, AppState>) -> Result<Option<f64>, AppError> {
+    get_safe_height_inner(&state.project)
+}
+
+// ── set_artwork_origin / get_artwork_origin ───────────────────────────────────
+
+/// Testable inner logic for [`set_artwork_origin`].
+///
+/// Sets the artwork origin offset for 2D Profiling mode.
+pub fn set_artwork_origin_inner(
+    x: f64,
+    y: f64,
+    project_lock: &RwLock<Project>,
+) -> Result<(), AppError> {
+    let mut project = write_project(project_lock)?;
+    project.artwork_origin = [x, y];
+    Ok(())
+}
+
+/// Testable inner logic for [`get_artwork_origin`].
+///
+/// Returns the current artwork origin as `[x, y]`.
+pub fn get_artwork_origin_inner(project_lock: &RwLock<Project>) -> Result<[f64; 2], AppError> {
+    let project = read_project(project_lock)?;
+    Ok(project.artwork_origin)
+}
+
+/// Set the artwork origin offset for 2D Profiling mode geometry.
+#[tauri::command]
+pub async fn set_artwork_origin(
+    x: f64,
+    y: f64,
+    state: tauri::State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    set_artwork_origin_inner(x, y, &state.project)?;
+
+    {
+        let mut flag = state
+            .dirty
+            .write()
+            .map_err(|e| AppError::Io(format!("dirty lock poisoned: {e}")))?;
+        *flag = true;
+    }
+
+    crate::menu::update_save_enabled(&app, true);
+
+    let is_open = *state
+        .project_is_open
+        .read()
+        .map_err(|e| AppError::Io(format!("project_is_open lock poisoned: {e}")))?;
+    let snapshot = super::project::get_project_snapshot_inner(&state.project, is_open, true)?;
+    let _ = app.emit("project:modified", &snapshot);
+
+    Ok(())
+}
+
+/// Return the artwork origin offset for 2D Profiling mode as `[x, y]`.
+#[tauri::command]
+pub async fn get_artwork_origin(state: tauri::State<'_, AppState>) -> Result<[f64; 2], AppError> {
+    get_artwork_origin_inner(&state.project)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project::serialization;
     use crate::state::Project;
 
     fn svg_path() -> String {
@@ -333,9 +453,6 @@ mod tests {
 
     #[test]
     fn project_roundtrip_preserves_source_2d_artwork() {
-        use crate::project::serialization;
-        use crate::state::Project;
-
         let dir = tempfile::tempdir().expect("create temp dir");
         let jcam_path = dir.path().join("test.jcam");
 
@@ -373,5 +490,101 @@ mod tests {
                 "is_closed mismatch at index {i}"
             );
         }
+    }
+
+    // ── set_safe_height_inner / get_safe_height_inner ─────────────────────
+
+    #[test]
+    fn set_safe_height_some_then_get_returns_some() {
+        let lock = fresh_project_lock();
+        set_safe_height_inner(Some(5.0), &lock).expect("set should succeed");
+        let result = get_safe_height_inner(&lock).expect("get should succeed");
+        assert_eq!(result, Some(5.0));
+    }
+
+    #[test]
+    fn set_safe_height_none_then_get_returns_none() {
+        let lock = fresh_project_lock();
+        set_safe_height_inner(Some(10.0), &lock).expect("set Some");
+        set_safe_height_inner(None, &lock).expect("set None");
+        let result = get_safe_height_inner(&lock).expect("get should succeed");
+        assert!(result.is_none());
+    }
+
+    // ── set_artwork_origin_inner / get_artwork_origin_inner ───────────────
+
+    #[test]
+    fn set_artwork_origin_then_get_returns_same() {
+        let lock = fresh_project_lock();
+        set_artwork_origin_inner(10.0, -5.0, &lock).expect("set should succeed");
+        let result = get_artwork_origin_inner(&lock).expect("get should succeed");
+        assert_eq!(result, [10.0, -5.0]);
+    }
+
+    #[test]
+    fn default_artwork_origin_is_zero_zero() {
+        let lock = fresh_project_lock();
+        let result = get_artwork_origin_inner(&lock).expect("get should succeed");
+        assert_eq!(result, [0.0, 0.0]);
+    }
+
+    // ── ProjectSnapshot includes safe_height and artwork_origin ───────────
+
+    #[test]
+    fn snapshot_includes_safe_height_and_artwork_origin_after_setting() {
+        use crate::state::AppState;
+
+        let state = AppState::default();
+        set_safe_height_inner(Some(8.0), &state.project).expect("set safe height");
+        set_artwork_origin_inner(3.0, 4.0, &state.project).expect("set artwork origin");
+
+        let snapshot =
+            super::super::project::get_project_snapshot_inner(&state.project, false, false)
+                .expect("snapshot should succeed");
+
+        assert_eq!(snapshot.safe_height, Some(8.0));
+        assert_eq!(snapshot.artwork_origin, [3.0, 4.0]);
+    }
+
+    // ── Serialization roundtrip: safe_height and artwork_origin ──────────
+
+    #[test]
+    fn roundtrip_preserves_safe_height_and_artwork_origin() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let jcam_path = dir.path().join("test.jcam");
+
+        let mut project = Project::default();
+        project.name = "roundtrip-settings".to_string();
+        project.created_at = "2026-01-01T00:00:00Z".to_string();
+        project.modified_at = "2026-01-01T00:00:00Z".to_string();
+        project.safe_height = Some(8.0);
+        project.artwork_origin = [3.0, 4.0];
+
+        serialization::save(&project, &jcam_path).expect("save should succeed");
+        let loaded = serialization::load(&jcam_path).expect("load should succeed");
+
+        assert_eq!(loaded.safe_height, Some(8.0));
+        assert_eq!(loaded.artwork_origin, [3.0, 4.0]);
+    }
+
+    #[test]
+    fn load_old_project_defaults_safe_height_none_and_origin_zero() {
+        use crate::project::types::ProjectFile;
+
+        // Simulate loading a project.json that has no safe_height or artwork_origin.
+        let json = r#"{
+            "schema_version": 1,
+            "app_version": "0.0.1",
+            "created_at": "2024-01-01T00:00:00Z",
+            "modified_at": "2024-01-01T00:00:00Z",
+            "project": {
+                "name": "old",
+                "description": "",
+                "units": "mm"
+            }
+        }"#;
+        let pf: ProjectFile = serde_json::from_str(json).expect("should deserialize");
+        assert!(pf.safe_height.is_none());
+        assert_eq!(pf.artwork_origin, [0.0, 0.0]);
     }
 }

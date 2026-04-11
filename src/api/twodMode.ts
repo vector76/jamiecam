@@ -69,3 +69,46 @@ export async function loadTwodFile(
 export async function getTwodCurves(): Promise<Get2dCurvesResult | null> {
   return typedInvoke<Get2dCurvesResult | null>('get_2d_curves', {})
 }
+
+// ── Safe height ───────────────────────────────────────────────────────────────
+
+/**
+ * Set the safe height for 2D Profiling mode rapid moves.
+ *
+ * @param height Z height in mm, or `null` to clear.
+ * @throws AppError if the project lock cannot be acquired.
+ */
+export async function setSafeHeight(height: number | null): Promise<void> {
+  return typedInvoke<void>('set_safe_height', { height })
+}
+
+/**
+ * Return the current safe height for 2D Profiling mode, or `null` if unset.
+ *
+ * @throws AppError if the project lock cannot be acquired.
+ */
+export async function getSafeHeight(): Promise<number | null> {
+  return typedInvoke<number | null>('get_safe_height', {})
+}
+
+// ── Artwork origin ────────────────────────────────────────────────────────────
+
+/**
+ * Set the artwork origin offset for 2D Profiling mode geometry.
+ *
+ * @param x X offset in artwork units.
+ * @param y Y offset in artwork units.
+ * @throws AppError if the project lock cannot be acquired.
+ */
+export async function setArtworkOrigin(x: number, y: number): Promise<void> {
+  return typedInvoke<void>('set_artwork_origin', { x, y })
+}
+
+/**
+ * Return the current artwork origin as `[x, y]`.
+ *
+ * @throws AppError if the project lock cannot be acquired.
+ */
+export async function getArtworkOrigin(): Promise<[number, number]> {
+  return typedInvoke<[number, number]>('get_artwork_origin', {})
+}

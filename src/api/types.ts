@@ -365,6 +365,10 @@ export interface ProjectSnapshot {
   dirty: boolean
   /** Active CNC operation mode (e.g. "3d", "2d", "gcode_viewer"). */
   mode: Mode
+  /** Safe height for rapid moves in 2D Profiling mode (Z value, mm), or null if unset. */
+  safeHeight: number | null
+  /** Artwork origin offset for 2D Profiling mode as [x, y]. */
+  artworkOrigin: [number, number]
 }
 
 /**

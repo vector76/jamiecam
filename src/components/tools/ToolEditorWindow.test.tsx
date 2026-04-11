@@ -89,6 +89,8 @@ const SNAPSHOT_PROJECT_OPEN: ProjectSnapshot = {
   filePath: null,
   dirty: false,
   mode: '3d',
+  safeHeight: null,
+  artworkOrigin: [0, 0] as [number, number],
 }
 
 const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
@@ -104,6 +106,8 @@ const SNAPSHOT_PROJECT_CLOSED: ProjectSnapshot = {
   filePath: null,
   dirty: false,
   mode: '3d',
+  safeHeight: null,
+  artworkOrigin: [0, 0] as [number, number],
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ const MOCK_SNAPSHOT: ProjectSnapshot = {
   filePath: null,
   dirty: false,
   mode: 'gcode_viewer',
+  safeHeight: null,
+  artworkOrigin: [0, 0] as [number, number],
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────

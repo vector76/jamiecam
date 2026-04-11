@@ -81,6 +81,10 @@ pub struct ProjectSnapshot {
     pub dirty: bool,
     /// Active CNC operation mode string (e.g. `"3d"`, `"2d"`).
     pub mode: String,
+    /// Safe height for rapid moves in 2D Profiling mode (Z value, mm), or null if unset.
+    pub safe_height: Option<f64>,
+    /// Artwork origin offset for 2D Profiling mode as `[x, y]`.
+    pub artwork_origin: [f64; 2],
 }
 
 impl ProjectSnapshot {
@@ -166,6 +170,8 @@ impl ProjectSnapshot {
                 .ok()
                 .and_then(|v| v.as_str().map(String::from))
                 .unwrap_or_default(),
+            safe_height: p.safe_height,
+            artwork_origin: p.artwork_origin,
         }
     }
 }
@@ -296,6 +302,8 @@ mod tests {
             file_path: None,
             dirty: false,
             mode: "3d".to_string(),
+            safe_height: None,
+            artwork_origin: [0.0, 0.0],
         };
         let value = serde_json::to_value(&snap).expect("serialize");
         assert!(
@@ -330,6 +338,14 @@ mod tests {
         );
         assert!(value.get("dirty").is_some(), "expected dirty field");
         assert!(value.get("mode").is_some(), "expected mode field");
+        assert!(
+            value.get("safeHeight").is_some(),
+            "expected camelCase safeHeight"
+        );
+        assert!(
+            value.get("artworkOrigin").is_some(),
+            "expected camelCase artworkOrigin"
+        );
     }
 
     #[test]

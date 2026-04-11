@@ -85,6 +85,10 @@ pub struct Project {
     pub mode: Mode,
     /// 2D artwork loaded for the 2D Profiling mode, if any.
     pub source_2d_artwork: Option<LoadedArtwork>,
+    /// Safe height for rapid moves in 2D Profiling mode (Z value, mm), if set.
+    pub safe_height: Option<f64>,
+    /// Artwork origin offset applied to 2D geometry in 2D Profiling mode.
+    pub artwork_origin: [f64; 2],
     /// Path to the `.jcam` file on disk, if the project has been saved/loaded.
     /// Not serialized in `.jcam` files (managed at the application level).
     pub file_path: Option<PathBuf>,
@@ -107,6 +111,8 @@ impl Default for Project {
             toolpaths: HashMap::new(),
             mode: Mode::default(),
             source_2d_artwork: None,
+            safe_height: None,
+            artwork_origin: [0.0, 0.0],
             file_path: None,
         }
     }

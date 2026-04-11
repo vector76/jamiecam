@@ -72,6 +72,12 @@ pub struct ProjectFile {
     /// 2D artwork loaded for the 2D Profiling mode, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_2d_artwork: Option<LoadedArtwork>,
+    /// Safe height for rapid moves in 2D Profiling mode (Z value, mm), if set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub safe_height: Option<f64>,
+    /// Artwork origin offset applied to 2D geometry in 2D Profiling mode.
+    #[serde(default)]
+    pub artwork_origin: [f64; 2],
 }
 
 #[cfg(test)]

@@ -160,6 +160,8 @@ describe('Window close guard', () => {
         filePath: null,
         dirty: true,
         mode: '3d' as const,
+        safeHeight: null,
+        artworkOrigin: [0, 0] as [number, number],
       },
     })
     ;(checkUnsavedChanges as ReturnType<typeof vi.fn>).mockResolvedValue(false)

@@ -128,6 +128,8 @@ pub fn load(path: &Path) -> Result<Project, AppError> {
         toolpaths: std::collections::HashMap::new(),
         mode: pf.mode,
         source_2d_artwork: pf.source_2d_artwork,
+        safe_height: pf.safe_height,
+        artwork_origin: pf.artwork_origin,
         file_path: None,
     };
 
@@ -219,6 +221,8 @@ fn write_archive(project: &Project, path: &Path) -> Result<(), AppError> {
         tools: project.tools.clone(),
         operations: ops,
         source_2d_artwork: project.source_2d_artwork.clone(),
+        safe_height: project.safe_height,
+        artwork_origin: project.artwork_origin,
     };
 
     // Serialize and write project.json.
@@ -999,6 +1003,8 @@ mod tests {
                 tools: vec![],
                 operations: ops,
                 source_2d_artwork: None,
+                safe_height: None,
+                artwork_origin: [0.0, 0.0],
             };
             let json = serde_json::to_string_pretty(&pf).unwrap();
             let file = std::fs::File::create(&tmp).unwrap();

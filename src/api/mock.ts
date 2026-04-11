@@ -44,6 +44,8 @@ const DEFAULT_SNAPSHOT: ProjectSnapshot = {
   filePath: null,
   dirty: false,
   mode: '3d',
+  safeHeight: null,
+  artworkOrigin: [0, 0] as [number, number],
 }
 
 // ── File / project commands ───────────────────────────────────────────────────
