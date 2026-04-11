@@ -174,6 +174,7 @@ pub fn run() {
             commands::twod::get_safe_height,
             commands::twod::set_artwork_origin,
             commands::twod::get_artwork_origin,
+            commands::twod::generate_2d_gcode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

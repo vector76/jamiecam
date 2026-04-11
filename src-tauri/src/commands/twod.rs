@@ -1,25 +1,34 @@
 //! 2D Profiling mode IPC command handlers.
 //!
-//! Provides two commands that wire the SVG/DXF parsers into the project state:
-//!
 //! - [`load_2d_file`] — parse an SVG or DXF file and store the result as the
 //!   project's active 2D artwork.
 //! - [`get_2d_curves`] — return curve summaries and point data for the
 //!   currently loaded 2D artwork, or `null` if none is loaded.
+//! - [`set_safe_height`] / [`get_safe_height`] — manage the Z rapid-retract height.
+//! - [`set_artwork_origin`] / [`get_artwork_origin`] — manage the XY artwork offset.
+//! - [`generate_2d_gcode`] — run the full G-code generation pipeline for all
+//!   enabled 2D Profile operations.
 //!
 //! All handlers follow the `_inner` + `#[tauri::command]` wrapper pattern.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
+use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::models::operation::OperationParams;
 use crate::models::twod::{
     parse_dxf, parse_svg, BoundingBox2d, CurveSummary, LoadedArtwork, UnitSystem,
 };
+use crate::models::Tool;
+use crate::postprocessor::{program::GenerateOptions, PostProcessor, ToolInfo};
 use crate::state::{AppState, Project};
+use crate::toolpath::operations::twod_profile::plan_2d_profile;
+use crate::toolpath::types::PassKind;
+use crate::toolpath::{LineGeometryData, Toolpath, ToolpathStats};
 
 use super::{read_project, write_project};
 
@@ -37,6 +46,20 @@ pub struct Load2dFileResult {
     pub unit_system: UnitSystem,
     /// Non-fatal import warnings from the parser.
     pub warnings: Vec<String>,
+}
+
+/// Return type of [`generate_2d_gcode`].
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Generate2dResult {
+    /// Generated G-code text.
+    pub gcode: String,
+    /// Merged line geometry for viewport rendering.
+    pub line_geometry: LineGeometryData,
+    /// Non-fatal validation warnings (e.g. top_of_cut at/below stock top).
+    pub warnings: Vec<String>,
+    /// Aggregated toolpath statistics across all operations.
+    pub stats: ToolpathStats,
 }
 
 /// Return type of [`get_2d_curves`].
@@ -332,6 +355,296 @@ pub async fn set_artwork_origin(
 #[tauri::command]
 pub async fn get_artwork_origin(state: tauri::State<'_, AppState>) -> Result<[f64; 2], AppError> {
     get_artwork_origin_inner(&state.project)
+}
+
+// ── generate_2d_gcode ─────────────────────────────────────────────────────────
+
+/// Testable inner logic for [`generate_2d_gcode`].
+///
+/// Full pipeline:
+/// 1. Validate that `source_2d_artwork` is loaded.
+/// 2. Validate that all enabled `Profile2d` operations reference closed curves
+///    that exist in the loaded artwork.
+/// 3. Enforce the single-tool constraint across enabled operations.
+/// 4. Emit validation warnings when `top_of_cut ≤ stock.top_z()`.
+/// 5. Call [`plan_2d_profile`] for each enabled operation in order.
+/// 6. Post-process the combined toolpaths through the named post-processor.
+/// 7. Derive merged [`LineGeometryData`] and aggregate [`ToolpathStats`].
+pub fn generate_2d_gcode_inner(
+    post_processor_id: &str,
+    project_lock: &RwLock<Project>,
+) -> Result<Generate2dResult, AppError> {
+    // ── Collect data under a single read lock ────────────────────────────────
+
+    struct OpRecord {
+        id: Uuid,
+        name: String,
+        tool_id: Uuid,
+        params: crate::models::operation::Profile2dParams,
+    }
+
+    let (op_records, curves_by_id, tools_by_id, stock_top_z, safe_height, artwork_origin) = {
+        let project = read_project(project_lock)?;
+
+        let artwork = project.source_2d_artwork.as_ref().ok_or_else(|| {
+            AppError::InvalidInput(
+                "no 2D artwork loaded; load a file before generating G-code".to_string(),
+            )
+        })?;
+
+        // Collect enabled Profile2d operations.
+        let op_records: Vec<OpRecord> = project
+            .operations
+            .iter()
+            .filter(|op| op.enabled)
+            .filter_map(|op| {
+                if let OperationParams::Profile2d(ref p) = op.params {
+                    Some(OpRecord {
+                        id: op.id,
+                        name: op.name.clone(),
+                        tool_id: op.tool_id,
+                        params: p.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Validate each op's curve reference.
+        for rec in &op_records {
+            let curve = artwork
+                .curves
+                .iter()
+                .find(|c| c.id == rec.params.curve_id)
+                .ok_or_else(|| {
+                    AppError::InvalidInput(format!(
+                        "operation '{}': curve {} not found in loaded artwork",
+                        rec.name, rec.params.curve_id
+                    ))
+                })?;
+            if !curve.is_closed {
+                return Err(AppError::InvalidInput(format!(
+                    "operation '{}': curve {} is not closed; \
+                     only closed curves are supported for 2D profile operations",
+                    rec.name, rec.params.curve_id
+                )));
+            }
+        }
+
+        // Single-tool constraint.
+        let distinct_tools: HashSet<Uuid> = op_records.iter().map(|r| r.tool_id).collect();
+        if distinct_tools.len() > 1 {
+            return Err(AppError::InvalidInput(
+                "multiple tools used across operations; \
+                 only one tool is allowed until tool-change support is added"
+                    .to_string(),
+            ));
+        }
+
+        // Clone curve points keyed by id.
+        let curves_by_id: HashMap<Uuid, Vec<[f64; 2]>> = artwork
+            .curves
+            .iter()
+            .map(|c| (c.id, c.points.clone()))
+            .collect();
+
+        // Clone tools keyed by id.
+        let tools_by_id: HashMap<Uuid, Tool> =
+            project.tools.iter().map(|t| (t.id, t.clone())).collect();
+
+        let stock_top_z: Option<f64> = project.stock.as_ref().map(|s| {
+            let crate::models::StockDefinition::Box(b) = s;
+            b.origin.z + b.height
+        });
+
+        let safe_height = project.safe_height;
+        let artwork_origin = project.artwork_origin;
+
+        (
+            op_records,
+            curves_by_id,
+            tools_by_id,
+            stock_top_z,
+            safe_height,
+            artwork_origin,
+        )
+    }; // read lock released here
+
+    // ── Validation warnings ──────────────────────────────────────────────────
+
+    let mut warnings: Vec<String> = Vec::new();
+    if let Some(top_z) = stock_top_z {
+        for rec in &op_records {
+            if rec.params.top_of_cut <= top_z {
+                warnings.push(format!(
+                    "operation '{}': top_of_cut ({:.3}) is at or below \
+                     stock top ({:.3}); verify Z origin setup",
+                    rec.name, rec.params.top_of_cut, top_z
+                ));
+            }
+        }
+    }
+
+    // ── Safe height resolution ───────────────────────────────────────────────
+
+    let safe_height_value = safe_height
+        .or_else(|| stock_top_z.map(|z| z + 5.0))
+        .unwrap_or(5.0);
+
+    // ── Plan each operation ──────────────────────────────────────────────────
+
+    let mut toolpaths: Vec<Toolpath> = Vec::with_capacity(op_records.len());
+    let mut tool_infos: Vec<ToolInfo> = Vec::with_capacity(op_records.len());
+
+    for rec in &op_records {
+        let curve_points = curves_by_id.get(&rec.params.curve_id).ok_or_else(|| {
+            AppError::InvalidInput(format!("curve {} not found", rec.params.curve_id))
+        })?;
+
+        let tool = tools_by_id.get(&rec.tool_id).ok_or_else(|| {
+            AppError::NotFound(format!(
+                "tool {} not found for operation '{}'",
+                rec.tool_id, rec.name
+            ))
+        })?;
+
+        let tool_radius = tool.diameter / 2.0;
+        let passes = plan_2d_profile(
+            &rec.params,
+            tool_radius,
+            artwork_origin,
+            safe_height_value,
+            curve_points,
+        )?;
+
+        toolpaths.push(Toolpath {
+            operation_id: rec.id,
+            tool_number: 1,
+            spindle_speed: 0.0,
+            feed_rate: rec.params.feed_rate,
+            passes,
+        });
+
+        tool_infos.push(ToolInfo {
+            number: 1,
+            diameter: tool.diameter,
+            description: tool.name.clone(),
+        });
+    }
+
+    // ── Post-processor ───────────────────────────────────────────────────────
+
+    let pp = PostProcessor::builtin(post_processor_id)
+        .map_err(|e| AppError::PostProcessor(e.to_string()))?;
+
+    let gcode = pp
+        .generate(
+            &toolpaths,
+            &tool_infos,
+            GenerateOptions {
+                program_number: None,
+                include_comments: true,
+            },
+        )
+        .map_err(|e| AppError::PostProcessor(e.to_string()))?;
+
+    // ── Line geometry ────────────────────────────────────────────────────────
+
+    const PALETTE: [(f32, f32, f32); 6] = [
+        (1.0, 0.0, 0.0),
+        (0.0, 0.8, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.0, 0.8, 0.8),
+        (0.8, 0.0, 0.8),
+        (0.8, 0.8, 0.0),
+    ];
+    let linking_colour: (f32, f32, f32) = (0.5, 0.5, 0.5);
+
+    let segment_count: usize = toolpaths
+        .iter()
+        .flat_map(|tp| tp.passes.iter())
+        .map(|p| p.cuts.len().saturating_sub(1))
+        .sum();
+    let mut positions: Vec<f32> = Vec::with_capacity(segment_count * 6);
+    let mut colours: Vec<f32> = Vec::with_capacity(segment_count * 6);
+    let mut types: Vec<u8> = Vec::with_capacity(segment_count);
+
+    for (op_index, toolpath) in toolpaths.iter().enumerate() {
+        let op_colour = PALETTE[op_index % 6];
+        let lead_colour = (op_colour.0 * 0.6, op_colour.1 * 0.6, op_colour.2 * 0.6);
+
+        for pass in &toolpath.passes {
+            let (colour, type_byte): ((f32, f32, f32), u8) = match pass.kind {
+                PassKind::Linking => (linking_colour, 0),
+                PassKind::Cutting | PassKind::SpringPass => (op_colour, 1),
+                PassKind::LeadIn => (lead_colour, 2),
+                PassKind::LeadOut => (lead_colour, 3),
+            };
+
+            for pair in pass.cuts.windows(2) {
+                let a = &pair[0].position;
+                let b = &pair[1].position;
+                positions.extend_from_slice(&[
+                    a.x as f32, a.y as f32, a.z as f32, b.x as f32, b.y as f32, b.z as f32,
+                ]);
+                colours.extend_from_slice(&[
+                    colour.0, colour.1, colour.2, colour.0, colour.1, colour.2,
+                ]);
+                types.push(type_byte);
+            }
+        }
+    }
+
+    let line_geometry = LineGeometryData {
+        positions,
+        colours,
+        types,
+    };
+
+    // ── Stats ────────────────────────────────────────────────────────────────
+
+    let total_pass_count: usize = toolpaths.iter().map(|tp| tp.passes.len()).sum();
+    let total_point_count: usize = toolpaths
+        .iter()
+        .flat_map(|tp| tp.passes.iter())
+        .map(|p| p.cuts.len())
+        .sum();
+    let total_path_length_mm: f64 = toolpaths
+        .iter()
+        .flat_map(|tp| tp.passes.iter())
+        .flat_map(|p| p.cuts.windows(2))
+        .map(|pair| {
+            let a = &pair[0].position;
+            let b = &pair[1].position;
+            let dx = b.x - a.x;
+            let dy = b.y - a.y;
+            let dz = b.z - a.z;
+            (dx * dx + dy * dy + dz * dz).sqrt()
+        })
+        .sum();
+
+    let stats = ToolpathStats {
+        total_pass_count,
+        total_point_count,
+        total_path_length_mm,
+    };
+
+    Ok(Generate2dResult {
+        gcode,
+        line_geometry,
+        warnings,
+        stats,
+    })
+}
+
+/// Generate G-code for all enabled 2D Profile operations in the current project.
+#[tauri::command]
+pub async fn generate_2d_gcode(
+    post_processor_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Generate2dResult, AppError> {
+    generate_2d_gcode_inner(&post_processor_id, &state.project)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

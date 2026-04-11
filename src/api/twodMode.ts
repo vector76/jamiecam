@@ -3,6 +3,7 @@
  */
 
 import { typedInvoke } from './errors'
+import type { LineGeometryData, ToolpathStats } from './types'
 
 // ── TypeScript types ──────────────────────────────────────────────────────────
 
@@ -32,6 +33,17 @@ export interface Get2dCurvesResult {
   /** Full point arrays keyed by curve UUID string. */
   curvePoints: Record<string, number[][]>
   unitSystem: 'mm' | 'inches'
+}
+
+export interface Generate2dResult {
+  /** Generated G-code text. */
+  gcode: string
+  /** Merged line geometry for viewport rendering. */
+  lineGeometry: LineGeometryData
+  /** Non-fatal validation warnings (e.g. top_of_cut at/below stock top). */
+  warnings: string[]
+  /** Aggregated toolpath statistics across all operations. */
+  stats: ToolpathStats
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -111,4 +123,21 @@ export async function setArtworkOrigin(x: number, y: number): Promise<void> {
  */
 export async function getArtworkOrigin(): Promise<[number, number]> {
   return typedInvoke<[number, number]>('get_artwork_origin', {})
+}
+
+// ── G-code generation ─────────────────────────────────────────────────────────
+
+/**
+ * Generate G-code for all enabled 2D Profile operations in the current project.
+ *
+ * @param postProcessorId The ID of the built-in post-processor to use
+ *   (e.g. `'fanuc-0i'`, `'grbl'`).
+ * @returns G-code text, merged line geometry, validation warnings, and stats.
+ * @throws AppError if no artwork is loaded, a curve reference is invalid,
+ *   more than one tool is used, or the post-processor cannot be loaded.
+ */
+export async function generate2dGcode(
+  postProcessorId: string,
+): Promise<Generate2dResult> {
+  return typedInvoke<Generate2dResult>('generate_2d_gcode', { postProcessorId })
 }
