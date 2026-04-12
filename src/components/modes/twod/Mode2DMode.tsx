@@ -6,12 +6,13 @@
  */
 
 import { useState, useEffect } from 'react'
-import { open } from '@tauri-apps/plugin-dialog'
+import { open, save } from '@tauri-apps/plugin-dialog'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Canvas2D } from './Canvas2D'
 import { Viewport } from '../../../viewport/Viewport'
+import { MaterialRemovalPanel } from '../../simulation/MaterialRemovalPanel'
 import { ToolEditorList } from '../../tools/ToolEditorList'
 import {
   loadTwodFile,
@@ -19,6 +20,7 @@ import {
   setSafeHeight,
   setArtworkOrigin,
   generate2dGcode,
+  save2dGcode,
 } from '../../../api/twodMode'
 import { setStock } from '../../../api/stock'
 import { addOperation, editOperation, deleteOperation, listOperations } from '../../../api/operations'
@@ -269,6 +271,12 @@ export function Mode2DMode() {
   const [thicknessStr, setThicknessStr] = useState('')
   const [xDimStr, setXDimStr] = useState('')
   const [yDimStr, setYDimStr] = useState('')
+  const [stockOriginXStr, setStockOriginXStr] = useState('0')
+  const [stockOriginYStr, setStockOriginYStr] = useState('0')
+
+  // ── Artwork origin local state ──────────────────────────────────────────
+  const [artworkXStr, setArtworkXStr] = useState('0')
+  const [artworkYStr, setArtworkYStr] = useState('0')
 
   // ── Safe height local state ───────────────────────────────────────────────
   const [safeHeightStr, setSafeHeightStr] = useState('')
@@ -348,8 +356,17 @@ export function Mode2DMode() {
       setThicknessStr(String(s.height))
       setXDimStr(String(s.width))
       setYDimStr(String(s.depth))
+      setStockOriginXStr(String(s.origin.x))
+      setStockOriginYStr(String(s.origin.y))
     }
   }, [stockFromSnapshot])
+
+  // ── Sync artwork origin from snapshot ────────────────────────────────────
+  useEffect(() => {
+    setArtworkXStr(String(artworkOrigin[0]))
+    setArtworkYStr(String(artworkOrigin[1]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artworkOrigin[0], artworkOrigin[1]])
 
   // ── Sync safe height from snapshot ────────────────────────────────────────
   useEffect(() => {
@@ -363,6 +380,8 @@ export function Mode2DMode() {
     useViewportStore.getState().setToolpathGeometry(null)
     return () => {
       useViewportStore.getState().setToolpathGeometry(null)
+      useViewportStore.getState().clearStockBox()
+      useViewportStore.getState().clearSimulationMesh()
     }
   }, [])
 
@@ -461,29 +480,29 @@ export function Mode2DMode() {
   // ── Stock handlers ────────────────────────────────────────────────────────
 
   async function handleStockChange(
-    field: 'topZ' | 'thickness' | 'xDim' | 'yDim',
+    field: 'topZ' | 'thickness' | 'xDim' | 'yDim' | 'originX' | 'originY',
     value: string,
   ) {
     if (field === 'topZ') setTopZStr(value)
     else if (field === 'thickness') setThicknessStr(value)
     else if (field === 'xDim') setXDimStr(value)
-    else setYDimStr(value)
+    else if (field === 'yDim') setYDimStr(value)
+    else if (field === 'originX') setStockOriginXStr(value)
+    else if (field === 'originY') setStockOriginYStr(value)
 
     const topZ = parseFloat(field === 'topZ' ? value : topZStr)
     const thickness = parseFloat(field === 'thickness' ? value : thicknessStr)
     const width = parseFloat(field === 'xDim' ? value : xDimStr)
     const depth = parseFloat(field === 'yDim' ? value : yDimStr)
+    const originX = parseFloat(field === 'originX' ? value : stockOriginXStr)
+    const originY = parseFloat(field === 'originY' ? value : stockOriginYStr)
 
-    if (isNaN(topZ) || isNaN(thickness) || isNaN(width) || isNaN(depth)) return
+    if (isNaN(topZ) || isNaN(thickness) || isNaN(width) || isNaN(depth)
+        || isNaN(originX) || isNaN(originY)) return
 
-    const existing = stockFromSnapshot?.type === 'box' ? stockFromSnapshot : null
     const newStock: BoxStock = {
       type: 'box',
-      origin: {
-        x: existing?.origin.x ?? 0,
-        y: existing?.origin.y ?? 0,
-        z: topZ - thickness,
-      },
+      origin: { x: originX, y: originY, z: topZ - thickness },
       width,
       depth,
       height: thickness,
@@ -493,6 +512,20 @@ export function Mode2DMode() {
     } catch (e) {
       const err = toAppError(e)
       pushNotification(err.message ?? err.kind ?? 'Failed to set stock')
+    }
+  }
+
+  async function handleArtworkOffsetChange(axis: 'x' | 'y', value: string) {
+    if (axis === 'x') setArtworkXStr(value)
+    else setArtworkYStr(value)
+    const x = parseFloat(axis === 'x' ? value : artworkXStr)
+    const y = parseFloat(axis === 'y' ? value : artworkYStr)
+    if (isNaN(x) || isNaN(y)) return
+    try {
+      await setArtworkOrigin(x, y)
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to set artwork origin')
     }
   }
 
@@ -595,6 +628,20 @@ export function Mode2DMode() {
       setGenerate2dResult(result)
       setSubState('viewing')
       useViewportStore.getState().setToolpathGeometry(result.lineGeometry)
+      // Set tool dimensions for the simulation tool mesh.
+      if (tools.length > 0) {
+        const tool = tools[0]
+        useViewportStore.getState().setSimulationToolDimensions(tool.diameter, tool.cuttingLength)
+      }
+      if (stockFromSnapshot?.type === 'box') {
+        const s = stockFromSnapshot
+        useViewportStore.getState().setStockBox({
+          origin: { x: s.origin.x, y: s.origin.y, z: s.origin.z },
+          width: s.width,
+          depth: s.depth,
+          height: s.height,
+        })
+      }
     } catch (e) {
       const err = toAppError(e)
       setGenerateError(err.message ?? err.kind ?? 'Generation failed')
@@ -609,6 +656,25 @@ export function Mode2DMode() {
     setSubState('editing')
     setGenerate2dResult(null)
     useViewportStore.getState().setToolpathGeometry(null)
+    useViewportStore.getState().clearStockBox()
+    useViewportStore.getState().clearSimulationMesh()
+  }
+
+  // ── Save G-code ──────────────────────────────────────────────────────────
+
+  async function handleSaveGcode() {
+    if (!generate2dResult) return
+    const path = await save({
+      filters: [{ name: 'G-code Files', extensions: ['nc', 'gcode', 'tap'] }],
+    })
+    if (!path) return
+    try {
+      await save2dGcode(path, generate2dResult.gcode)
+      pushNotification('G-code saved')
+    } catch (e) {
+      const err = toAppError(e)
+      pushNotification(err.message ?? err.kind ?? 'Failed to save G-code')
+    }
   }
 
   // ── Operations panel renderer ─────────────────────────────────────────────
@@ -699,13 +765,21 @@ export function Mode2DMode() {
           {subState === 'viewing' && generate2dResult && (
             <div className="flex flex-col gap-3">
               {/* Back to 2D Canvas */}
-              <div className="border-b border-border px-3 py-2">
+              <div className="border-b border-border px-3 py-2 flex flex-col gap-1">
                 <Button
                   size="sm"
                   className="w-full"
                   onClick={handleBackToEditing}
                 >
                   ← Back to 2D Canvas
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => void handleSaveGcode()}
+                >
+                  Save G-code
                 </Button>
               </div>
 
@@ -722,6 +796,14 @@ export function Mode2DMode() {
                 <p>Points: {generate2dResult.stats.totalPointCount}</p>
                 <p>Passes: {generate2dResult.stats.totalPassCount}</p>
                 <p>Path: {generate2dResult.stats.totalPathLengthMm.toFixed(1)} mm</p>
+              </div>
+
+              {/* Simulation */}
+              <div className="border-t border-border px-3 py-2">
+                <span className="text-xs font-medium text-foreground">Simulation</span>
+                <div className="mt-1">
+                  <MaterialRemovalPanel />
+                </div>
               </div>
             </div>
           )}
@@ -815,6 +897,63 @@ export function Mode2DMode() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-foreground">Stock Origin</span>
+                    <div className="flex gap-1">
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <label className="text-xs text-muted-foreground">X</label>
+                        <input
+                          type="number"
+                          aria-label="Stock origin X"
+                          value={stockOriginXStr}
+                          onChange={(e) => void handleStockChange('originX', e.target.value)}
+                          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+                          step="0.1"
+                        />
+                      </div>
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <label className="text-xs text-muted-foreground">Y</label>
+                        <input
+                          type="number"
+                          aria-label="Stock origin Y"
+                          value={stockOriginYStr}
+                          onChange={(e) => void handleStockChange('originY', e.target.value)}
+                          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+                          step="0.1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-foreground">Artwork Offset</span>
+                    <div className="flex gap-1">
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <label className="text-xs text-muted-foreground">X</label>
+                        <input
+                          type="number"
+                          aria-label="Artwork offset X"
+                          value={artworkXStr}
+                          onChange={(e) => void handleArtworkOffsetChange('x', e.target.value)}
+                          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+                          step="0.1"
+                        />
+                      </div>
+                      <div className="flex flex-1 flex-col gap-0.5">
+                        <label className="text-xs text-muted-foreground">Y</label>
+                        <input
+                          type="number"
+                          aria-label="Artwork offset Y"
+                          value={artworkYStr}
+                          onChange={(e) => void handleArtworkOffsetChange('y', e.target.value)}
+                          className="h-7 w-full rounded-sm border border-border bg-background px-1 text-xs"
+                          step="0.1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex flex-col gap-0.5">
                     <label className="text-xs text-muted-foreground">Safe height (mm)</label>
                     <input

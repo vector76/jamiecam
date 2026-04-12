@@ -127,6 +127,13 @@ export function ToolpathViewerMode() {
   const parsedHeight = parseFloat(effectiveHeight)
   const parsedDiameter = parseFloat(effectiveToolDiameter)
 
+  // ── Sync tool dimensions to viewport store when effective diameter changes ─
+  useEffect(() => {
+    if (!isNaN(parsedDiameter) && parsedDiameter > 0) {
+      useViewportStore.getState().setSimulationToolDimensions(parsedDiameter, parsedDiameter * 3)
+    }
+  }, [parsedDiameter])
+
   const canSimulate =
     filePath !== null &&
     !isNaN(parsedWidth) && parsedWidth > 0 &&

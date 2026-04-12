@@ -6,39 +6,46 @@ use crate::toolpath::Toolpath;
 /// Convert a [`Toolpath`] into a flat list of [`MotionSegment`] values
 /// suitable for the dexel material-removal engine.
 ///
-/// The first [`CutPoint`] in each pass establishes position only; subsequent
-/// points are paired with the previous position to produce segments.
+/// Position is carried across passes: if one pass ends at position A and
+/// the next pass starts at position B, a connecting segment is generated
+/// (matching real machine behavior).
+///
+/// When `initial_position` is `Some`, the very first [`CutPoint`] produces
+/// a connecting segment from that position (used to chain across operations).
+/// When `None`, the first point establishes position without a segment.
+///
 /// [`MoveKind::Dwell`] points are skipped (no geometry).
-pub fn toolpath_to_segments(toolpath: &Toolpath) -> Vec<MotionSegment> {
+pub fn toolpath_to_segments(
+    toolpath: &Toolpath,
+    initial_position: Option<&crate::models::Vec3>,
+) -> Vec<MotionSegment> {
     let mut segments = Vec::new();
+    let mut prev_position: Option<crate::models::Vec3> = initial_position.cloned();
 
     for pass in &toolpath.passes {
-        let mut prev_position = match pass.cuts.first() {
-            Some(cp) => cp.position.clone(),
-            None => continue,
-        };
+        for cp in &pass.cuts {
+            if let Some(ref prev) = prev_position {
+                let seg = match &cp.move_kind {
+                    MoveKind::Rapid | MoveKind::Feed => Some(MotionSegment::Linear {
+                        start: prev.clone(),
+                        end: cp.position.clone(),
+                    }),
+                    MoveKind::Arc {
+                        center, clockwise, ..
+                    } => Some(MotionSegment::Arc {
+                        start: prev.clone(),
+                        end: cp.position.clone(),
+                        center: center.clone(),
+                        clockwise: *clockwise,
+                    }),
+                    MoveKind::Dwell { .. } => None,
+                };
 
-        for cp in pass.cuts.iter().skip(1) {
-            let seg = match &cp.move_kind {
-                MoveKind::Rapid | MoveKind::Feed => Some(MotionSegment::Linear {
-                    start: prev_position.clone(),
-                    end: cp.position.clone(),
-                }),
-                MoveKind::Arc {
-                    center, clockwise, ..
-                } => Some(MotionSegment::Arc {
-                    start: prev_position.clone(),
-                    end: cp.position.clone(),
-                    center: center.clone(),
-                    clockwise: *clockwise,
-                }),
-                MoveKind::Dwell { .. } => None,
-            };
-
-            if let Some(s) = seg {
-                segments.push(s);
+                if let Some(s) = seg {
+                    segments.push(s);
+                }
             }
-            prev_position = cp.position.clone();
+            prev_position = Some(cp.position.clone());
         }
     }
 
@@ -82,7 +89,7 @@ mod tests {
             ],
         }]);
 
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert_eq!(segs.len(), 2);
         assert_eq!(
             segs[0],
@@ -148,7 +155,7 @@ mod tests {
             ],
         }]);
 
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert_eq!(segs.len(), 1);
         assert_eq!(
             segs[0],
@@ -180,7 +187,7 @@ mod tests {
             ],
         }]);
 
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert_eq!(segs.len(), 1);
         assert_eq!(
             segs[0],
@@ -209,7 +216,7 @@ mod tests {
             ],
         }]);
 
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert_eq!(segs.len(), 1);
         assert_eq!(
             segs[0],
@@ -231,7 +238,7 @@ mod tests {
     #[test]
     fn empty_toolpath_produces_no_segments() {
         let tp = simple_toolpath(vec![]);
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert!(segs.is_empty());
     }
 
@@ -242,8 +249,73 @@ mod tests {
             cuts: vec![pt(0.0, 0.0, 0.0, MoveKind::Feed)],
         }]);
 
-        let segs = toolpath_to_segments(&tp);
+        let segs = toolpath_to_segments(&tp, None);
         assert!(segs.is_empty());
+    }
+
+    #[test]
+    fn position_carries_across_passes() {
+        // Pass 1 ends at (10,0,0). Pass 2 starts at (20,0,0).
+        // The implicit move from (10,0,0) to (20,0,0) must be simulated.
+        let tp = simple_toolpath(vec![
+            Pass {
+                kind: PassKind::Cutting,
+                cuts: vec![
+                    pt(0.0, 0.0, 0.0, MoveKind::Feed),
+                    pt(10.0, 0.0, 0.0, MoveKind::Feed),
+                ],
+            },
+            Pass {
+                kind: PassKind::Cutting,
+                cuts: vec![
+                    pt(20.0, 0.0, 0.0, MoveKind::Feed),
+                    pt(30.0, 0.0, 0.0, MoveKind::Feed),
+                ],
+            },
+        ]);
+
+        let segs = toolpath_to_segments(&tp, None);
+        assert_eq!(segs.len(), 3, "should include connecting segment between passes");
+        // Segment 0: (0,0,0) → (10,0,0)  — pass 1
+        assert_eq!(segs[0], MotionSegment::Linear {
+            start: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+            end: Vec3 { x: 10.0, y: 0.0, z: 0.0 },
+        });
+        // Segment 1: (10,0,0) → (20,0,0)  — implicit connecting move
+        assert_eq!(segs[1], MotionSegment::Linear {
+            start: Vec3 { x: 10.0, y: 0.0, z: 0.0 },
+            end: Vec3 { x: 20.0, y: 0.0, z: 0.0 },
+        });
+        // Segment 2: (20,0,0) → (30,0,0)  — pass 2
+        assert_eq!(segs[2], MotionSegment::Linear {
+            start: Vec3 { x: 20.0, y: 0.0, z: 0.0 },
+            end: Vec3 { x: 30.0, y: 0.0, z: 0.0 },
+        });
+    }
+
+    #[test]
+    fn initial_position_generates_connecting_segment() {
+        let tp = simple_toolpath(vec![Pass {
+            kind: PassKind::Cutting,
+            cuts: vec![
+                pt(10.0, 0.0, 0.0, MoveKind::Rapid),
+                pt(20.0, 0.0, 0.0, MoveKind::Feed),
+            ],
+        }]);
+
+        let start = Vec3 { x: 0.0, y: 0.0, z: 5.0 };
+        let segs = toolpath_to_segments(&tp, Some(&start));
+        assert_eq!(segs.len(), 2);
+        // Segment 0: initial position (0,0,5) → first point (10,0,0)
+        assert_eq!(segs[0], MotionSegment::Linear {
+            start: Vec3 { x: 0.0, y: 0.0, z: 5.0 },
+            end: Vec3 { x: 10.0, y: 0.0, z: 0.0 },
+        });
+        // Segment 1: (10,0,0) → (20,0,0)
+        assert_eq!(segs[1], MotionSegment::Linear {
+            start: Vec3 { x: 10.0, y: 0.0, z: 0.0 },
+            end: Vec3 { x: 20.0, y: 0.0, z: 0.0 },
+        });
     }
 }
 

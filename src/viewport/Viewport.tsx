@@ -27,6 +27,7 @@ export function Viewport({ className }: ViewportProps) {
   const mgrRef = useRef<SceneManager | null>(null)
   const modelGroupRef = useRef<THREE.Group | null>(null)
   const highlightMeshRef = useRef<THREE.Mesh | null>(null)
+  const stockWireframeRef = useRef<THREE.LineSegments | null>(null)
 
   useSimulationLoop(mgrRef)
 
@@ -44,6 +45,7 @@ export function Viewport({ className }: ViewportProps) {
   const setDisplayMode = useViewportStore((state) => state.setDisplayMode)
   const setHoveredFaceIdx = useViewportStore((state) => state.setHoveredFaceIdx)
   const toggleFaceSelection = useViewportStore((state) => state.toggleFaceSelection)
+  const stockBox = useViewportStore((state) => state.stockBox)
   const measurementMode = useViewportStore((state) => state.measurementMode)
   const setMeasurementMode = useViewportStore((state) => state.setMeasurementMode)
   const setSelectionMode = useViewportStore((state) => state.setSelectionMode)
@@ -186,6 +188,29 @@ export function Viewport({ className }: ViewportProps) {
     if (!mgr) return
     mgr.setToolpathData(toolpathGeometry)
   }, [toolpathGeometry])
+
+  // ── Stock wireframe update ──────────────────────────────────────────────────
+  useEffect(() => {
+    const mgr = mgrRef.current
+    if (!mgr) return
+    if (stockWireframeRef.current) {
+      mgr.scene.remove(stockWireframeRef.current)
+      stockWireframeRef.current = null
+    }
+    if (stockBox) {
+      const geo = new THREE.BoxGeometry(stockBox.width, stockBox.depth, stockBox.height)
+      const edges = new THREE.EdgesGeometry(geo)
+      const mat = new THREE.LineBasicMaterial({ color: 0x888888 })
+      const wireframe = new THREE.LineSegments(edges, mat)
+      wireframe.position.set(
+        stockBox.origin.x + stockBox.width / 2,
+        stockBox.origin.y + stockBox.depth / 2,
+        stockBox.origin.z + stockBox.height / 2,
+      )
+      mgr.scene.add(wireframe)
+      stockWireframeRef.current = wireframe
+    }
+  }, [stockBox])
 
   // ── Mesh update ────────────────────────────────────────────────────────────
   useEffect(() => {

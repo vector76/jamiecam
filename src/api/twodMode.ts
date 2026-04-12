@@ -141,3 +141,8 @@ export async function generate2dGcode(
 ): Promise<Generate2dResult> {
   return typedInvoke<Generate2dResult>('generate_2d_gcode', { postProcessorId })
 }
+
+/** Save G-code text to a file at the given path. */
+export async function save2dGcode(path: string, gcode: string): Promise<void> {
+  return typedInvoke<void>('save_2d_gcode', { path, gcode })
+}

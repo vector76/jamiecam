@@ -13,6 +13,8 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
   const simulationPoints = useViewportStore((s) => s.simulationPoints)
   const simulationPlaybackSpeed = useViewportStore((s) => s.simulationPlaybackSpeed)
   const simulationProgress = useViewportStore((s) => s.simulationProgress)
+  const simulationToolDiameter = useViewportStore((s) => s.simulationToolDiameter)
+  const simulationCuttingLength = useViewportStore((s) => s.simulationCuttingLength)
 
   const toolMeshRef = useRef<THREE.Group | null>(null)
   const highlightRef = useRef<THREE.Mesh | null>(null)
@@ -29,7 +31,6 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
 
   // ── Mount / unmount ─────────────────────────────────────────────────────────
   useEffect(() => {
-    toolMeshRef.current = createToolMesh(6, 20)
     highlightRef.current = createHighlightIndicator()
 
     return () => {
@@ -39,6 +40,18 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
       }
     }
   }, [])
+
+  // ── Tool mesh: recreate when dimensions change ────────────────────────────
+  useEffect(() => {
+    const oldMesh = toolMeshRef.current
+    const newMesh = createToolMesh(simulationToolDiameter, simulationCuttingLength)
+    toolMeshRef.current = newMesh
+    // If the old mesh was in the scene (simulation active), swap it.
+    if (oldMesh?.parent) {
+      oldMesh.parent.add(newMesh)
+      oldMesh.parent.remove(oldMesh)
+    }
+  }, [simulationToolDiameter, simulationCuttingLength])
 
   // ── Scene membership: add/remove objects when simulation starts/stops ───────
   useEffect(() => {

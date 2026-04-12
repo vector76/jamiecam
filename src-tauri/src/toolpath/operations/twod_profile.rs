@@ -75,6 +75,26 @@ pub fn plan_2d_profile(
     }
     let mut passes: Vec<Pass> = Vec::with_capacity(z_levels.len() * 2);
 
+    // Initial approach: rapid to the entry point at safe height, then descend.
+    let entry_xy = tool_path[0];
+    passes.push(Pass {
+        kind: PassKind::Linking,
+        cuts: vec![
+            CutPoint {
+                position: Vec3 { x: entry_xy.0, y: entry_xy.1, z: safe_height },
+                move_kind: MoveKind::Rapid,
+                tool_orientation: None,
+                feed_rate_override: None,
+            },
+            CutPoint {
+                position: Vec3 { x: entry_xy.0, y: entry_xy.1, z: params.top_of_cut },
+                move_kind: MoveKind::Rapid,
+                tool_orientation: None,
+                feed_rate_override: None,
+            },
+        ],
+    });
+
     for (idx, &z) in z_levels.iter().enumerate() {
         // Insert a linking pass between consecutive cutting passes.
         if idx > 0 {

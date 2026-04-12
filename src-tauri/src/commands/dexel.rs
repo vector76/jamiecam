@@ -69,8 +69,9 @@ pub(crate) fn get_simulation_mesh_inner(
     // (e) Initialize dexel grid from stock.
     let mut grid = DexelGrid::from_stock(&stock, resolution);
 
-    // (f) Apply segments for each operation.
+    // (f) Apply segments for each operation, carrying tool position across.
     let mut segments_applied: usize = 0;
+    let mut last_position: Option<crate::models::Vec3> = None;
 
     for op in &ops {
         // Find the tool for this operation.
@@ -86,7 +87,7 @@ pub(crate) fn get_simulation_mesh_inner(
             AppError::NotFound(format!("toolpath for operation {} not found", op.id))
         })?;
 
-        let segments = toolpath_to_segments(toolpath);
+        let segments = toolpath_to_segments(toolpath, last_position.as_ref());
 
         // Apply segments, respecting the budget if set.
         let to_apply = if let Some(budget) = up_to_segment {
@@ -98,6 +99,14 @@ pub(crate) fn get_simulation_mesh_inner(
 
         grid.apply_segments(to_apply, tool_radius, &z_clearance);
         segments_applied += to_apply.len();
+
+        // Track the last position for continuity with the next operation.
+        if let Some(last_seg) = to_apply.last() {
+            last_position = Some(match last_seg {
+                crate::dexel::MotionSegment::Linear { end, .. } => end.clone(),
+                crate::dexel::MotionSegment::Arc { end, .. } => end.clone(),
+            });
+        }
 
         // Break if budget exhausted.
         if let Some(budget) = up_to_segment {

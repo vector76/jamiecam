@@ -85,6 +85,15 @@ interface ViewportState {
   stopSimulation: () => void
   setSimulationProgress: (progress: number) => void
   setSimulationPlaybackSpeed: (speed: number) => void
+  /** Tool diameter for the simulation tool mesh (mm). */
+  simulationToolDiameter: number
+  /** Tool cutting length for the simulation tool mesh (mm). */
+  simulationCuttingLength: number
+  setSimulationToolDimensions: (diameter: number, cuttingLength: number) => void
+  /** Stock box for wireframe display in the viewport, or null. */
+  stockBox: { origin: { x: number; y: number; z: number }; width: number; depth: number; height: number } | null
+  setStockBox: (box: { origin: { x: number; y: number; z: number }; width: number; depth: number; height: number }) => void
+  clearStockBox: () => void
   /** Current measurement mode. */
   measurementMode: 'off' | 'distance' | 'angle'
   /** Points collected so far for the in-progress measurement. */
@@ -140,6 +149,12 @@ export const useViewportStore = create<ViewportState>((set) => ({
   stopSimulation: () => set({ simulationActive: false, simulationPaused: false, simulationProgress: 0, simulationPoints: null }),
   setSimulationProgress: (progress) => set({ simulationProgress: progress }),
   setSimulationPlaybackSpeed: (speed) => set({ simulationPlaybackSpeed: speed }),
+  simulationToolDiameter: 6,
+  simulationCuttingLength: 20,
+  setSimulationToolDimensions: (diameter, cuttingLength) => set({ simulationToolDiameter: diameter, simulationCuttingLength: cuttingLength }),
+  stockBox: null,
+  setStockBox: (box) => set({ stockBox: box }),
+  clearStockBox: () => set({ stockBox: null }),
   measurementMode: 'off',
   measurementPoints: [],
   measurements: [],

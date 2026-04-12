@@ -383,7 +383,7 @@ pub fn generate_2d_gcode_inner(
         params: crate::models::operation::Profile2dParams,
     }
 
-    let (op_records, curves_by_id, tools_by_id, stock_top_z, safe_height, artwork_origin) = {
+    let (op_records, curves_by_id, tools_by_id, stock_def, stock_top_z, safe_height, artwork_origin) = {
         let project = read_project(project_lock)?;
 
         let artwork = project.source_2d_artwork.as_ref().ok_or_else(|| {
@@ -453,7 +453,8 @@ pub fn generate_2d_gcode_inner(
         let tools_by_id: HashMap<Uuid, Tool> =
             project.tools.iter().map(|t| (t.id, t.clone())).collect();
 
-        let stock_top_z: Option<f64> = project.stock.as_ref().map(|s| {
+        let stock_def = project.stock.clone();
+        let stock_top_z: Option<f64> = stock_def.as_ref().map(|s| {
             let crate::models::StockDefinition::Box(b) = s;
             b.origin.z + b.height
         });
@@ -465,6 +466,7 @@ pub fn generate_2d_gcode_inner(
             op_records,
             curves_by_id,
             tools_by_id,
+            stock_def,
             stock_top_z,
             safe_height,
             artwork_origin,
@@ -549,6 +551,34 @@ pub fn generate_2d_gcode_inner(
         )
         .map_err(|e| AppError::PostProcessor(e.to_string()))?;
 
+    // ── Prepend @STOCK / @TOOL metadata for G-code viewer round-trip ────────
+
+    let mut metadata_header = String::new();
+    if let Some(ref sd) = stock_def {
+        let crate::models::StockDefinition::Box(b) = sd;
+        metadata_header.push_str(&format!(
+            "; @STOCK type=box width={} depth={} height={} origin={},{},{}\n",
+            b.width, b.depth, b.height, b.origin.x, b.origin.y, b.origin.z
+        ));
+    }
+    for ti in &tool_infos {
+        let tool = tools_by_id.values().find(|t| t.name == ti.description);
+        let tool_type_str = tool
+            .and_then(|t| serde_json::to_string(&t.tool_type).ok())
+            .unwrap_or_else(|| "\"flat_endmill\"".to_string());
+        // serde produces a quoted string like "flat_endmill"; strip the quotes.
+        let tool_type_str = tool_type_str.trim_matches('"');
+        metadata_header.push_str(&format!(
+            "; @TOOL number={} type={} diameter={}\n",
+            ti.number, tool_type_str, ti.diameter
+        ));
+    }
+    let gcode = if metadata_header.is_empty() {
+        gcode
+    } else {
+        format!("{metadata_header}{gcode}")
+    };
+
     // ── Line geometry ────────────────────────────────────────────────────────
 
     const PALETTE: [(f32, f32, f32); 6] = [
@@ -602,6 +632,15 @@ pub fn generate_2d_gcode_inner(
         types,
     };
 
+    // ── Store toolpaths in project for dexel simulation ──────────────────────
+    {
+        let mut project = write_project(project_lock)?;
+        project.toolpaths.clear();
+        for tp in &toolpaths {
+            project.toolpaths.insert(tp.operation_id, tp.clone());
+        }
+    }
+
     // ── Stats ────────────────────────────────────────────────────────────────
 
     let total_pass_count: usize = toolpaths.iter().map(|tp| tp.passes.len()).sum();
@@ -645,6 +684,13 @@ pub async fn generate_2d_gcode(
     state: tauri::State<'_, AppState>,
 ) -> Result<Generate2dResult, AppError> {
     generate_2d_gcode_inner(&post_processor_id, &state.project)
+}
+
+/// Save G-code text to a file.
+#[tauri::command]
+pub async fn save_2d_gcode(path: String, gcode: String) -> Result<(), AppError> {
+    std::fs::write(&path, &gcode)?;
+    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
