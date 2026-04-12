@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   extractSimPoints,
   buildCumulativeDistances,
-  indexAtFraction,
+  interpolateAtFraction,
 } from './simulationPoints'
 import type { LineGeometryData } from '../api/types'
 
@@ -71,39 +71,44 @@ describe('buildCumulativeDistances', () => {
   })
 })
 
-describe('indexAtFraction', () => {
+describe('interpolateAtFraction', () => {
   const pts = [
     { x: 0, y: 0, z: 0, moveType: 0 },
-    { x: 3, y: 0, z: 0, moveType: 0 },
-    { x: 8, y: 0, z: 0, moveType: 0 },
+    { x: 4, y: 0, z: 0, moveType: 0 },
+    { x: 4, y: 6, z: 0, moveType: 0 },
   ]
-  const cd = buildCumulativeDistances(pts) // [0, 3, 8]
+  const cd = buildCumulativeDistances(pts) // [0, 4, 10]
 
-  it('fraction=0 → index 0', () => {
-    expect(indexAtFraction(cd, 0)).toBe(0)
+  it('fraction=0 returns the first point', () => {
+    const p = interpolateAtFraction(pts, cd, 0)
+    expect(p.x).toBeCloseTo(0)
+    expect(p.y).toBeCloseTo(0)
   })
 
-  it('fraction=1 → last index', () => {
-    expect(indexAtFraction(cd, 1)).toBe(2)
+  it('fraction=1 returns the last point', () => {
+    const p = interpolateAtFraction(pts, cd, 1)
+    expect(p.x).toBeCloseTo(4)
+    expect(p.y).toBeCloseTo(6)
   })
 
-  it('maps midpoint correctly on path with unequal segment lengths', () => {
-    // total=8; 3/8=0.375 is closer to index 1 (dist 3) than index 0 (dist 0)
-    // fraction=3/8 → target=3 → exactly index 1
-    expect(indexAtFraction(cd, 3 / 8)).toBe(1)
-    // fraction slightly below 3/8 → still closer to index 1
-    expect(indexAtFraction(cd, 0.37)).toBe(1)
-    // fraction slightly above 3/8 → target > 3, next index is 2
-    expect(indexAtFraction(cd, 0.5)).toBe(1) // midpoint of [3..8] = 5.5, index 1 (dist 3) closer than index 2 (dist 8)? No: 5.5-3=2.5 vs 8-5.5=2.5, tie goes to lo
+  it('interpolates midway along first segment', () => {
+    // total = 10, first segment length = 4, midpoint of first seg at dist=2 → fraction=0.2
+    const p = interpolateAtFraction(pts, cd, 0.2)
+    expect(p.x).toBeCloseTo(2)
+    expect(p.y).toBeCloseTo(0)
   })
 
-  it('handles single-point path', () => {
-    expect(indexAtFraction([0], 0)).toBe(0)
-    expect(indexAtFraction([0], 0.5)).toBe(0)
-    expect(indexAtFraction([0], 1)).toBe(0)
+  it('interpolates midway along second segment', () => {
+    // At dist=7 (fraction=0.7): 3 units into second seg of length 6 → 50% along it
+    const p = interpolateAtFraction(pts, cd, 0.7)
+    expect(p.x).toBeCloseTo(4)
+    expect(p.y).toBeCloseTo(3)
   })
 
-  it('handles empty cumDist', () => {
-    expect(indexAtFraction([], 0.5)).toBe(0)
+  it('returns origin for empty points', () => {
+    const p = interpolateAtFraction([], [], 0.5)
+    expect(p.x).toBe(0)
+    expect(p.y).toBe(0)
+    expect(p.z).toBe(0)
   })
 })

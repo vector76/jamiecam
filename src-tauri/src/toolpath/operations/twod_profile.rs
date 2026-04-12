@@ -73,14 +73,14 @@ pub fn plan_2d_profile(
     if tool_path.is_empty() {
         return Ok(vec![]);
     }
-    let n_path = tool_path.len();
     let mut passes: Vec<Pass> = Vec::with_capacity(z_levels.len() * 2);
 
     for (idx, &z) in z_levels.iter().enumerate() {
         // Insert a linking pass between consecutive cutting passes.
         if idx > 0 {
-            // Lift from end of previous cutting pass; descend to start of this pass.
-            let from_xy = tool_path[n_path - 1];
+            // The previous cutting pass closed at tool_path[0]; retract and
+            // re-plunge at the same XY for the next Z level.
+            let from_xy = tool_path[0];
             let to_xy = tool_path[0];
             passes.push(make_linking_pass(
                 from_xy,
@@ -92,9 +92,11 @@ pub fn plan_2d_profile(
 
         // Build the cutting pass: every point is a Feed move.
         // The first point performs the entry plunge; subsequent points traverse
-        // the contour at the same Z level.
+        // the contour at the same Z level.  The first point is repeated at the
+        // end to close the polygon.
         let cuts: Vec<CutPoint> = tool_path
             .iter()
+            .chain(std::iter::once(&tool_path[0]))
             .map(|&(x, y)| CutPoint {
                 position: Vec3 { x, y, z },
                 move_kind: MoveKind::Feed,
@@ -360,7 +362,7 @@ mod tests {
     // ── OnLine cut ───────────────────────────────────────────────────────────
 
     /// OnLine cut must not call poly_offset: the XY of the cutting pass should
-    /// exactly equal the (offset-adjusted) input points.
+    /// exactly equal the (offset-adjusted) input points, plus a closing point.
     #[test]
     fn on_line_uses_input_polygon_directly() {
         let curve = ccw_square();
@@ -368,24 +370,38 @@ mod tests {
         let passes =
             plan_2d_profile(&params, 3.0, [0.0, 0.0], 10.0, &curve).expect("plan should succeed");
 
-        // Collect XY of the cutting pass (winding may be reversed, so compare as sets).
         let cutting = passes
             .iter()
             .find(|p| p.kind == PassKind::Cutting)
             .expect("at least one cutting pass");
 
-        let mut got_xy: Vec<(f64, f64)> = cutting
+        let got_xy: Vec<(f64, f64)> = cutting
             .cuts
             .iter()
             .map(|c| (c.position.x, c.position.y))
             .collect();
-        got_xy.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
+        // The pass should have N+1 points: the contour vertices plus a
+        // closing point that repeats the first vertex.
+        assert_eq!(
+            got_xy.len(),
+            curve.len() + 1,
+            "cutting pass should close the polygon"
+        );
+        assert_eq!(
+            got_xy.first(),
+            got_xy.last(),
+            "first and last point must match (closed contour)"
+        );
+
+        // All input curve points should appear in the pass (order may differ
+        // due to winding normalisation).
+        let mut got_unique: Vec<(f64, f64)> = got_xy[..got_xy.len() - 1].to_vec();
+        got_unique.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mut expected: Vec<(f64, f64)> = curve.iter().map(|p| (p[0], p[1])).collect();
         expected.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
         assert_eq!(
-            got_xy, expected,
+            got_unique, expected,
             "OnLine cut should use the input polygon points unchanged"
         );
     }

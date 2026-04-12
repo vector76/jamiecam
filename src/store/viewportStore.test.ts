@@ -25,7 +25,7 @@ beforeEach(() => {
     faceDescriptors: [],
     simulationActive: false,
     simulationPaused: false,
-    simulationPointIndex: 0,
+    simulationProgress: 0,
     simulationPlaybackSpeed: 10.0,
     simulationPoints: null,
     measurementMode: 'off',
@@ -272,8 +272,8 @@ describe('viewportStore — simulation initial state', () => {
     expect(useViewportStore.getState().simulationPaused).toBe(false)
   })
 
-  it('starts with simulationPointIndex 0', () => {
-    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+  it('starts with simulationProgress 0', () => {
+    expect(useViewportStore.getState().simulationProgress).toBe(0)
   })
 
   it('starts with simulationPlaybackSpeed 10.0', () => {
@@ -296,10 +296,10 @@ describe('viewportStore — startSimulation', () => {
     expect(useViewportStore.getState().simulationPoints).toEqual(SIM_POINTS)
   })
 
-  it('resets simulationPointIndex to 0', () => {
-    useViewportStore.setState({ simulationPointIndex: 5 })
+  it('resets simulationProgress to 0', () => {
+    useViewportStore.setState({ simulationProgress: 0.5 })
     useViewportStore.getState().startSimulation(SIM_POINTS)
-    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+    expect(useViewportStore.getState().simulationProgress).toBe(0)
   })
 
   it('clears simulationPaused', () => {
@@ -351,11 +351,11 @@ describe('viewportStore — stopSimulation', () => {
     expect(useViewportStore.getState().simulationPaused).toBe(false)
   })
 
-  it('resets simulationPointIndex to 0', () => {
+  it('resets simulationProgress to 0', () => {
     useViewportStore.getState().startSimulation(SIM_POINTS)
-    useViewportStore.getState().setSimulationPointIndex(2)
+    useViewportStore.getState().setSimulationProgress(0.8)
     useViewportStore.getState().stopSimulation()
-    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+    expect(useViewportStore.getState().simulationProgress).toBe(0)
   })
 
   it('clears simulationPoints to null', () => {
@@ -365,16 +365,16 @@ describe('viewportStore — stopSimulation', () => {
   })
 })
 
-describe('viewportStore — setSimulationPointIndex', () => {
-  it('updates the point index', () => {
-    useViewportStore.getState().setSimulationPointIndex(7)
-    expect(useViewportStore.getState().simulationPointIndex).toBe(7)
+describe('viewportStore — setSimulationProgress', () => {
+  it('updates the progress', () => {
+    useViewportStore.getState().setSimulationProgress(0.7)
+    expect(useViewportStore.getState().simulationProgress).toBe(0.7)
   })
 
   it('can be set to 0', () => {
-    useViewportStore.getState().setSimulationPointIndex(3)
-    useViewportStore.getState().setSimulationPointIndex(0)
-    expect(useViewportStore.getState().simulationPointIndex).toBe(0)
+    useViewportStore.getState().setSimulationProgress(0.3)
+    useViewportStore.getState().setSimulationProgress(0)
+    expect(useViewportStore.getState().simulationProgress).toBe(0)
   })
 })
 

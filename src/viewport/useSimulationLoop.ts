@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type React from 'react'
 import type * as THREE from 'three'
 import { useViewportStore } from '../store/viewportStore'
-import { buildCumulativeDistances, indexAtFraction } from './simulationPoints'
+import { buildCumulativeDistances, interpolateAtFraction } from './simulationPoints'
 import { createToolMesh, positionToolMesh } from './toolMesh'
 import { createHighlightIndicator, positionHighlight } from './simulationHighlight'
 import type { SceneManager } from './scene'
@@ -12,7 +12,7 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
   const simulationPaused = useViewportStore((s) => s.simulationPaused)
   const simulationPoints = useViewportStore((s) => s.simulationPoints)
   const simulationPlaybackSpeed = useViewportStore((s) => s.simulationPlaybackSpeed)
-  const simulationPointIndex = useViewportStore((s) => s.simulationPointIndex)
+  const simulationProgress = useViewportStore((s) => s.simulationProgress)
 
   const toolMeshRef = useRef<THREE.Group | null>(null)
   const highlightRef = useRef<THREE.Mesh | null>(null)
@@ -21,8 +21,8 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
   const accumulatedDistRef = useRef<number>(0)
   const rafIdRef = useRef<number | null>(null)
   const prevTimestampRef = useRef<number | null>(null)
-  // True while the RAF loop is the one that wrote simulationPointIndex this frame.
-  const loopUpdatedIndexRef = useRef<boolean>(false)
+  // True while the RAF loop is the one that wrote simulationProgress this frame.
+  const loopUpdatedProgressRef = useRef<boolean>(false)
   // Keep playback speed readable inside the RAF closure without re-creating the loop.
   const simulationPlaybackSpeedRef = useRef(simulationPlaybackSpeed)
   useEffect(() => { simulationPlaybackSpeedRef.current = simulationPlaybackSpeed }, [simulationPlaybackSpeed])
@@ -76,7 +76,7 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
     }
 
     function loop(timestamp: number): void {
-      const { simulationPoints: pts, stopSimulation, setSimulationPointIndex } =
+      const { simulationPoints: pts, stopSimulation, setSimulationProgress } =
         useViewportStore.getState()
       if (!pts || pts.length === 0) return
 
@@ -88,15 +88,15 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
 
       const totalDist = totalDistRef.current
       const fraction = totalDist > 0 ? Math.min(accumulatedDistRef.current / totalDist, 1.0) : 1.0
-      const idx = indexAtFraction(cumDistRef.current, fraction)
+      const interp = interpolateAtFraction(pts, cumDistRef.current, fraction)
 
-      if (toolMeshRef.current) positionToolMesh(toolMeshRef.current, pts[idx])
-      if (highlightRef.current) positionHighlight(highlightRef.current, pts[idx])
+      if (toolMeshRef.current) positionToolMesh(toolMeshRef.current, interp)
+      if (highlightRef.current) positionHighlight(highlightRef.current, interp)
 
-      loopUpdatedIndexRef.current = true
-      setSimulationPointIndex(idx)
+      loopUpdatedProgressRef.current = true
+      setSimulationProgress(fraction)
 
-      if (idx >= pts.length - 1) {
+      if (fraction >= 1) {
         stopSimulation()
         return
       }
@@ -114,15 +114,24 @@ export function useSimulationLoop(mgrRef: React.RefObject<SceneManager | null>):
     }
   }, [simulationActive, simulationPaused])
 
-  // ── Scrub: external write to simulationPointIndex resyncs accumulatedDist ───
+  // ── Scrub: external write to simulationProgress resyncs accumulatedDist ─────
   useEffect(() => {
-    if (loopUpdatedIndexRef.current) {
-      loopUpdatedIndexRef.current = false
+    if (loopUpdatedProgressRef.current) {
+      loopUpdatedProgressRef.current = false
       return
     }
     if (!simulationActive) return
-    if (simulationPointIndex < cumDistRef.current.length) {
-      accumulatedDistRef.current = cumDistRef.current[simulationPointIndex]
+
+    accumulatedDistRef.current = simulationProgress * totalDistRef.current
+
+    // When paused the RAF loop is not running, so reposition the tool here.
+    if (simulationPaused) {
+      const pts = useViewportStore.getState().simulationPoints
+      if (pts && pts.length > 0) {
+        const interp = interpolateAtFraction(pts, cumDistRef.current, simulationProgress)
+        if (toolMeshRef.current) positionToolMesh(toolMeshRef.current, interp)
+        if (highlightRef.current) positionHighlight(highlightRef.current, interp)
+      }
     }
-  }, [simulationPointIndex, simulationActive])
+  }, [simulationProgress, simulationActive, simulationPaused])
 }

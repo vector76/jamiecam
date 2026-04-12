@@ -236,9 +236,11 @@ export function Canvas2D({
       dragState.current.totalMovement = Math.sqrt(dx * dx + dy * dy)
 
       if (dragState.current.type === 'pan') {
+        // dy is negated because worldToScreen inverts Y:
+        // screenY = canvasHeight - (worldY * zoom + panOffset.y)
         setPanOffset({
           x: dragState.current.startPanX + dx,
-          y: dragState.current.startPanY + dy,
+          y: dragState.current.startPanY - dy,
         })
       } else {
         // origin drag — show live preview

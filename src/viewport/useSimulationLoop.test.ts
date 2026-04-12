@@ -78,7 +78,7 @@ beforeEach(() => {
     simulationActive: false,
     simulationPaused: false,
     simulationPoints: null,
-    simulationPointIndex: 0,
+    simulationProgress: 0,
     simulationPlaybackSpeed: 10,
   })
 })
@@ -202,8 +202,8 @@ describe('useSimulationLoop — RAF lifecycle', () => {
 
 // ── RAF loop advancing ────────────────────────────────────────────────────────
 
-describe('useSimulationLoop — loop advances simulationPointIndex', () => {
-  it('updates simulationPointIndex after a frame with sufficient elapsed time', async () => {
+describe('useSimulationLoop — loop advances simulationProgress', () => {
+  it('updates simulationProgress after a frame with sufficient elapsed time', async () => {
     setup()
 
     await act(async () => {
@@ -214,11 +214,12 @@ describe('useSimulationLoop — loop advances simulationPointIndex', () => {
     // First frame (ts=0): sets prevTimestamp, accumulates nothing.
     await act(async () => { tickRaf(0) })
     // Second frame (ts=15 ms): deltaMs=15 → dist = 15/1000 * 50 * 10 = 7.5 mm.
-    // 7.5 mm is between cumDist[0]=0 and cumDist[1]=10 → idx = 1 (nearest), not last point.
+    // 7.5 / 20 = 0.375 → progress should be ~0.375.
     await act(async () => { tickRaf(15) })
 
-    const idx = useViewportStore.getState().simulationPointIndex
-    expect(idx).toBeGreaterThan(0)
+    const progress = useViewportStore.getState().simulationProgress
+    expect(progress).toBeGreaterThan(0)
+    expect(progress).toBeLessThan(1)
   })
 
   it('does not accumulate distance on the very first frame', async () => {
@@ -228,18 +229,18 @@ describe('useSimulationLoop — loop advances simulationPointIndex', () => {
       useViewportStore.getState().startSimulation(SIM_POINTS)
     })
 
-    // Only one frame — should not advance past index 0
+    // Only one frame — should not advance past 0
     await act(async () => { tickRaf(100) })
 
-    const idx = useViewportStore.getState().simulationPointIndex
-    expect(idx).toBe(0)
+    const progress = useViewportStore.getState().simulationProgress
+    expect(progress).toBe(0)
   })
 })
 
 // ── Scrub resyncing ───────────────────────────────────────────────────────────
 
 describe('useSimulationLoop — scrub resyncing', () => {
-  it('resyncs accumulatedDist when simulationPointIndex is changed externally', async () => {
+  it('resyncs accumulatedDist when simulationProgress is changed externally', async () => {
     setup()
 
     await act(async () => {
@@ -251,21 +252,21 @@ describe('useSimulationLoop — scrub resyncing', () => {
       useViewportStore.getState().pauseSimulation()
     })
 
-    // Externally scrub to point index 1 (cumDist = 10 mm, midpoint).
+    // Externally scrub to 50% (midpoint of 20 mm path = 10 mm).
     await act(async () => {
-      useViewportStore.getState().setSimulationPointIndex(1)
+      useViewportStore.getState().setSimulationProgress(0.5)
     })
 
     // Resume and fire one frame (prevTimestamp=null → no delta, but position is
-    // computed from the resynced accumulatedDist of 10 mm → idx = 1).
+    // computed from the resynced accumulatedDist of 10 mm → progress ≈ 0.5).
     await act(async () => {
       useViewportStore.getState().resumeSimulation()
     })
     await act(async () => { tickRaf(500) })
 
-    // Without resync, accumulatedDist would still be 0 → idx = 0.
-    // With resync, accumulatedDist = 10 mm → idx = 1.
-    const idx = useViewportStore.getState().simulationPointIndex
-    expect(idx).toBeGreaterThanOrEqual(1)
+    // Without resync, accumulatedDist would still be 0 → progress = 0.
+    // With resync, accumulatedDist = 10 mm → progress ≈ 0.5.
+    const progress = useViewportStore.getState().simulationProgress
+    expect(progress).toBeGreaterThanOrEqual(0.4)
   })
 })

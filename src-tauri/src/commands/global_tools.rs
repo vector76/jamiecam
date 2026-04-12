@@ -157,13 +157,29 @@ pub(crate) fn export_to_library_inner(
         .tools
         .iter()
         .find(|t| t.id == uuid)
-        .ok_or_else(|| AppError::NotFound(format!("project tool {id} not found")))?;
-
-    let mut cloned = source.clone();
-    cloned.id = Uuid::new_v4();
+        .ok_or_else(|| AppError::NotFound(format!("project tool {id} not found")))?
+        .clone();
     drop(project);
 
     let mut library = write_library(library_lock)?;
+
+    // If a global tool with the same name and type already exists, update it
+    // in-place rather than creating a duplicate.
+    if let Some(existing) = library
+        .tools
+        .iter_mut()
+        .find(|t| t.name == source.name && t.tool_type == source.tool_type)
+    {
+        let existing_id = existing.id;
+        *existing = source;
+        existing.id = existing_id;
+        let updated = existing.clone();
+        library.save(save_path)?;
+        return Ok(updated);
+    }
+
+    let mut cloned = source;
+    cloned.id = Uuid::new_v4();
     library.tools.push(cloned.clone());
     library.save(save_path)?;
 
@@ -612,6 +628,39 @@ mod tests {
         assert_eq!(proj.tools.len(), 1);
         assert_eq!(proj.tools[0].id, original_id);
         assert_eq!(proj.tools[0].name, "Original");
+    }
+
+    #[test]
+    fn export_same_name_and_type_updates_existing_global_tool() {
+        let library = RwLock::new(GlobalToolLibrary::default());
+        let project = RwLock::new(Project::default());
+        let path = temp_path();
+
+        // Seed the global library with one tool.
+        let global_tool =
+            add_global_tool_inner(make_input("Endmill"), &library, &path).expect("add global");
+
+        // Add a project tool with the same name and type but different diameter.
+        let mut input = make_input("Endmill");
+        input.diameter = 8.0;
+        let project_tool = {
+            use crate::commands::tools::add_tool_inner;
+            add_tool_inner(input, &project).expect("add project")
+        };
+
+        let exported =
+            export_to_library_inner(&project_tool.id.to_string(), &project, &library, &path)
+                .expect("export should succeed");
+
+        // Should have updated the existing entry, not created a new one.
+        let tools = list_global_tools_inner(&library).expect("list");
+        assert_eq!(tools.len(), 1, "no duplicate should be created");
+        assert_eq!(
+            tools[0].id, global_tool.id,
+            "existing UUID should be preserved"
+        );
+        assert_eq!(exported.id, global_tool.id);
+        assert_eq!(tools[0].diameter, 8.0, "diameter should be updated");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { SimPoint } from './simulationPoints'
+import type { InterpolatedPoint } from './simulationPoints'
 
 const HIGHLIGHT_MATERIAL = new THREE.MeshStandardMaterial({
   color: 0xffaa00,
@@ -11,6 +11,6 @@ export function createHighlightIndicator(): THREE.Mesh {
   return new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), HIGHLIGHT_MATERIAL)
 }
 
-export function positionHighlight(indicator: THREE.Mesh, point: SimPoint): void {
+export function positionHighlight(indicator: THREE.Mesh, point: InterpolatedPoint): void {
   indicator.position.set(point.x, point.y, point.z)
 }

@@ -73,8 +73,8 @@ interface ViewportState {
   simulationActive: boolean
   /** Whether simulation is paused (simulationActive must also be true). */
   simulationPaused: boolean
-  /** Current point index along the simulation path. */
-  simulationPointIndex: number
+  /** Normalised progress along the simulation path (0 = start, 1 = end). */
+  simulationProgress: number
   /** Playback speed multiplier (default 10.0 = 10× real feed rate). */
   simulationPlaybackSpeed: number
   /** Simulation points set by startSimulation, cleared by stopSimulation. */
@@ -83,7 +83,7 @@ interface ViewportState {
   pauseSimulation: () => void
   resumeSimulation: () => void
   stopSimulation: () => void
-  setSimulationPointIndex: (idx: number) => void
+  setSimulationProgress: (progress: number) => void
   setSimulationPlaybackSpeed: (speed: number) => void
   /** Current measurement mode. */
   measurementMode: 'off' | 'distance' | 'angle'
@@ -131,14 +131,14 @@ export const useViewportStore = create<ViewportState>((set) => ({
   setProjectionMode: (projectionMode) => set({ projectionMode }),
   simulationActive: false,
   simulationPaused: false,
-  simulationPointIndex: 0,
+  simulationProgress: 0,
   simulationPlaybackSpeed: 10.0,
   simulationPoints: null,
-  startSimulation: (points) => set({ simulationActive: true, simulationPaused: false, simulationPointIndex: 0, simulationPoints: points }),
+  startSimulation: (points) => set({ simulationActive: true, simulationPaused: false, simulationProgress: 0, simulationPoints: points }),
   pauseSimulation: () => set({ simulationPaused: true }),
   resumeSimulation: () => set({ simulationPaused: false }),
-  stopSimulation: () => set({ simulationActive: false, simulationPaused: false, simulationPointIndex: 0, simulationPoints: null }),
-  setSimulationPointIndex: (idx) => set({ simulationPointIndex: idx }),
+  stopSimulation: () => set({ simulationActive: false, simulationPaused: false, simulationProgress: 0, simulationPoints: null }),
+  setSimulationProgress: (progress) => set({ simulationProgress: progress }),
   setSimulationPlaybackSpeed: (speed) => set({ simulationPlaybackSpeed: speed }),
   measurementMode: 'off',
   measurementPoints: [],

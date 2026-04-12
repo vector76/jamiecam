@@ -326,6 +326,20 @@ export function Mode2DMode() {
     void init()
   }, [pushNotification])
 
+  // ── Re-fetch project tools when snapshot tools change ──────────────────────
+  const snapshotToolsJson = JSON.stringify(snapshot?.tools ?? [])
+  useEffect(() => {
+    async function refresh() {
+      try {
+        const ts = await listTools()
+        setTools(ts)
+      } catch {
+        // Non-fatal
+      }
+    }
+    void refresh()
+  }, [snapshotToolsJson])
+
   // ── Sync stock fields from snapshot ───────────────────────────────────────
   useEffect(() => {
     if (stockFromSnapshot?.type === 'box') {

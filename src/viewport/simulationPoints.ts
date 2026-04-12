@@ -53,31 +53,49 @@ export function buildCumulativeDistances(points: SimPoint[]): number[] {
   return cumDist
 }
 
-export function indexAtFraction(cumDist: number[], fraction: number): number {
-  if (cumDist.length === 0) return 0
-  if (cumDist.length === 1) return 0
-  if (fraction <= 0) return 0
-  if (fraction >= 1) return cumDist.length - 1
+/** Interpolated position along the toolpath at the given fraction of total distance. */
+export interface InterpolatedPoint {
+  x: number
+  y: number
+  z: number
+}
+
+export function interpolateAtFraction(
+  points: SimPoint[],
+  cumDist: number[],
+  fraction: number,
+): InterpolatedPoint {
+  if (points.length === 0) return { x: 0, y: 0, z: 0 }
+  if (fraction <= 0) return { x: points[0].x, y: points[0].y, z: points[0].z }
+  if (fraction >= 1) {
+    const last = points[points.length - 1]
+    return { x: last.x, y: last.y, z: last.z }
+  }
 
   const totalLength = cumDist[cumDist.length - 1]
-  const target = fraction * totalLength
+  const target = totalLength * fraction
 
-  // Binary search for the nearest index
+  // Binary search: find first index where cumDist[i] >= target
   let lo = 0
   let hi = cumDist.length - 1
   while (lo < hi) {
     const mid = (lo + hi) >> 1
-    if (cumDist[mid] < target) {
-      lo = mid + 1
-    } else {
-      hi = mid
-    }
+    if (cumDist[mid] < target) lo = mid + 1
+    else hi = mid
   }
 
-  // lo is the first index where cumDist[lo] >= target
-  // Check if lo-1 is closer
-  if (lo > 0 && target - cumDist[lo - 1] < cumDist[lo] - target) {
-    return lo - 1
+  // lo is the first index with cumDist >= target
+  if (lo === 0) return { x: points[0].x, y: points[0].y, z: points[0].z }
+
+  const segStart = lo - 1
+  const segLen = cumDist[lo] - cumDist[segStart]
+  const t = segLen > 0 ? (target - cumDist[segStart]) / segLen : 0
+  const a = points[segStart]
+  const b = points[lo]
+
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    z: a.z + (b.z - a.z) * t,
   }
-  return lo
 }

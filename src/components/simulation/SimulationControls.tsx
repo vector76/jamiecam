@@ -7,25 +7,33 @@ export function SimulationControls() {
   const toolpathGeometry = useViewportStore((s) => s.toolpathGeometry)
   const simulationActive = useViewportStore((s) => s.simulationActive)
   const simulationPaused = useViewportStore((s) => s.simulationPaused)
-  const simulationPoints = useViewportStore((s) => s.simulationPoints)
-  const simulationPointIndex = useViewportStore((s) => s.simulationPointIndex)
+  const simulationProgress = useViewportStore((s) => s.simulationProgress)
   const simulationPlaybackSpeed = useViewportStore((s) => s.simulationPlaybackSpeed)
   const startSimulation = useViewportStore((s) => s.startSimulation)
   const pauseSimulation = useViewportStore((s) => s.pauseSimulation)
+  const resumeSimulation = useViewportStore((s) => s.resumeSimulation)
   const stopSimulation = useViewportStore((s) => s.stopSimulation)
-  const setSimulationPointIndex = useViewportStore((s) => s.setSimulationPointIndex)
+  const setSimulationProgress = useViewportStore((s) => s.setSimulationProgress)
   const setSimulationPlaybackSpeed = useViewportStore((s) => s.setSimulationPlaybackSpeed)
 
   const showPlay = !simulationActive || simulationPaused
   const playLabel = simulationPaused ? 'Resume' : 'Play'
 
+  function handlePlay() {
+    if (simulationPaused) {
+      resumeSimulation()
+    } else {
+      startSimulation(extractSimPoints(toolpathGeometry!))
+    }
+  }
+
   return (
-    <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1">
+    <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center gap-1">
       {showPlay && (
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => startSimulation(extractSimPoints(toolpathGeometry!))}
+          onClick={handlePlay}
           disabled={toolpathGeometry === null}
           title={playLabel}
         >
@@ -49,11 +57,12 @@ export function SimulationControls() {
       <input
         type="range"
         min={0}
-        max={(simulationPoints?.length ?? 1) - 1}
-        value={simulationPointIndex}
-        onChange={(e) => setSimulationPointIndex(Number(e.target.value))}
+        max={1}
+        step="any"
+        value={simulationProgress}
+        onChange={(e) => setSimulationProgress(Number(e.target.value))}
         disabled={!simulationActive}
-        className="h-1.5 w-24 accent-primary"
+        className="h-1.5 min-w-0 flex-1 accent-primary"
       />
       <select
         value={simulationPlaybackSpeed}

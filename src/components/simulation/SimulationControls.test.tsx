@@ -25,7 +25,7 @@ function defaultState() {
     simulationActive: false,
     simulationPaused: false,
     simulationPoints: null as SimPoint[] | null,
-    simulationPointIndex: 0,
+    simulationProgress: 0,
     simulationPlaybackSpeed: 10,
   }
 }
@@ -65,6 +65,28 @@ describe('SimulationControls — Play starts simulation', () => {
   })
 })
 
+describe('SimulationControls — Resume from paused', () => {
+  it('clicking Play while paused calls resumeSimulation instead of startSimulation', async () => {
+    const resumeSimulation = vi.fn()
+    const startSimulation = vi.fn()
+    useViewportStore.setState({
+      toolpathGeometry: TOOLPATH,
+      simulationActive: true,
+      simulationPaused: true,
+      resumeSimulation,
+      startSimulation,
+    } as never)
+
+    render(<SimulationControls />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    })
+
+    expect(resumeSimulation).toHaveBeenCalledOnce()
+    expect(startSimulation).not.toHaveBeenCalled()
+  })
+})
+
 describe('SimulationControls — Pause appears when playing', () => {
   it('shows Pause button when simulationActive=true, simulationPaused=false', () => {
     useViewportStore.setState({ simulationActive: true, simulationPaused: false })
@@ -100,24 +122,19 @@ describe('SimulationControls — Stop resets', () => {
 })
 
 describe('SimulationControls — Scrub slider', () => {
-  it('changing slider calls setSimulationPointIndex with new value', async () => {
-    const setSimulationPointIndex = vi.fn()
+  it('changing slider calls setSimulationProgress with new value', async () => {
+    const setSimulationProgress = vi.fn()
     useViewportStore.setState({
       simulationActive: true,
-      simulationPoints: [
-        { x: 0, y: 0, z: 0, moveType: 0 },
-        { x: 1, y: 0, z: 0, moveType: 0 },
-        { x: 2, y: 0, z: 0, moveType: 0 },
-      ],
-      setSimulationPointIndex,
+      setSimulationProgress,
     } as never)
 
     render(<SimulationControls />)
     await act(async () => {
-      fireEvent.change(screen.getByRole('slider'), { target: { value: '2' } })
+      fireEvent.change(screen.getByRole('slider'), { target: { value: '0.75' } })
     })
 
-    expect(setSimulationPointIndex).toHaveBeenCalledWith(2)
+    expect(setSimulationProgress).toHaveBeenCalledWith(0.75)
   })
 })
 
