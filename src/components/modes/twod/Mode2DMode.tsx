@@ -319,7 +319,7 @@ export function Mode2DMode() {
       try {
         const ts = await listTools()
         setTools(ts)
-      } catch (_e) {
+      } catch {
         // Non-fatal
       }
     }
