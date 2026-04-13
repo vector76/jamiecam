@@ -81,12 +81,20 @@ export async function handleOpenProject(): Promise<void> {
   if (!path) return
   try {
     const snapshot = await api.loadProject(path)
+
+    // Clear all viewport state after successful load so stale data from the
+    // previous project never bleeds through.  Done after loadProject so the
+    // viewport isn't wiped if the load fails.
+    const vp = useViewportStore.getState()
+    vp.setMeshData(null)
+    vp.setToolpathGeometry(null)
+    vp.setSimulationMeshData(null)
+
     useProjectStore.getState().setSnapshot(snapshot)
+    useProjectStore.getState().bumpLoadGeneration()
     if (snapshot.modelPath) {
       const meshData = await api.openModel(snapshot.modelPath)
       useViewportStore.getState().setMeshData(meshData)
-    } else {
-      useViewportStore.getState().setMeshData(null)
     }
     for (const op of snapshot.operations) {
       if (!op.needsRecalculate) {

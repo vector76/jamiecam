@@ -131,6 +131,27 @@ pub fn plan_2d_profile(
         });
     }
 
+    // Final retract: raise tool to safe height after the last cutting pass.
+    // Two points so the retract is visible in the line-geometry preview.
+    let exit_xy = tool_path[0]; // last cutting pass closed at the entry point
+    passes.push(Pass {
+        kind: PassKind::Linking,
+        cuts: vec![
+            CutPoint {
+                position: Vec3 { x: exit_xy.0, y: exit_xy.1, z: bottom_z },
+                move_kind: MoveKind::Rapid,
+                tool_orientation: None,
+                feed_rate_override: None,
+            },
+            CutPoint {
+                position: Vec3 { x: exit_xy.0, y: exit_xy.1, z: safe_height },
+                move_kind: MoveKind::Rapid,
+                tool_orientation: None,
+                feed_rate_override: None,
+            },
+        ],
+    });
+
     Ok(passes)
 }
 
@@ -499,6 +520,79 @@ mod tests {
             "outside cut should return Err without bindings"
         );
     }
+
+    // ── Final retract ─────────────────────────────────────────────────────
+
+    /// After the last cutting pass the toolpath must end with a linking pass
+    /// that retracts the tool from cut depth to safe height.
+    #[test]
+    fn final_pass_retracts_to_safe_height() {
+        let safe_height = 10.0;
+        let params = square_params(CutType::OnLine, MillingDirection::Climb);
+        // bottom_z = 0.0 - 5.0 = -5.0
+        let passes = plan_2d_profile(&params, 3.0, [0.0, 0.0], safe_height, &ccw_square())
+            .expect("plan should succeed");
+
+        let last = passes.last().expect("should have at least one pass");
+        assert_eq!(
+            last.kind,
+            PassKind::Linking,
+            "last pass must be a linking (retract) pass"
+        );
+        assert_eq!(last.cuts.len(), 2, "retract pass needs 2 points for line geometry");
+        let first_point = &last.cuts[0];
+        assert!(
+            (first_point.position.z - (-5.0)).abs() < 1e-9,
+            "retract starts at bottom_z=-5.0, got Z={}",
+            first_point.position.z
+        );
+        let final_point = &last.cuts[1];
+        assert!(
+            (final_point.position.z - safe_height).abs() < 1e-9,
+            "retract ends at safe_height={}, got Z={}",
+            safe_height,
+            final_point.position.z
+        );
+    }
+
+    /// Multi-pass: the final retract must still go from bottom depth to safe height.
+    #[test]
+    fn multi_pass_final_retract_to_safe_height() {
+        let safe_height = 15.0;
+        let params = Profile2dParams {
+            curve_id: Uuid::nil(),
+            cut_type: CutType::OnLine,
+            direction: MillingDirection::Climb,
+            top_of_cut: 0.0,
+            depth_of_cut: 10.0,
+            step_down: 2.5,
+            feed_rate: 1000.0,
+        };
+        // bottom_z = 0.0 - 10.0 = -10.0
+        let passes = plan_2d_profile(&params, 3.0, [0.0, 0.0], safe_height, &ccw_square())
+            .expect("plan should succeed");
+
+        let last = passes.last().expect("should have at least one pass");
+        assert_eq!(
+            last.kind,
+            PassKind::Linking,
+            "last pass must be a linking (retract) pass"
+        );
+        assert_eq!(last.cuts.len(), 2, "retract pass needs 2 points for line geometry");
+        assert!(
+            (last.cuts[0].position.z - (-10.0)).abs() < 1e-9,
+            "retract starts at bottom_z=-10.0, got Z={}",
+            last.cuts[0].position.z
+        );
+        assert!(
+            (last.cuts[1].position.z - safe_height).abs() < 1e-9,
+            "retract ends at safe_height={}, got Z={}",
+            safe_height,
+            last.cuts[1].position.z
+        );
+    }
+
+    // ── No-bindings stubs ────────────────────────────────────────────────────
 
     #[cfg(not(cam_geometry_bindings))]
     #[test]

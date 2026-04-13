@@ -26,7 +26,7 @@ import { setStock } from '../../../api/stock'
 import { addOperation, editOperation, deleteOperation, listOperations } from '../../../api/operations'
 import { listTools, deleteTool } from '../../../api/tools'
 import { toAppError } from '../../../api/errors'
-import { useProjectStore, usePushNotification } from '../../../store/projectStore'
+import { useProjectStore, usePushNotification, useProjectLoadGeneration } from '../../../store/projectStore'
 import { useViewportStore } from '../../../store/viewportStore'
 import type { CurveSummary, Generate2dResult } from '../../../api/twodMode'
 import type { BoxStock, Tool, Profile2dParams, Operation } from '../../../api/types'
@@ -238,6 +238,7 @@ function OperationEditForm({
 export function Mode2DMode() {
   const snapshot = useProjectStore((s) => s.snapshot)
   const pushNotification = usePushNotification()
+  const loadGeneration = useProjectLoadGeneration()
 
   // ── Sub-state ─────────────────────────────────────────────────────────────
   const [subState, setSubState] = useState<SubState>('editing')
@@ -309,8 +310,21 @@ export function Mode2DMode() {
       ? stockFromSnapshot.origin.z + stockFromSnapshot.height
       : null
 
-  // ── On mount: restore state if project was loaded from disk ──────────────
+  // ── Restore state on mount OR when a different project is loaded ────────
   useEffect(() => {
+    // Reset local state so stale data from the previous project is cleared.
+    setSubState('editing')
+    setGenerate2dResult(null)
+    setCurves([])
+    setCurvePointsMap(new Map())
+    setUnitSystem(null)
+    setLoadedFileName(null)
+    setSelectedCurveId(null)
+    setGenerateError(null)
+    setPendingPath(null)
+    setReplaceConfirmOpen(false)
+    setSvgUnitModalOpen(false)
+
     async function init() {
       try {
         const result = await getTwodCurves()
@@ -332,7 +346,8 @@ export function Mode2DMode() {
       }
     }
     void init()
-  }, [pushNotification])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadGeneration])
 
   // ── Re-fetch project tools when snapshot tools change ──────────────────────
   const snapshotToolsJson = JSON.stringify(snapshot?.tools ?? [])
@@ -750,17 +765,6 @@ export function Mode2DMode() {
       {/* Right: Sidebar (~300px) */}
       <aside className="w-[300px] shrink-0 border-l border-border">
         <ScrollArea className="h-full">
-
-          {/* Back button */}
-          <div className="border-b border-border px-3 py-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => useProjectStore.getState().returnToSelector()}
-            >
-              ← Back
-            </Button>
-          </div>
 
           {subState === 'viewing' && generate2dResult && (
             <div className="flex flex-col gap-3">

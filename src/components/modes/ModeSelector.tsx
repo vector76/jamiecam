@@ -14,6 +14,7 @@ export function ModeSelector() {
     try {
       const snapshot = await api.newProject(id)
       useProjectStore.getState().setSnapshot(snapshot)
+      useProjectStore.getState().bumpLoadGeneration()
     } catch (e: unknown) {
       const err = e as AppError
       useProjectStore.getState().pushNotification(err.message ?? err.kind ?? 'An error occurred')

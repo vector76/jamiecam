@@ -17,6 +17,10 @@ interface ProjectState {
   snapshot: ProjectSnapshot | null
   /** Replace the current snapshot (pass null to clear). */
   setSnapshot: (s: ProjectSnapshot | null) => void
+  /** Monotonic counter bumped when a new/different project is loaded (not on save). */
+  projectLoadGeneration: number
+  /** Bump the load generation so mode components re-initialise. */
+  bumpLoadGeneration: () => void
   /** Active notification messages shown to the user. */
   notifications: string[]
   /** Append a notification message. */
@@ -42,6 +46,8 @@ interface ProjectState {
 export const useProjectStore = create<ProjectState>((set, get) => ({
   snapshot: null,
   setSnapshot: (snapshot) => set({ snapshot }),
+  projectLoadGeneration: 0,
+  bumpLoadGeneration: () => set((s) => ({ projectLoadGeneration: s.projectLoadGeneration + 1 })),
   notifications: [],
   pushNotification: (message) => set((s) => ({ notifications: [...s.notifications, message] })),
   dismissNotification: (index) => set((s) => ({ notifications: s.notifications.filter((_, i) => i !== index) })),
@@ -162,6 +168,15 @@ export const useFilePath = (): string | null =>
  */
 export const useDirty = (): boolean =>
   useProjectStore((state) => state.snapshot?.dirty ?? false)
+
+/**
+ * Selector hook: returns the project load generation counter.
+ *
+ * Bumped only when a new or different project is loaded (not on save).
+ * Mode components use this to re-initialise when the underlying project changes.
+ */
+export const useProjectLoadGeneration = (): number =>
+  useProjectStore((state) => state.projectLoadGeneration)
 
 /**
  * Selector hook: returns the current top-level view.
