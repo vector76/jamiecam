@@ -1,1 +1,15 @@
 src-tauri/Cargo.toml text eol=lf
+
+# Golden test fixtures are byte-exact generator output. Some post-processors
+# (fanuc-0i) emit CRLF while others (grbl, linuxcnc) emit LF, and JSON
+# snapshots are always LF — so line endings are intentional per file and
+# must NOT be touched by core.autocrlf. Marking `binary` disables conversion
+# without claiming these files are actually binary for diff purposes.
+tests/fixtures/*.json         binary
+tests/fixtures/*.nc           binary
+tests/fixtures/*.stl          binary
+tests/fixtures/*.step         binary
+tests/integration/**/*.json   binary
+tests/integration/**/*.nc     binary
+tests/integration/**/*.svg    binary
+tests/integration/**/*.dxf    binary
