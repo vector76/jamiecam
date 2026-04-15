@@ -78,24 +78,30 @@ pub fn load_heightmap_inner(path: &str) -> Result<MeshData, AppError> {
             let z = zs[j * w + i];
             vertices.extend_from_slice(&[x as f32, y as f32, z as f32]);
 
-            let (zl, zr, step_x) = if i == 0 {
-                (zs[j * w + i], zs[j * w + i + 1], dx)
+            // Central difference with one-sided fallback at edges. Variables
+            // are named by their position in **world** coordinates so that
+            // `dz = (high - low) / step` reads unambiguously; world Y is
+            // flipped relative to image j, so the j-branches invert what
+            // "higher" means.
+            let z_here = zs[j * w + i];
+            let (z_low_x, z_high_x, step_x) = if i == 0 {
+                (z_here, zs[j * w + i + 1], dx)
             } else if i == w - 1 {
-                (zs[j * w + i - 1], zs[j * w + i], dx)
+                (zs[j * w + i - 1], z_here, dx)
             } else {
                 (zs[j * w + i - 1], zs[j * w + i + 1], 2.0 * dx)
             };
-            // Y axis in world space is flipped relative to image j, so swap
-            // the "up"/"down" neighbour ordering to keep dz/dy in world units.
-            let (zd, zu, step_y) = if j == 0 {
-                (zs[j * w + i], zs[(j + 1) * w + i], dy)
+            let (z_low_y, z_high_y, step_y) = if j == 0 {
+                // At maximum world y; only neighbour is at lower y (j+1).
+                (zs[(j + 1) * w + i], z_here, dy)
             } else if j == h - 1 {
-                (zs[(j - 1) * w + i], zs[j * w + i], dy)
+                // At minimum world y; only neighbour is at higher y (j-1).
+                (z_here, zs[(j - 1) * w + i], dy)
             } else {
                 (zs[(j + 1) * w + i], zs[(j - 1) * w + i], 2.0 * dy)
             };
-            let dz_dx = (zr - zl) / step_x;
-            let dz_dy = (zu - zd) / step_y;
+            let dz_dx = (z_high_x - z_low_x) / step_x;
+            let dz_dy = (z_high_y - z_low_y) / step_y;
 
             let nx = -dz_dx;
             let ny = -dz_dy;
@@ -284,6 +290,37 @@ mod tests {
             let cz = e1[0] * e2[1] - e1[1] * e2[0];
             let area2 = (cx * cx + cy * cy + cz * cz).sqrt();
             assert!(area2 > 1e-6, "triangle {tri} is degenerate");
+        }
+    }
+
+    #[test]
+    fn y_gradient_produces_correct_normal_sign_at_edges_and_interior() {
+        // Image rows vary; columns are constant. Image row 0 (top) = black (z=0),
+        // image row H-1 (bottom) = white (z=10 mm). In world coords, row 0 maps
+        // to the MAXIMUM y, so z _decreases_ as world y increases → dz/dy < 0 →
+        // normal's Y component should be POSITIVE (ny = -dz/dy > 0) at every
+        // row, including the top and bottom edges.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut img: ImageBuffer<Luma<u16>, Vec<u16>> = ImageBuffer::new(3, 3);
+        for j in 0..3u32 {
+            for i in 0..3u32 {
+                let v = (j as f64 / 2.0 * u16::MAX as f64) as u16;
+                img.put_pixel(i, j, Luma([v]));
+            }
+        }
+        let path = write_test_png(&tmp, "ygrad.png", img);
+        let mesh = load_heightmap_inner(&path).unwrap();
+
+        // Normal at (i=0, j=0) — top-left, edge in both axes (tests one-sided y).
+        // Normal at (i=1, j=1) — interior (tests central-difference y).
+        // Normal at (i=0, j=2) — bottom-left, edge in both axes (tests j==h-1).
+        for (label, vertex_idx) in [("top-edge", 0), ("interior", 4), ("bottom-edge", 6)] {
+            let ny = mesh.normals[vertex_idx * 3 + 1];
+            assert!(
+                ny > 0.0,
+                "normal Y at {label} vertex should be positive (surface slopes down \
+                 as world y increases); got ny = {ny}",
+            );
         }
     }
 
