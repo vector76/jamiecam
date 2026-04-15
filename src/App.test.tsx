@@ -29,6 +29,10 @@ vi.mock('./components/modes/twod/Mode2DMode', () => ({
   Mode2DMode: () => <div data-testid="mode-2d-mode" />,
 }))
 
+vi.mock('./components/modes/Mode3dMode', () => ({
+  Mode3dMode: () => <div data-testid="mode-3d-mode" />,
+}))
+
 vi.mock('./components/common/Notifications', () => ({
   Notifications: () => <div data-testid="notifications" />,
 }))
@@ -123,17 +127,16 @@ describe('App', () => {
     })
   })
 
-  describe('mode state (projectIsOpen: true, mode: "3d")', () => {
+  describe('3d mode state (projectIsOpen: true, mode: "3d")', () => {
     beforeEach(() => {
       useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: true, mode: '3d' } })
     })
 
-    it('renders ModePlaceholder for 3D Surface and not ModeSelector', () => {
+    it('renders Mode3dMode and not ModeSelector or ModePlaceholder', () => {
       render(<App />)
+      expect(screen.getByTestId('mode-3d-mode')).toBeInTheDocument()
       expect(screen.queryByTestId('mode-selector')).not.toBeInTheDocument()
-      const placeholder = screen.getByTestId('mode-placeholder')
-      expect(placeholder).toBeInTheDocument()
-      expect(placeholder).toHaveAttribute('data-mode', '3d')
+      expect(screen.queryByTestId('mode-placeholder')).not.toBeInTheDocument()
     })
 
     it('renders Notifications', () => {
@@ -144,6 +147,19 @@ describe('App', () => {
     it('renders UnsavedChangesDialog', () => {
       render(<App />)
       expect(screen.getByTestId('unsaved-dialog')).toBeInTheDocument()
+    })
+  })
+
+  describe('unimplemented mode state (projectIsOpen: true, mode: "2_5d")', () => {
+    beforeEach(() => {
+      useProjectStore.setState({ snapshot: { ...SNAPSHOT, projectIsOpen: true, mode: '2_5d' } })
+    })
+
+    it('falls through to ModePlaceholder', () => {
+      render(<App />)
+      const placeholder = screen.getByTestId('mode-placeholder')
+      expect(placeholder).toBeInTheDocument()
+      expect(placeholder).toHaveAttribute('data-mode', '2_5d')
     })
   })
 })

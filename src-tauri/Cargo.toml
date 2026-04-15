@@ -43,6 +43,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 toml = "1"
 usvg = "0"
 dxf = "0"
+image = { version = "0.25", default-features = false, features = ["png", "tiff"] }
 
 [[test]]
 name = "gcode_golden"

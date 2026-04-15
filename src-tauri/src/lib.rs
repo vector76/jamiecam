@@ -161,6 +161,7 @@ pub fn run() {
             commands::gcode_viewer::load_gcode_for_viewer,
             commands::gcode_viewer::simulate_gcode_viewer,
             commands::gcode_viewer::get_sample_gcode_path,
+            commands::heightmap::load_heightmap,
             commands::dexel::get_simulation_mesh,
             commands::global_tools::list_global_tools,
             commands::global_tools::add_global_tool,

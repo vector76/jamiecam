@@ -5,6 +5,7 @@
 //! - [`file`]         — open model, save / load / new project, export G-code
 //! - [`gcode_parser`] — G-code text parsing
 //! - [`geometry`]     — face enumeration for loaded B-rep models
+//! - [`heightmap`]    — 3D mode: heightmap image import → tessellated plane
 //! - [`global_tools`] — global tool library CRUD (persisted across projects)
 //! - [`operations`]   — machining operation CRUD and reorder
 //! - [`project`]      — lightweight project state queries
@@ -19,6 +20,7 @@ pub mod file;
 pub mod gcode_parser;
 pub mod gcode_viewer;
 pub mod geometry;
+pub mod heightmap;
 pub mod global_tools;
 pub mod operations;
 pub mod project;
