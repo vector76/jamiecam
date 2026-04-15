@@ -365,6 +365,9 @@ fn expand_peck_chip_break(
 }
 
 #[cfg(test)]
+// Test fixtures deliberately use `let mut x = T::default(); x.field = ...;`
+// for readability when only a couple of fields differ from defaults.
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::super::interpreter::interpret_line;
     use super::super::state::{ModalState, RetractMode};

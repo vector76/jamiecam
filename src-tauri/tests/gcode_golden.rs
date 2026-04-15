@@ -137,7 +137,7 @@ fn simple_pocket_golden(controller: &str) {
     };
     let output = pp
         .generate(
-            &[toolpath.clone()],
+            std::slice::from_ref(&toolpath),
             &[tool_info],
             GenerateOptions {
                 program_number: Some(1000),
@@ -349,7 +349,7 @@ fn grbl_drill_expansion_golden_matches() {
     };
     let output = pp
         .generate(
-            &[toolpath.clone()],
+            std::slice::from_ref(&toolpath),
             &[tool_info],
             GenerateOptions {
                 program_number: None,
@@ -390,7 +390,7 @@ fn linuxcnc_drill_cycle_golden_matches() {
     };
     let output = pp
         .generate(
-            &[toolpath.clone()],
+            std::slice::from_ref(&toolpath),
             &[tool_info],
             GenerateOptions {
                 program_number: None,
@@ -431,7 +431,7 @@ fn fanuc_0i_drill_cycle_golden_matches() {
     };
     let output = pp
         .generate(
-            &[toolpath.clone()],
+            std::slice::from_ref(&toolpath),
             &[tool_info],
             GenerateOptions {
                 program_number: None,

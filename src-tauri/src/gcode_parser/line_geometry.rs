@@ -577,10 +577,10 @@ mod tests {
             let z_start = geo.positions[i * 6 + 2];
             let z_end = geo.positions[i * 6 + 5];
             assert!(
-                z_start >= 0.0 && z_start <= 8.0,
+                (0.0..=8.0).contains(&z_start),
                 "Z out of range: {z_start}"
             );
-            assert!(z_end >= 0.0 && z_end <= 8.0, "Z out of range: {z_end}");
+            assert!((0.0..=8.0).contains(&z_end), "Z out of range: {z_end}");
             if i > 0 && i < n_segs - 1 && z_start > 0.001 {
                 saw_intermediate_z = true;
             }
@@ -613,7 +613,7 @@ mod tests {
             "XZ CW quarter arc should be ~16 segments, got {}",
             geo.types.len()
         );
-        assert!(geo.types.len() >= 1);
+        assert!(!geo.types.is_empty());
         // First point must match start.
         assert!((geo.positions[0] - 10.0_f32).abs() < 1e-4);
         assert!((geo.positions[1] - 0.0_f32).abs() < 1e-4);

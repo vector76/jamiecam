@@ -239,6 +239,10 @@ impl DexelGrid {
 }
 
 #[cfg(test)]
+// Row-major index formulas (`row * stride + col`) are written literally even
+// when row is 1; the pattern is self-documenting and preferred over
+// collapsing to the reduced form.
+#[allow(clippy::identity_op)]
 mod tests {
     use super::*;
     use crate::models::stock::{BoxDimensions, Vec3};

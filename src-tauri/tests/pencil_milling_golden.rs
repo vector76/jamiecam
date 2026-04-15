@@ -58,7 +58,7 @@ fn pencil_milling_golden_matches() {
     let params = plate_params();
 
     let passes = pencil_milling_passes(&stock, &params, 6.0, Some(&shape)).expect("should succeed");
-    assert!(passes.len() >= 1, "expected at least 1 pass, got 0");
+    assert!(!passes.is_empty(), "expected at least 1 pass, got 0");
 
     let json = serde_json::to_string_pretty(&passes).expect("serialize passes");
 

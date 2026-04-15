@@ -441,7 +441,7 @@ mod tests_no_bindings {
             passes.len()
         );
         let z_values: Vec<f64> = passes.iter().map(|p| p.cuts[0].position.z).collect();
-        let expected = vec![8.0, 6.0, 4.0, 2.0];
+        let expected = [8.0, 6.0, 4.0, 2.0];
         for (got, exp) in z_values.iter().zip(expected.iter()) {
             assert!((got - exp).abs() < 1e-9, "expected Z={exp}, got Z={got}");
         }

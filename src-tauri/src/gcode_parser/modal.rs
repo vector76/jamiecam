@@ -167,6 +167,9 @@ impl ModalState {
 }
 
 #[cfg(test)]
+// Test fixtures deliberately use `let mut x = T::default(); x.field = ...;`
+// for readability when only a couple of fields differ from defaults.
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::super::state::RetractMode;
     use super::*;

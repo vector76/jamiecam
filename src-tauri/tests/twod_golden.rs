@@ -1,4 +1,7 @@
 #![cfg(cam_geometry_bindings)]
+// Test fixtures deliberately use `let mut x = T::default(); x.field = ...;`
+// for readability when only a couple of fields differ from defaults.
+#![allow(clippy::field_reassign_with_default)]
 
 //! Golden tests for the `generate_2d_gcode` IPC command (Mode 2 — 2D Profiling).
 //!

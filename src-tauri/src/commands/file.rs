@@ -544,7 +544,7 @@ mod tests {
 
         let project = state.project.read().expect("read lock");
         assert_eq!(
-            project.file_path.as_ref().map(|p| p.as_path()),
+            project.file_path.as_deref(),
             Some(tmp.as_path()),
             "file_path must be set after save"
         );

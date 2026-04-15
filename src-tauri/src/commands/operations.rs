@@ -676,7 +676,7 @@ mod tests {
         let tmp = std::env::temp_dir().join("jcam_test_reorder_round_trip.jcam");
         {
             let project = state.project.read().expect("read");
-            save(&*project, &tmp).expect("save");
+            save(&project, &tmp).expect("save");
         }
         let loaded = load(&tmp).expect("load");
         let _ = std::fs::remove_file(&tmp);

@@ -440,8 +440,7 @@ mod tests {
 
         // All arc points lie on the quarter-circle of radius R=5
         let r = 5.0;
-        for i in 0..=4 {
-            let (pr, pz) = pts[i];
+        for (i, &(pr, pz)) in pts.iter().enumerate().take(5) {
             let dist = (pr * pr + (pz - r) * (pz - r)).sqrt();
             assert_approx(dist, r, 1e-10, &format!("arc[{}] on circle", i));
         }

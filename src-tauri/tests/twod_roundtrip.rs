@@ -1,3 +1,7 @@
+// Test fixtures deliberately use `let mut x = T::default(); x.field = ...;`
+// for readability when only a couple of fields differ from defaults.
+#![allow(clippy::field_reassign_with_default)]
+
 //! Serialization roundtrip test for Mode 2 (2D Profiling) project fields.
 //!
 //! Does NOT require the `cam_geometry_bindings` feature and must always run.

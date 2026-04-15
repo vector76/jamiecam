@@ -259,6 +259,7 @@ mod tests {
     }
 
     /// Create an Arc CutPoint.  Convention: position = arc start, end = arc end.
+    #[allow(clippy::too_many_arguments)]
     fn arc_point(
         start_x: f64,
         start_y: f64,

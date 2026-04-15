@@ -696,6 +696,9 @@ pub async fn save_2d_gcode(path: String, gcode: String) -> Result<(), AppError> 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+// Test fixtures deliberately use `let mut x = T::default(); x.field = ...;`
+// for readability when only a couple of fields differ from defaults.
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use crate::project::serialization;

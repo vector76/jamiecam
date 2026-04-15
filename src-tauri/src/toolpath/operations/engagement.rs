@@ -296,7 +296,7 @@ mod tests {
         let material = big_rect();
         let e = compute_engagement((-4.9, 50.0), 5.0, &material);
         assert!(
-            e >= 0.0 && e < 0.05,
+            (0.0..0.05).contains(&e),
             "tool barely overlapping: expected <0.05, got {e}"
         );
     }
