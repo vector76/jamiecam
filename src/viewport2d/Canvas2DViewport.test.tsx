@@ -10,6 +10,7 @@
 import { act, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { Canvas2DViewport, type Canvas2DDrawAPI, CANVAS_2D_STYLES } from './Canvas2DViewport'
+import { useViewport2DStore } from '../store/viewport2dStore'
 
 // ── Global stubs ─────────────────────────────────────────────────────────────
 
@@ -48,6 +49,24 @@ function makeMockCtx() {
 
 type MockCtx = ReturnType<typeof makeMockCtx>
 
+/**
+ * jsdom does not implement PointerEvent. The handlers under test only
+ * read `pointerId`, `clientX`, and `clientY`, so we synthesise a
+ * MouseEvent of the right type and attach a `pointerId` property.
+ */
+function pointer(
+  type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+  init: { pointerId?: number; clientX?: number; clientY?: number },
+): Event {
+  const e = new MouseEvent(type, {
+    bubbles: true,
+    clientX: init.clientX ?? 0,
+    clientY: init.clientY ?? 0,
+  })
+  Object.defineProperty(e, 'pointerId', { value: init.pointerId ?? 1, configurable: true })
+  return e
+}
+
 let mockCtx: MockCtx
 let originalGetContext: typeof HTMLCanvasElement.prototype.getContext
 
@@ -67,6 +86,7 @@ beforeEach(() => {
     configurable: true,
     value: 300,
   })
+  useViewport2DStore.getState().reset()
 })
 
 afterEach(() => {
@@ -216,7 +236,7 @@ describe('Canvas2DViewport — drawing API', () => {
     expect(mockCtx.restore).toHaveBeenCalled()
   })
 
-  it('passes through world coordinates unchanged (identity for now)', () => {
+  it('passes through world coordinates unchanged under the identity transform', () => {
     const ref = createRef<Canvas2DDrawAPI>()
     render(<Canvas2DViewport ref={ref} />)
     act(() => {
@@ -224,5 +244,95 @@ describe('Canvas2DViewport — drawing API', () => {
     })
     expect(mockCtx.moveTo).toHaveBeenCalledWith(123.5, -7.25)
     expect(mockCtx.lineTo).toHaveBeenCalledWith(200, 0)
+  })
+
+  it('applies the store transform when drawing', () => {
+    const ref = createRef<Canvas2DDrawAPI>()
+    render(<Canvas2DViewport ref={ref} />)
+    act(() => {
+      useViewport2DStore.getState().setTransform({ tx: 50, ty: -10, scale: 2 })
+    })
+    act(() => {
+      ref.current!.polyline([[10, 5], [20, 0]], 'artwork')
+    })
+    // world (10,5) → (10*2+50, 5*2-10) = (70, 0)
+    expect(mockCtx.moveTo).toHaveBeenCalledWith(70, 0)
+    // world (20,0) → (20*2+50, 0*2-10) = (90, -10)
+    expect(mockCtx.lineTo).toHaveBeenCalledWith(90, -10)
+  })
+})
+
+// ── Pan / zoom integration ───────────────────────────────────────────────────
+
+describe('Canvas2DViewport — pan/zoom interactions', () => {
+  it('drag updates the store transform translation by the cumulative screen delta', () => {
+    const { container } = render(<Canvas2DViewport />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+
+    act(() => {
+      canvas.dispatchEvent(pointer('pointerdown', { clientX: 100, clientY: 100 }))
+      canvas.dispatchEvent(pointer('pointermove', { clientX: 140, clientY: 75 }))
+      canvas.dispatchEvent(pointer('pointerup', { clientX: 140, clientY: 75 }))
+    })
+
+    const t = useViewport2DStore.getState().transform
+    expect(t.tx).toBe(40)
+    expect(t.ty).toBe(-25)
+    expect(t.scale).toBe(1)
+  })
+
+  it('pointer move without a prior pointerdown does not pan', () => {
+    const { container } = render(<Canvas2DViewport />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+    act(() => {
+      canvas.dispatchEvent(pointer('pointermove', { clientX: 200, clientY: 200 }))
+    })
+    expect(useViewport2DStore.getState().transform).toEqual({ tx: 0, ty: 0, scale: 1 })
+  })
+
+  it('pointer move after pointerup stops panning', () => {
+    const { container } = render(<Canvas2DViewport />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+    act(() => {
+      canvas.dispatchEvent(pointer('pointerdown', { clientX: 0, clientY: 0 }))
+      canvas.dispatchEvent(pointer('pointermove', { clientX: 10, clientY: 10 }))
+      canvas.dispatchEvent(pointer('pointerup', { clientX: 10, clientY: 10 }))
+      canvas.dispatchEvent(pointer('pointermove', { clientX: 50, clientY: 50 }))
+    })
+    expect(useViewport2DStore.getState().transform.tx).toBe(10)
+    expect(useViewport2DStore.getState().transform.ty).toBe(10)
+  })
+
+  it('wheel up zooms in at the cursor', () => {
+    const { container } = render(<Canvas2DViewport />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+
+    act(() => {
+      canvas.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -100, clientX: 200, clientY: 150, bubbles: true, cancelable: true }),
+      )
+    })
+
+    const t = useViewport2DStore.getState().transform
+    expect(t.scale).toBeCloseTo(1.1, 9)
+    // Pivot at (200, 150) on identity transform → world (200, 150).
+    // After zooming to scale 1.1, world point must still land at (200, 150):
+    // tx = 200 - 200 * 1.1 = -20, ty = 150 - 150 * 1.1 = -15.
+    expect(t.tx).toBeCloseTo(-20, 9)
+    expect(t.ty).toBeCloseTo(-15, 9)
+  })
+
+  it('wheel down zooms out at the cursor', () => {
+    const { container } = render(<Canvas2DViewport />)
+    const canvas = container.querySelector('canvas') as HTMLCanvasElement
+
+    act(() => {
+      canvas.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: 100, clientX: 0, clientY: 0, bubbles: true, cancelable: true }),
+      )
+    })
+
+    const t = useViewport2DStore.getState().transform
+    expect(t.scale).toBeCloseTo(1 / 1.1, 9)
   })
 })
