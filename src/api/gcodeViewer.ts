@@ -62,6 +62,17 @@ function getSimClient(): SimulationClient {
 }
 
 /**
+ * Eagerly fetch + instantiate the wasm module without performing any work.
+ *
+ * Lets the UI display an "initializing engine" indicator at startup so the
+ * wasm download isn't hidden behind a button click. Idempotent — subsequent
+ * callers reuse the same promise.
+ */
+export async function prewarmWasm(): Promise<void> {
+  await getWasm()
+}
+
+/**
  * Parse G-code text, returning header metadata, viewport line geometry,
  * and any non-fatal warnings. Throws an `AppError`-shaped object on failure.
  */

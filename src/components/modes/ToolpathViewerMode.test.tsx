@@ -20,13 +20,14 @@ import { packJcamProject, type ProjectState } from '../../persistence/projectFil
 vi.mock('../../api/gcodeViewer', () => ({
   loadGcodeForViewer: vi.fn(),
   simulateGcodeViewer: vi.fn(),
+  prewarmWasm: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../viewport/Viewport', () => ({
   Viewport: () => <div data-testid="viewport-mock" />,
 }))
 
-import { loadGcodeForViewer, simulateGcodeViewer } from '../../api/gcodeViewer'
+import { loadGcodeForViewer, prewarmWasm, simulateGcodeViewer } from '../../api/gcodeViewer'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -67,12 +68,44 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('ToolpathViewerMode', () => {
-  it('renders the file-action buttons', () => {
+  it('renders the file-action buttons', async () => {
     render(<ToolpathViewerMode />)
     expect(screen.getByText('Open G-code…')).toBeInTheDocument()
     expect(screen.getByText('Open Project…')).toBeInTheDocument()
     expect(screen.getByText('Save Project')).toBeInTheDocument()
     expect(screen.getByText('Load Sample')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows an engine-initializing indicator until prewarm resolves', async () => {
+    // Hold the prewarm promise open so we can observe the "Initializing…" state.
+    let resolvePrewarm!: () => void
+    vi.mocked(prewarmWasm).mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolvePrewarm = resolve
+      }),
+    )
+    render(<ToolpathViewerMode />)
+    expect(screen.getByText('Initializing engine…')).toBeInTheDocument()
+
+    resolvePrewarm()
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
+  })
+
+  it('surfaces an error if the wasm engine fails to initialize', async () => {
+    vi.mocked(prewarmWasm).mockRejectedValueOnce({
+      kind: 'Io',
+      message: 'failed to fetch wasm',
+    })
+    render(<ToolpathViewerMode />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Engine failed to load: failed to fetch wasm/)).toBeInTheDocument()
+    })
   })
 
   it('loads a file via the hidden input and shows metadata', async () => {
@@ -222,9 +255,14 @@ describe('ToolpathViewerMode', () => {
     })
   })
 
-  it('Save Project is disabled until a G-code file is loaded', () => {
+  it('Save Project is disabled until a G-code file is loaded', async () => {
     render(<ToolpathViewerMode />)
     expect(screen.getByText('Save Project')).toBeDisabled()
+    // Wait for the prewarm useEffect to settle so its setState doesn't
+    // fire after the test returns (would trigger an act() warning).
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
   })
 
   it('Save Project triggers a .jcam download after loading a file', async () => {

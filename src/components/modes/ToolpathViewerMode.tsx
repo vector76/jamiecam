@@ -12,7 +12,11 @@ import { Viewport } from '../../viewport/Viewport'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { loadGcodeForViewer, simulateGcodeViewer } from '../../api/gcodeViewer'
+import {
+  loadGcodeForViewer,
+  prewarmWasm,
+  simulateGcodeViewer,
+} from '../../api/gcodeViewer'
 import { useViewportStore } from '../../store/viewportStore'
 import type { GcodeViewerLoadResult, SimulateGcodeViewerParams } from '../../api/types'
 import {
@@ -27,6 +31,7 @@ const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/demo-pocket.nc`
 
 type LoadStatus = 'idle' | 'loading' | 'loaded' | 'error'
 type SimStatus = 'idle' | 'simulating' | 'ready' | 'error'
+type EngineStatus = 'initializing' | 'ready' | 'failed'
 
 interface SimForm {
   originX: string
@@ -161,6 +166,9 @@ export function ToolpathViewerMode() {
   const [recents, setRecents] = useState<RecentRecord[]>([])
   const [projectError, setProjectError] = useState<string | null>(null)
 
+  const [engineStatus, setEngineStatus] = useState<EngineStatus>('initializing')
+  const [engineError, setEngineError] = useState<string | null>(null)
+
   const refreshRecents = useCallback(async () => {
     try {
       setRecents(await listRecents())
@@ -175,7 +183,19 @@ export function ToolpathViewerMode() {
     useViewportStore.getState().setToolpathGeometry(null)
     useViewportStore.getState().clearSimulationMesh()
     void refreshRecents()
+    let cancelled = false
+    prewarmWasm().then(
+      () => {
+        if (!cancelled) setEngineStatus('ready')
+      },
+      (err: { message?: string; kind?: string }) => {
+        if (cancelled) return
+        setEngineStatus('failed')
+        setEngineError(err.message ?? err.kind ?? 'Failed to initialize engine')
+      },
+    )
     return () => {
+      cancelled = true
       useViewportStore.getState().setToolpathGeometry(null)
       useViewportStore.getState().clearSimulationMesh()
     }
@@ -195,6 +215,10 @@ export function ToolpathViewerMode() {
     setLoadError(null)
     try {
       const result = await loadGcodeForViewer(content)
+      // A successful load proves the engine works — clear any stale failure
+      // indicator left over from a transient prewarm error.
+      setEngineStatus('ready')
+      setEngineError(null)
       setFileName(name)
       setGcodeContent(content)
       setLoadResult(result)
@@ -355,6 +379,16 @@ export function ToolpathViewerMode() {
 
             <SidebarSection title="File">
               <div className="flex flex-col gap-2">
+                {engineStatus === 'initializing' && (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Initializing engine…
+                  </p>
+                )}
+                {engineStatus === 'failed' && (
+                  <p className="text-xs text-destructive" role="alert">
+                    Engine failed to load: {engineError}
+                  </p>
+                )}
                 <Button size="sm" className="w-full" onClick={handlePickFile}>
                   Open G-code…
                 </Button>
