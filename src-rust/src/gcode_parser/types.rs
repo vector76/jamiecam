@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::Vec3;
 
+pub use crate::parse_warning::ParseWarning;
+
 /// The complete result of parsing a G-code program.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,14 +73,6 @@ pub struct SegmentMetadata {
 pub struct ToolChange {
     pub segment_index: usize,
     pub tool_number: u32,
-}
-
-/// A non-fatal warning generated during parsing.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ParseWarning {
-    pub line: usize,
-    pub message: String,
 }
 
 /// Active working plane for arc interpolation.

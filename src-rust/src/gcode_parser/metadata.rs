@@ -120,7 +120,7 @@ pub fn parse_metadata(header_comments: &[String]) -> GcodeMetadata {
                 Ok(s) => {
                     if stock.is_some() {
                         warnings.push(ParseWarning {
-                            line,
+                            line: Some(line as u32),
                             message: format!(
                                 "duplicate @STOCK comment ignored; only the first definition is used (comment: \"{comment}\")"
                             ),
@@ -131,7 +131,7 @@ pub fn parse_metadata(header_comments: &[String]) -> GcodeMetadata {
                 }
                 Err(reason) => {
                     warnings.push(ParseWarning {
-                        line,
+                        line: Some(line as u32),
                         message: format!(
                             "malformed @STOCK comment ignored — {reason} (comment: \"{comment}\")"
                         ),
@@ -148,7 +148,7 @@ pub fn parse_metadata(header_comments: &[String]) -> GcodeMetadata {
                     let num = t.number;
                     if tool_map.contains_key(&num) {
                         warnings.push(ParseWarning {
-                            line,
+                            line: Some(line as u32),
                             message: format!(
                                 "duplicate @TOOL T{num} comment; later definition replaces earlier one (comment: \"{comment}\")"
                             ),
@@ -160,7 +160,7 @@ pub fn parse_metadata(header_comments: &[String]) -> GcodeMetadata {
                 }
                 Err(reason) => {
                     warnings.push(ParseWarning {
-                        line,
+                        line: Some(line as u32),
                         message: format!(
                             "malformed @TOOL comment ignored — {reason} (comment: \"{comment}\")"
                         ),

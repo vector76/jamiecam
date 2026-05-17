@@ -166,21 +166,21 @@ pub(crate) fn interpret_line(
 
     if let Some(code) = cutter_comp_code {
         warnings.push(ParseWarning {
-            line: source_line,
+            line: Some(source_line as u32),
             message: format!("cutter compensation G{} not supported", code.round() as i32),
         });
     }
 
     for code in &unrecognized_g {
         warnings.push(ParseWarning {
-            line: source_line,
+            line: Some(source_line as u32),
             message: format!("unrecognized G-code G{}", code),
         });
     }
 
     for code in &unrecognized_m {
         warnings.push(ParseWarning {
-            line: source_line,
+            line: Some(source_line as u32),
             message: format!("unrecognized M-code M{}", code),
         });
     }
@@ -188,7 +188,7 @@ pub(crate) fn interpret_line(
     for (action, value) in &m_actions {
         if *action == MCodeAction::Subprogram {
             warnings.push(ParseWarning {
-                line: source_line,
+                line: Some(source_line as u32),
                 message: format!("subprogram call M{} not supported", value.round() as i32),
             });
         }
@@ -236,7 +236,7 @@ pub(crate) fn interpret_line(
                 });
                 state.position = intermediate;
                 warnings.push(ParseWarning {
-                    line: source_line,
+                    line: Some(source_line as u32),
                     message:
                         "G28: machine home position unknown, intermediate point used as endpoint"
                             .to_string(),
@@ -356,7 +356,7 @@ pub(crate) fn interpret_line(
                 };
             }
             warnings.push(ParseWarning {
-                line: source_line,
+                line: Some(source_line as u32),
                 message: "axis words without prior motion mode, defaulting to G1".to_string(),
             });
             state.set_motion_mode(MotionMode::Linear);
@@ -377,7 +377,7 @@ pub(crate) fn interpret_line(
             MotionMode::Linear => {
                 if state.feed_rate == 0.0 && f_word.is_none() {
                     warnings.push(ParseWarning {
-                        line: source_line,
+                        line: Some(source_line as u32),
                         message: "feed rate is zero for linear move".to_string(),
                     });
                 }
@@ -541,7 +541,7 @@ mod tests {
         assert!(result
             .warnings
             .iter()
-            .any(|w| w.message.contains("feed rate is zero") && w.line == 5));
+            .any(|w| w.message.contains("feed rate is zero") && w.line == Some(5)));
     }
 
     // --- Tool staging and activation ---
@@ -573,7 +573,7 @@ mod tests {
 
         assert_eq!(result.warnings.len(), 1);
         assert!(result.warnings[0].message.contains("unrecognized G-code"));
-        assert_eq!(result.warnings[0].line, 7);
+        assert_eq!(result.warnings[0].line, Some(7));
     }
 
     // --- Program end ---
@@ -936,7 +936,7 @@ mod tests {
         let mut state = ModalState::default();
         let result = interp("M50", &mut state, 3);
         assert!(result.warnings[0].message.contains("unrecognized M-code"));
-        assert_eq!(result.warnings[0].line, 3);
+        assert_eq!(result.warnings[0].line, Some(3));
     }
 
     // --- Arc params alone with no motion mode → no segment, no crash ---

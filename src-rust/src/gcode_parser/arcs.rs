@@ -92,7 +92,7 @@ pub(crate) fn resolve_r_center(
 /// Validate that arc radii from center to start and center to end match.
 ///
 /// Returns a warning if the difference exceeds 0.01mm. The `line` field of the
-/// returned warning is set to 0; the caller should set it to the correct value.
+/// returned warning is left as `None`; the caller should set it to the correct value.
 pub(crate) fn validate_arc_radii(
     center: &Vec3,
     start: &Vec3,
@@ -109,7 +109,7 @@ pub(crate) fn validate_arc_radii(
     let diff = (r_start - r_end).abs();
     if diff > 0.01 {
         Some(ParseWarning {
-            line: 0,
+            line: None,
             message: format!(
                 "arc radii mismatch: start radius {:.4} vs end radius {:.4} (diff {:.4}mm)",
                 r_start, r_end, diff
@@ -136,7 +136,7 @@ pub(crate) fn resolve_arc(
     feed_rate: f64,
     metadata: SegmentMetadata,
 ) -> (Option<MotionSegment>, Vec<ParseWarning>) {
-    let line = metadata.source_line;
+    let line: Option<u32> = Some(metadata.source_line as u32);
     let mut warnings = Vec::new();
 
     let has_ijk = i.is_some() || j.is_some() || k.is_some();

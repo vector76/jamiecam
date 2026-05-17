@@ -104,7 +104,7 @@ pub(crate) fn expand_cycle(
                 let q = state.cycle_q;
                 if q <= 0.0 {
                     warnings.push(ParseWarning {
-                        line: source_line,
+                        line: Some(source_line as u32),
                         message: "G83 peck cycle Q <= 0, using single plunge".to_string(),
                     });
                     expand_simple_drill(
@@ -136,7 +136,7 @@ pub(crate) fn expand_cycle(
                 let q = state.cycle_q;
                 if q <= 0.0 {
                     warnings.push(ParseWarning {
-                        line: source_line,
+                        line: Some(source_line as u32),
                         message: "G73 chip break cycle Q <= 0, using single plunge".to_string(),
                     });
                     expand_simple_drill(

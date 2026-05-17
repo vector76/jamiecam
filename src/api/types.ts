@@ -78,11 +78,30 @@ export interface SimulateGcodeViewerParams {
   resolution: number
 }
 
-/** Error shape returned by wasm entry points. */
-export interface AppError {
-  kind: string
+/**
+ * Detail payload for the `ParseFailure` AppError variant. Used when a parser
+ * cannot produce any structured output (recoverable issues are reported as
+ * `ParseWarning` instead).
+ */
+export interface ParseFailureDetail {
+  source: string
   message: string
+  line: number | null
 }
+
+/**
+ * Error shape returned by wasm entry points. Mirrors `AppError` in
+ * `src-rust/src/error.rs`, serialized as `{ "kind": "<variant>", "message": <content> }`.
+ * The `Unknown` / `WorkerError` / `Disposed` arms are synthesised by the TS
+ * bridge for transport-layer failures.
+ */
+export type AppError =
+  | { kind: 'Io'; message: string }
+  | { kind: 'InvalidInput'; message: string }
+  | { kind: 'ParseFailure'; message: ParseFailureDetail }
+  | { kind: 'Unknown'; message: string }
+  | { kind: 'WorkerError'; message: string }
+  | { kind: 'Disposed'; message: string }
 
 /**
  * B-rep face descriptor. Mode 1 doesn't import models with face groups,

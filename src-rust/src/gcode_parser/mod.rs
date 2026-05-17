@@ -72,7 +72,7 @@ pub fn parse_gcode(input: &str) -> ParsedProgram {
 
         if tokens.has_expression {
             warnings.push(ParseWarning {
-                line: line_number,
+                line: Some(line_number as u32),
                 message: "Macro expressions not supported, line skipped".to_string(),
             });
             continue;
@@ -366,8 +366,8 @@ mod tests {
         let input = "G999\nG998\n";
         let result = parse_gcode(input);
         assert_eq!(result.warnings.len(), 2);
-        assert_eq!(result.warnings[0].line, 1);
-        assert_eq!(result.warnings[1].line, 2);
+        assert_eq!(result.warnings[0].line, Some(1));
+        assert_eq!(result.warnings[1].line, Some(2));
     }
 
     // --- Macro expression warning ---
@@ -379,7 +379,7 @@ mod tests {
         assert!(result
             .warnings
             .iter()
-            .any(|w| w.message.contains("Macro expressions") && w.line == 2));
+            .any(|w| w.message.contains("Macro expressions") && w.line == Some(2)));
         // The other two lines should still parse.
         assert_eq!(result.segments.len(), 2);
     }
