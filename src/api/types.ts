@@ -192,6 +192,44 @@ export interface Region {
 }
 
 /**
+ * Profile-cut operation: input descriptor and toolpath output.
+ *
+ * Mirrors `src-rust/src/profile/mod.rs`. Per phase-4 design §5 the first
+ * Mode 2 ship is a single profile operation per project — these types
+ * bracket the planner (input from the operation editor, output to the
+ * GRBL emitter / dexel preview). Distances are millimetres, feeds are
+ * mm/min.
+ */
+
+/** Which side of each boundary the cutter travels on. */
+export type CutSide = 'outside' | 'inside' | 'onLine'
+
+export interface ProfileOperationInput {
+  boundaries: Polyline[]
+  tool: Tool
+  cutSide: CutSide
+  depthTotal: number
+  depthPerPass: number
+  safeZ: number
+  plungeFeed: number
+  cutFeed: number
+  spindleRpm: number
+}
+
+/**
+ * A single toolpath move. `to` is `[x, y, z]` in mm. No arcs in first
+ * ship — every cutting move is linear (G1); every traverse is a rapid
+ * (G0).
+ */
+export type ToolpathMotion =
+  | { kind: 'rapid'; to: [number, number, number] }
+  | { kind: 'linear'; to: [number, number, number]; feed: number }
+
+/** Ordered toolpath: the first move is normally a rapid to the approach
+ * point at `safeZ`; the last is normally a rapid retract. */
+export type ToolpathOutput = ToolpathMotion[]
+
+/**
  * B-rep face descriptor. Mode 1 doesn't import models with face groups,
  * but the viewport store still carries the field for future modes.
  */
