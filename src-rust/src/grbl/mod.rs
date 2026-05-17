@@ -198,6 +198,7 @@ fn sanitize_token(s: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gcode_parser::{parse_gcode, parse_metadata, MotionSegment};
     use crate::types::Vec3;
     use crate::working_env::{FeedsAndSpeeds, ToolId};
 
@@ -459,5 +460,170 @@ mod tests {
         stock.origin.z = f64::NAN;
         let err = emit_grbl(&Vec::new(), &sample_tool(), &stock).unwrap_err();
         assert!(matches!(err, AppError::InvalidInput(_)));
+    }
+
+    // ── Round-trip through the parser ────────────────────────────────
+    //
+    // Per docs/phase-4-design.md §7 the cheap correctness gate for the
+    // emitter is that what it writes parses back to the same toolpath
+    // (motion-wise) and the same stock/tool metadata Mode 1 expects.
+
+    /// Tolerance for round-trip comparisons: the emitter formats numbers
+    /// with up to 4 decimal places, so worst-case rounding error is ~5e-5.
+    const ROUND_TRIP_TOL: f64 = 1e-4;
+
+    fn approx(a: f64, b: f64) -> bool {
+        (a - b).abs() <= ROUND_TRIP_TOL
+    }
+
+    #[test]
+    fn round_trip_motions_match_within_tolerance() {
+        // A profile-flavoured sequence: rapid to clearance, rapid to XY,
+        // plunge, two cutting moves, rapid retract.
+        let toolpath = vec![
+            ToolpathMotion::Rapid {
+                to: [0.0, 0.0, 5.0],
+            },
+            ToolpathMotion::Rapid {
+                to: [12.5, -3.0, 5.0],
+            },
+            ToolpathMotion::Linear {
+                to: [12.5, -3.0, -1.5],
+                feed: 200.0,
+            },
+            ToolpathMotion::Linear {
+                to: [22.5, -3.0, -1.5],
+                feed: 800.0,
+            },
+            ToolpathMotion::Linear {
+                to: [22.5, 7.0, -1.5],
+                feed: 800.0,
+            },
+            ToolpathMotion::Rapid {
+                to: [22.5, 7.0, 5.0],
+            },
+        ];
+        let gcode = emit_grbl(&toolpath, &sample_tool(), &sample_stock()).unwrap();
+        let parsed = parse_gcode(&gcode);
+        assert!(
+            parsed.warnings.is_empty(),
+            "unexpected parser warnings: {:?}",
+            parsed.warnings
+        );
+        assert_eq!(
+            parsed.segments.len(),
+            toolpath.len(),
+            "segment count mismatch; gcode:\n{gcode}"
+        );
+
+        for (i, (motion, seg)) in toolpath.iter().zip(parsed.segments.iter()).enumerate() {
+            match (motion, seg) {
+                (ToolpathMotion::Rapid { to }, MotionSegment::Rapid { end, .. }) => {
+                    assert!(approx(end.x, to[0]), "seg {i} rapid X: {end:?} vs {to:?}");
+                    assert!(approx(end.y, to[1]), "seg {i} rapid Y: {end:?} vs {to:?}");
+                    assert!(approx(end.z, to[2]), "seg {i} rapid Z: {end:?} vs {to:?}");
+                }
+                (
+                    ToolpathMotion::Linear { to, feed },
+                    MotionSegment::Linear { end, feed_rate, .. },
+                ) => {
+                    assert!(approx(end.x, to[0]), "seg {i} linear X: {end:?} vs {to:?}");
+                    assert!(approx(end.y, to[1]), "seg {i} linear Y: {end:?} vs {to:?}");
+                    assert!(approx(end.z, to[2]), "seg {i} linear Z: {end:?} vs {to:?}");
+                    assert!(
+                        approx(*feed_rate, *feed),
+                        "seg {i} linear feed: {feed_rate} vs {feed}"
+                    );
+                }
+                (m, s) => panic!("seg {i} kind mismatch: emitted {m:?}, parsed {s:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn round_trip_motions_with_sub_thousandth_precision() {
+        // Coordinates and feed needing the full 4-decimal precision the
+        // emitter offers — exercise the upper bound of rounding error.
+        let toolpath = vec![ToolpathMotion::Linear {
+            to: [1.23456, -2.7891, 0.1234],
+            feed: 567.8912,
+        }];
+        let gcode = emit_grbl(&toolpath, &sample_tool(), &sample_stock()).unwrap();
+        let parsed = parse_gcode(&gcode);
+        assert!(parsed.warnings.is_empty());
+        assert_eq!(parsed.segments.len(), 1);
+        match &parsed.segments[0] {
+            MotionSegment::Linear { end, feed_rate, .. } => {
+                assert!(approx(end.x, 1.23456));
+                assert!(approx(end.y, -2.7891));
+                assert!(approx(end.z, 0.1234));
+                assert!(approx(*feed_rate, 567.8912));
+            }
+            other => panic!("expected Linear, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn round_trip_stock_header_parses_to_matching_metadata() {
+        let stock = BoxDimensions {
+            origin: Vec3 {
+                x: -5.0,
+                y: -10.0,
+                z: 0.0,
+            },
+            width: 100.0,
+            depth: 80.0,
+            height: 20.0,
+        };
+        let gcode = emit_grbl(&Vec::new(), &sample_tool(), &stock).unwrap();
+        let parsed = parse_gcode(&gcode);
+        let meta = parse_metadata(&parsed.metadata.header_comments);
+        assert!(
+            meta.warnings.is_empty(),
+            "metadata warnings: {:?}",
+            meta.warnings
+        );
+
+        let parsed_stock = meta.stock.expect("@STOCK header should parse");
+        assert_eq!(parsed_stock.stock_type, "box");
+        assert!(approx(parsed_stock.width, stock.width));
+        assert!(approx(parsed_stock.depth, stock.depth));
+        assert!(approx(parsed_stock.height, stock.height));
+        assert!(approx(parsed_stock.origin.x, stock.origin.x));
+        assert!(approx(parsed_stock.origin.y, stock.origin.y));
+        assert!(approx(parsed_stock.origin.z, stock.origin.z));
+    }
+
+    #[test]
+    fn round_trip_tool_header_parses_to_matching_metadata() {
+        let tool = sample_tool();
+        let gcode = emit_grbl(&Vec::new(), &tool, &sample_stock()).unwrap();
+        let parsed = parse_gcode(&gcode);
+        let meta = parse_metadata(&parsed.metadata.header_comments);
+        assert!(
+            meta.warnings.is_empty(),
+            "metadata warnings: {:?}",
+            meta.warnings
+        );
+
+        assert_eq!(meta.tools.len(), 1);
+        let parsed_tool = &meta.tools[0];
+        assert_eq!(parsed_tool.number, TOOL_NUMBER);
+        assert_eq!(parsed_tool.tool_type, "endmill");
+        assert!(approx(parsed_tool.diameter, tool.diameter));
+        assert_eq!(parsed_tool.flutes, Some(tool.flute_count));
+        assert_eq!(parsed_tool.material.as_deref(), Some("carbide"));
+    }
+
+    #[test]
+    fn round_trip_tool_header_omits_material_when_blank() {
+        let mut tool = sample_tool();
+        tool.material = "   ".into();
+        let gcode = emit_grbl(&Vec::new(), &tool, &sample_stock()).unwrap();
+        let parsed = parse_gcode(&gcode);
+        let meta = parse_metadata(&parsed.metadata.header_comments);
+        assert!(meta.warnings.is_empty());
+        assert_eq!(meta.tools.len(), 1);
+        assert_eq!(meta.tools[0].material, None);
     }
 }
