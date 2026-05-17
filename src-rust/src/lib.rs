@@ -10,3 +10,4 @@ pub mod gcode_parser;
 pub mod parse_warning;
 pub mod types;
 pub mod wasm;
+pub mod working_env;

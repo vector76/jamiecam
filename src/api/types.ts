@@ -104,6 +104,65 @@ export type AppError =
   | { kind: 'Disposed'; message: string }
 
 /**
+ * Working environment (machine setups, tools, and their availability matrix).
+ * Mirrors `src-rust/src/working_env/mod.rs`. Saved separately from `.jcam`
+ * project files because it describes the user's CNC hardware rather than any
+ * particular project. Per phase-4 design §6, tools are NOT nested inside
+ * setups — the same tool often fits multiple setups, and the compatibility
+ * relation is recorded in `AvailabilityMatrix`.
+ */
+
+/** Stable id for a `MachineSetup`. Intended source: UUID string. */
+export type SetupId = string
+
+/** Stable id for a `Tool`. Intended source: UUID string. */
+export type ToolId = string
+
+export interface SafetyParams {
+  safeZ: number
+  rapidFeedRate: number
+}
+
+export interface MachineSetup {
+  id: SetupId
+  name: string
+  workspace: BoxDimensions
+  kinematics: string
+  postProcessor: string
+  safety: SafetyParams
+}
+
+export interface FeedsAndSpeeds {
+  spindleRpm: number
+  feedRate: number
+  plungeRate: number
+}
+
+export interface Tool {
+  id: ToolId
+  name: string
+  diameter: number
+  fluteCount: number
+  length: number
+  material: string
+  recommended: FeedsAndSpeeds
+}
+
+export interface AvailabilityPair {
+  setupId: SetupId
+  toolId: ToolId
+}
+
+/** Serialized as a JSON array of `AvailabilityPair`s (sorted on the Rust side). */
+export type AvailabilityMatrix = AvailabilityPair[]
+
+export interface WorkingEnvironment {
+  setups: MachineSetup[]
+  tools: Tool[]
+  availability: AvailabilityMatrix
+}
+
+/**
  * B-rep face descriptor. Mode 1 doesn't import models with face groups,
  * but the viewport store still carries the field for future modes.
  */
