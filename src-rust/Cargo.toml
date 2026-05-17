@@ -16,6 +16,14 @@ thiserror = "2"
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
 console_error_panic_hook = { version = "0.1", optional = true }
+dxf = "0.6"
+
+# `dxf` pulls in `uuid` with the `v4` feature, which needs a randomness
+# source. On the wasm target `uuid` requires the `js` feature to wire
+# itself up to `wasm-bindgen`'s crypto bridge. We never call uuid
+# directly — this dep exists solely to enable that feature.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", features = ["js"] }
 
 [features]
 default = ["console_error_panic_hook"]
