@@ -8,9 +8,12 @@
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { IDBFactory } from 'fake-indexeddb'
 import { ToolpathViewerMode } from './ToolpathViewerMode'
 import { useViewportStore } from '../../store/viewportStore'
 import type { GcodeViewerLoadResult } from '../../api/types'
+import { __resetRecentsForTests, upsertRecent } from '../../persistence/recents'
+import { packJcamProject, type ProjectState } from '../../persistence/projectFile'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -55,14 +58,20 @@ const SAMPLE_RESULT: GcodeViewerLoadResult = {
 beforeEach(() => {
   vi.clearAllMocks()
   useViewportStore.setState({ toolpathGeometry: null, simulationMeshData: null })
+  // Fresh IndexedDB per test so recents written by one test don't leak
+  // into the next (e.g. cause a "Recent" section to appear unexpectedly).
+  globalThis.indexedDB = new IDBFactory()
+  __resetRecentsForTests()
 })
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('ToolpathViewerMode', () => {
-  it('renders Open File and Load Sample buttons', () => {
+  it('renders the file-action buttons', () => {
     render(<ToolpathViewerMode />)
-    expect(screen.getByText('Open File…')).toBeInTheDocument()
+    expect(screen.getByText('Open G-code…')).toBeInTheDocument()
+    expect(screen.getByText('Open Project…')).toBeInTheDocument()
+    expect(screen.getByText('Save Project')).toBeInTheDocument()
     expect(screen.getByText('Load Sample')).toBeInTheDocument()
   })
 
@@ -211,6 +220,130 @@ describe('ToolpathViewerMode', () => {
       expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('')
       expect((screen.getByLabelText('Tool Ø') as HTMLInputElement).value).toBe('')
     })
+  })
+
+  it('Save Project is disabled until a G-code file is loaded', () => {
+    render(<ToolpathViewerMode />)
+    expect(screen.getByText('Save Project')).toBeDisabled()
+  })
+
+  it('Save Project triggers a .jcam download after loading a file', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
+
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:fake')
+    const revokeObjectURL = vi.fn<(url: string) => void>()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['G0 X0\n'], 'pocket.nc', { type: 'text/plain' })] },
+    })
+    await waitFor(() => expect(screen.getByText('Save Project')).not.toBeDisabled())
+
+    fireEvent.click(screen.getByText('Save Project'))
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1)
+    const blob = createObjectURL.mock.calls[0][0]
+    expect(blob.type).toBe('application/zip')
+    expect(blob.size).toBeGreaterThan(0)
+    expect(anchorClick).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake')
+
+    anchorClick.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('Open Project restores the saved sim params (not the file metadata)', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
+
+    // Saved sim uses different dims than SAMPLE_RESULT's @STOCK metadata
+    // (200×60×8 vs 100×50×10) so we can tell which one wins on restore.
+    const saved: ProjectState = {
+      fileName: 'archived.nc',
+      gcode: '; some other gcode\nG0 X0\n',
+      sim: {
+        stock: { origin: { x: 1, y: 2, z: 3 }, width: 200, depth: 60, height: 8 },
+        toolDiameter: 12,
+        resolution: 0.25,
+      },
+    }
+    const bytes = packJcamProject(saved)
+    const jcamFile = new File([new Uint8Array(bytes)], 'archived.jcam', {
+      type: 'application/zip',
+    })
+
+    render(<ToolpathViewerMode />)
+    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
+    fireEvent.change(projectInput, { target: { files: [jcamFile] } })
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('200')
+    })
+    expect((screen.getByLabelText('Tool Ø') as HTMLInputElement).value).toBe('12')
+    expect((screen.getByLabelText('Resolution') as HTMLInputElement).value).toBe('0.25')
+    expect((screen.getByLabelText('Origin Z') as HTMLInputElement).value).toBe('3')
+    expect(loadGcodeForViewer).toHaveBeenCalledWith(saved.gcode)
+  })
+
+  it('Open Project shows a clear error for a non-jcam file', async () => {
+    render(<ToolpathViewerMode />)
+    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
+    fireEvent.change(projectInput, {
+      target: { files: [new File(['hello'], 'junk.jcam', { type: 'application/zip' })] },
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/valid zip|JamieCam project/i)
+  })
+
+  it('Recent list appears after loading a file and restores it on click', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValue(SAMPLE_RESULT)
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['G0 X0\n'], 'first.nc', { type: 'text/plain' })] },
+    })
+
+    // After load, the Recent section should appear with the file in it.
+    const recentBtn = await screen.findByRole('button', { name: 'first.nc' })
+
+    // Now load a different file so we can verify clicking Recent restores
+    // back to the first one.
+    fireEvent.change(input, {
+      target: { files: [new File(['G1 X1\n'], 'second.nc', { type: 'text/plain' })] },
+    })
+    await waitFor(() => expect(screen.getByText('second.nc')).toBeInTheDocument())
+
+    vi.mocked(loadGcodeForViewer).mockClear()
+    fireEvent.click(recentBtn)
+
+    await waitFor(() => {
+      expect(loadGcodeForViewer).toHaveBeenCalledWith('G0 X0\n')
+    })
+  })
+
+  it('hides the Recent section when IndexedDB has no entries', async () => {
+    render(<ToolpathViewerMode />)
+    // No files loaded → no recents → no section header.
+    await waitFor(() => {
+      expect(screen.queryByText('Recent')).not.toBeInTheDocument()
+    })
+  })
+
+  it('seeded recents are visible on mount', async () => {
+    await upsertRecent({
+      fileName: 'seeded.nc',
+      gcode: 'G0\n',
+      sim: {
+        stock: { origin: { x: 0, y: 0, z: 0 }, width: 50, depth: 50, height: 5 },
+        toolDiameter: 3,
+        resolution: 0.5,
+      },
+    })
+
+    render(<ToolpathViewerMode />)
+    expect(await screen.findByRole('button', { name: 'seeded.nc' })).toBeInTheDocument()
   })
 
   it('blocks simulation when required inputs are missing', async () => {
