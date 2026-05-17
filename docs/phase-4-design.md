@@ -198,6 +198,38 @@ own component — which is evidence the boundary is natural.
 
 ---
 
+## 10. Implementation dependencies
+
+The decisions above describe *what* to build but not in what order.
+The dependency graph between the implementation items:
+
+```
+Independent (can land in any order):
+  §8  .jcam mode field
+  §2  clipper2-rust integration
+  §3  SVG + DXF parsers
+  §6  working-environment data model
+  §9  Canvas2D component
+
+Dependent:
+  §4+§5  profile toolpath generator  →  needs §2 (clipper) and §3 (paths)
+                                     →  needs a Tool type, sourced either
+                                        from §6 or inlined in the operation
+                                        for the first slice
+  §7     GRBL emitter                →  consumes toolpaths from §4+§5
+```
+
+**Type-coupling.** §3 (parser output), §5 (planner input/output), §6
+(`Tool` type), and §7 (G-code emitter input) all need to agree on
+shared Rust types. Whoever lands first sets the shape; later items
+conform. Landing them in roughly that order avoids retroactive type
+churn.
+
+**Hard ordering rule.** §8's `mode` field must be added *before* any
+Mode 2 `.jcam` file is written (restated from §8 for visibility).
+
+---
+
 ## Status
 
 *Document status: Decisions accepted 2026-05-17. Implementation not yet
