@@ -63,6 +63,21 @@ export interface GcodeViewerLoadResult {
   warnings: ParseWarning[]
 }
 
+/** Axis-aligned box stock dimensions. Mirrors Rust `BoxDimensions`. */
+export interface BoxDimensions {
+  origin: { x: number; y: number; z: number }
+  width: number
+  depth: number
+  height: number
+}
+
+/** Parameters for the dexel material-removal simulation. */
+export interface SimulateGcodeViewerParams {
+  stock: BoxDimensions
+  toolDiameter: number
+  resolution: number
+}
+
 /** Error shape returned by wasm entry points. */
 export interface AppError {
   kind: string

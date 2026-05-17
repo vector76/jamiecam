@@ -16,13 +16,14 @@ import type { GcodeViewerLoadResult } from '../../api/types'
 
 vi.mock('../../api/gcodeViewer', () => ({
   loadGcodeForViewer: vi.fn(),
+  simulateGcodeViewer: vi.fn(),
 }))
 
 vi.mock('../../viewport/Viewport', () => ({
   Viewport: () => <div data-testid="viewport-mock" />,
 }))
 
-import { loadGcodeForViewer } from '../../api/gcodeViewer'
+import { loadGcodeForViewer, simulateGcodeViewer } from '../../api/gcodeViewer'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -129,5 +130,109 @@ describe('ToolpathViewerMode', () => {
     })
 
     expect(await screen.findByText(/Unknown G-code/)).toBeInTheDocument()
+  })
+
+  it('runs a simulation and sets the mesh on the viewport store', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
+    const fakeMesh = { vertices: [0, 0, 0], normals: [0, 0, 1], indices: [], faceGroups: [] }
+    vi.mocked(simulateGcodeViewer).mockResolvedValueOnce(fakeMesh)
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['G0 X0\n'], 'p.nc', { type: 'text/plain' })] },
+    })
+
+    const simulateBtn = await screen.findByRole('button', { name: 'Simulate' })
+    fireEvent.click(simulateBtn)
+
+    await waitFor(() => {
+      expect(simulateGcodeViewer).toHaveBeenCalledWith(
+        'G0 X0\n',
+        expect.objectContaining({
+          stock: expect.objectContaining({ width: 100, depth: 50, height: 10 }),
+          toolDiameter: 6,
+          resolution: 0.5,
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(useViewportStore.getState().simulationMeshData).toBe(fakeMesh)
+    })
+  })
+
+  it('surfaces simulation errors in the sidebar', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
+    vi.mocked(simulateGcodeViewer).mockRejectedValueOnce({
+      kind: 'InvalidInput',
+      message: 'tool diameter must be positive',
+    })
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['G0 X0\n'], 'p.nc', { type: 'text/plain' })] },
+    })
+
+    const simulateBtn = await screen.findByRole('button', { name: 'Simulate' })
+    fireEvent.click(simulateBtn)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('tool diameter must be positive')
+  })
+
+  it('clears stale stock dims when a new file has no @STOCK header', async () => {
+    // Load file A with metadata, then file B without — the form must not
+    // silently carry A's stock dims into B's simulation.
+    const bareResult: GcodeViewerLoadResult = {
+      stock: null,
+      tools: [],
+      lineGeometry: { positions: [], colours: [], types: [] },
+      warnings: [],
+    }
+    vi.mocked(loadGcodeForViewer)
+      .mockResolvedValueOnce(SAMPLE_RESULT)
+      .mockResolvedValueOnce(bareResult)
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'a.nc', { type: 'text/plain' })] },
+    })
+    // Width input gets populated from SAMPLE_RESULT's @STOCK width=100.
+    await waitFor(() => {
+      expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('100')
+    })
+
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'b.nc', { type: 'text/plain' })] },
+    })
+    await waitFor(() => {
+      expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('')
+      expect((screen.getByLabelText('Tool Ø') as HTMLInputElement).value).toBe('')
+    })
+  })
+
+  it('blocks simulation when required inputs are missing', async () => {
+    // Load a file that has no @STOCK or @TOOL metadata so the form is empty.
+    const bareResult: GcodeViewerLoadResult = {
+      stock: null,
+      tools: [],
+      lineGeometry: { positions: [], colours: [], types: [] },
+      warnings: [],
+    }
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(bareResult)
+
+    render(<ToolpathViewerMode />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
+    fireEvent.change(input, {
+      target: { files: [new File(['G0 X0\n'], 'bare.nc', { type: 'text/plain' })] },
+    })
+
+    const simulateBtn = await screen.findByRole('button', { name: 'Simulate' })
+    fireEvent.click(simulateBtn)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/positive/)
+    expect(simulateGcodeViewer).not.toHaveBeenCalled()
   })
 })

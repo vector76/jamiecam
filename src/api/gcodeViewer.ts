@@ -6,7 +6,12 @@
  * module only loads when the user actually needs it.
  */
 
-import type { AppError, GcodeViewerLoadResult } from './types'
+import type {
+  AppError,
+  GcodeViewerLoadResult,
+  MeshData,
+  SimulateGcodeViewerParams,
+} from './types'
 
 type WasmModule = typeof import('../wasm-pkg/jamiecam')
 
@@ -38,6 +43,22 @@ export async function loadGcodeForViewer(content: string): Promise<GcodeViewerLo
   const wasm = await getWasm()
   try {
     return wasm.loadGcodeForViewer(content) as GcodeViewerLoadResult
+  } catch (err) {
+    throw toAppError(err)
+  }
+}
+
+/**
+ * Run a dexel material-removal simulation on the supplied G-code, returning
+ * the resulting workpiece mesh. Throws an `AppError`-shaped object on failure.
+ */
+export async function simulateGcodeViewer(
+  content: string,
+  params: SimulateGcodeViewerParams,
+): Promise<MeshData> {
+  const wasm = await getWasm()
+  try {
+    return wasm.simulateGcodeViewer(content, params) as MeshData
   } catch (err) {
     throw toAppError(err)
   }
