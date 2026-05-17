@@ -109,10 +109,10 @@ kinematics, post-processor selection, safety parameters, etc. The user
 may have several — e.g. one per physical CNC, or experimental vs.
 production. Multiple setups per mode are allowed.
 
-The complete setup collection (every setup across every mode) is saved
-as a single file. A project references a setup by id; opening a project
-against a missing setup is a recoverable error (prompt the user to
-select or create one).
+The complete setup collection (every setup across every mode) is
+persisted together (see *Storage layout* below). A project references a
+setup by id; opening a project against a missing setup is a recoverable
+error (prompt the user to select or create one).
 
 ### Tools
 
@@ -131,10 +131,33 @@ The working assumption is:
 This matrix design is *provisional*. Confirm or revise when real
 multi-setup use cases emerge.
 
-**Open sub-decision:** whether the tool collection and the setup
-collection share a single working-environment save file or live in
-separate files. Resolve when the first writer/loader is implemented;
-the data model above is unaffected either way.
+### Storage layout
+
+The working environment lives in IndexedDB in the existing `jamiecam`
+database, in a dedicated object store (`workingEnv`) alongside the
+`recents` store. The store uses out-of-line keys with **one record per
+collection** of the aggregate:
+
+| key            | value                |
+| -------------- | -------------------- |
+| `setups`       | `MachineSetup[]`     |
+| `tools`        | `Tool[]`             |
+| `availability` | `AvailabilityPair[]` |
+
+**Why per-collection records rather than one blob keyed `'current'`:**
+a single save writes three small records in one transaction without a
+whole-aggregate `JSON.stringify` round-trip, and a future "edit only
+the tools" UI can update one collection without rewriting the others.
+
+**IndexedDB is the only home for now.** No file-based import/export of
+the working environment exists yet — the prior open sub-decision (one
+file vs. two) is resolved by deferring file format entirely. Add export
+when the editing UI needs it (e.g. moving setups between machines or
+sharing tool libraries).
+
+On first run, `seedIfEmpty()` populates one placeholder setup, one
+placeholder tool, and one availability entry linking them, so the
+Mode 2 UI always has something to render and edit.
 
 ### Implications for Mode 2
 

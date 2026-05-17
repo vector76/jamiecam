@@ -5,14 +5,14 @@
  * same file bumps its timestamp instead of creating a duplicate row.
  * Records are sorted client-side by `savedAt` descending — the recent
  * list is small (capped at MAX_RECENTS) so a full scan + sort is fine.
+ *
+ * The DB handle (version + upgrade) is owned by `./db.ts` so multiple
+ * stores can share the same `jamiecam` database without racing on version.
  */
 
-import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { IDBPDatabase } from 'idb'
+import { __resetDBForTests, getDB, RECENTS_STORE as STORE } from './db'
 import type { ProjectState } from './projectFile'
-
-const DB_NAME = 'jamiecam'
-const DB_VERSION = 1
-const STORE = 'recents'
 
 export const MAX_RECENTS = 10
 
@@ -22,39 +22,15 @@ export interface RecentRecord {
   state: ProjectState
 }
 
-interface JamiecamDB extends DBSchema {
-  recents: {
-    key: string
-    value: RecentRecord
-  }
-}
-
-type JamiecamDBHandle = IDBPDatabase<JamiecamDB>
-
-let dbPromise: Promise<JamiecamDBHandle> | null = null
-
-function getDB(): Promise<JamiecamDBHandle> {
-  if (!dbPromise) {
-    dbPromise = openDB<JamiecamDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE)) {
-          db.createObjectStore(STORE, { keyPath: 'fileName' })
-        }
-      },
-    })
-  }
-  return dbPromise
-}
-
 /** Test-only: drop the cached DB handle so the next call reopens. */
 export function __resetRecentsForTests(): void {
-  dbPromise = null
+  __resetDBForTests()
 }
 
 /** Newest-first list of recent projects, capped at `limit` (default = MAX_RECENTS). */
 export async function listRecents(limit = MAX_RECENTS): Promise<RecentRecord[]> {
   const db = await getDB()
-  const all = await db.getAll(STORE)
+  const all = (await db.getAll(STORE)) as RecentRecord[]
   all.sort((a, b) => b.savedAt - a.savedAt)
   return all.slice(0, limit)
 }
@@ -76,8 +52,8 @@ export async function deleteRecent(fileName: string): Promise<void> {
   await db.delete(STORE, fileName)
 }
 
-async function prune(db: JamiecamDBHandle): Promise<void> {
-  const all = await db.getAll(STORE)
+async function prune(db: IDBPDatabase): Promise<void> {
+  const all = (await db.getAll(STORE)) as RecentRecord[]
   if (all.length <= MAX_RECENTS) return
   all.sort((a, b) => b.savedAt - a.savedAt)
   const surplus = all.slice(MAX_RECENTS)
