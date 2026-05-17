@@ -165,6 +165,33 @@ export interface WorkingEnvironment {
 }
 
 /**
+ * Shared 2D path representation used across the Mode 2 pipeline. Mirrors
+ * `src-rust/src/geometry2d/mod.rs`.
+ *
+ * **Unit contract:** all coordinates and lengths are millimetres, `f64`
+ * (number) throughout. Importers convert source units to mm before
+ * constructing these values; the planner and emitter consume mm directly.
+ *
+ * Closed polylines do *not* duplicate the first point at the end of
+ * `points` — the closing edge is implicit. Regions follow the same
+ * convention for both exterior and holes.
+ */
+export interface Point2 {
+  x: number
+  y: number
+}
+
+export interface Polyline {
+  points: Point2[]
+  closed: boolean
+}
+
+export interface Region {
+  exterior: Point2[]
+  holes: Point2[][]
+}
+
+/**
  * B-rep face descriptor. Mode 1 doesn't import models with face groups,
  * but the viewport store still carries the field for future modes.
  */

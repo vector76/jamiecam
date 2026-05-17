@@ -7,6 +7,7 @@
 pub mod dexel;
 pub mod error;
 pub mod gcode_parser;
+pub mod geometry2d;
 pub mod parse_warning;
 pub mod types;
 pub mod wasm;
