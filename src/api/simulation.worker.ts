@@ -40,7 +40,15 @@ const scope = self as unknown as WorkerScope
 let ready: Promise<void> | null = null
 function ensureReady(): Promise<void> {
   if (!ready) {
-    ready = init().then(() => undefined)
+    // Clear the cache on failure so a subsequent sim can retry rather
+    // than reusing the rejected promise forever (matches the main-thread
+    // getWasm() pattern in gcodeViewer.ts).
+    ready = init()
+      .then(() => undefined)
+      .catch((err) => {
+        ready = null
+        throw err
+      })
   }
   return ready
 }
