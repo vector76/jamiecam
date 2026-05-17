@@ -1,11 +1,11 @@
 /**
- * TypeScript interfaces mirroring the Rust IPC types.
+ * TypeScript types mirroring the Rust wasm boundary.
  *
- * All field names match the camelCase serde output produced by the Rust
- * backend (#[serde(rename_all = "camelCase")]).
+ * Field names match the camelCase serde output produced by Rust
+ * (`#[serde(rename_all = "camelCase")]`).
  */
 
-/** Tessellated triangle mesh returned by open_model. */
+/** Tessellated triangle mesh. */
 export interface MeshData {
   /** XYZ interleaved vertex positions — 3 values per vertex. */
   vertices: number[]
@@ -13,535 +13,70 @@ export interface MeshData {
   normals: number[]
   /** Triangle indices — 3 values per triangle. */
   indices: number[]
-  /** Per-face triangle group boundaries — one entry per face in traversal order. */
-  faceGroups: Array<{ startTriangle: number; triangleCount: number }>
+  /** Per-face triangle group boundaries. Empty for dexel meshes. */
+  faceGroups: FaceGroup[]
 }
 
-/** Reference to the source geometry model stored in a .jcam file. */
-export interface SourceModelRef {
-  /** Absolute path to the model file at last save. */
-  path: string
-  /** SHA-256 hex digest of the model file at last load. */
-  checksum: string
-  /** True when the model is embedded inside the .jcam ZIP. */
-  embedded: boolean
+export interface FaceGroup {
+  startTriangle: number
+  triangleCount: number
 }
 
-// ── Shared geometry ───────────────────────────────────────────────────────────
-
-/** 3-component vector used for positions and axis directions. */
-export interface Vec3 {
-  x: number
-  y: number
-  z: number
+/** Flat-array line geometry for Three.js rendering. */
+export interface LineGeometryData {
+  /** Per segment: 6 floats (start XYZ + end XYZ). */
+  positions: number[]
+  /** Per segment: 6 floats (RGB × 2 vertices). */
+  colours: number[]
+  /** Per segment: 1 byte. 0 = linking/rapid, 1 = cutting. */
+  types: number[]
 }
 
-// ── Tool types ────────────────────────────────────────────────────────────────
-
-/**
- * A cutting tool in the project tool library.
- *
- * Mirrors the Rust `Tool` struct. The tool geometry type is serialized under
- * the key `"type"` (not `"toolType"`) due to `#[serde(rename = "type")]` in
- * the Rust struct.
- */
-export interface Tool {
-  id: string
-  name: string
-  /** Snake_case tool geometry type (e.g. `"flat_endmill"`, `"ball_nose"`). */
-  type: string
-  material?: string
-  diameter: number
-  fluteCount?: number
-  defaultSpindleSpeed?: number
-  defaultFeedRate?: number
-  cuttingLength: number
-  shankDiameter: number
-  overallLength?: number
-  cornerRadius?: number
-  includedAngle?: number
-  pointAngle?: number
-  pilotDiameter?: number
-  pilotLength?: number
-  threadPitch?: number
-  minBoreDiameter?: number
-  taperHalfAngle?: number
-}
-
-/**
- * Input for creating or replacing a tool (ID is excluded; generated server-side
- * on add, or provided separately on edit).
- */
-export interface ToolInput {
-  name: string
-  /** Snake_case tool type string (e.g. `"flat_endmill"`). */
-  type: string
-  material?: string
-  diameter: number
-  fluteCount?: number
-  defaultSpindleSpeed?: number
-  defaultFeedRate?: number
-  cuttingLength?: number
-  shankDiameter?: number
-  overallLength?: number
-  cornerRadius?: number
-  includedAngle?: number
-  pointAngle?: number
-  pilotDiameter?: number
-  pilotLength?: number
-  threadPitch?: number
-  minBoreDiameter?: number
-  taperHalfAngle?: number
-}
-
-/** A compact tool summary included in ProjectSnapshot. */
-export interface ToolSummary {
-  id: string
-  name: string
-  /** Snake_case tool type string (e.g. `"flat_endmill"`). */
-  toolType: string
-  material?: string
-}
-
-// ── Stock types ───────────────────────────────────────────────────────────────
-
-/** A box-shaped stock solid. */
-export interface BoxStock {
-  type: 'box'
-  /** Minimum-XYZ corner in WCS coordinates. */
-  origin: Vec3
-  /** Width along the X axis. */
+/** Stock metadata parsed from a `; @STOCK` comment. */
+export interface GcodeStockMetadata {
+  stockType: string
   width: number
-  /** Depth along the Y axis. */
   depth: number
-  /** Height along the Z axis. */
   height: number
+  origin: { x: number; y: number; z: number }
 }
 
-/**
- * Stock material block for the project.
- *
- * Internally-tagged enum matching `StockDefinition` in Rust.
- */
-export type StockDefinition = BoxStock
-
-// ── WCS types ─────────────────────────────────────────────────────────────────
-
-/**
- * A named coordinate frame for positioning machining operations.
- *
- * Mirrors the Rust `WorkCoordinateSystem` struct.
- */
-export interface WorkCoordinateSystem {
-  id: string
-  name: string
-  origin: Vec3
-  xAxis: Vec3
-  zAxis: Vec3
+/** Tool metadata parsed from a `; @TOOL` comment. */
+export interface GcodeToolMetadata {
+  number: number
+  toolType: string
+  diameter: number
+  flutes: number | null
+  material: string | null
 }
 
-// ── Operation types ───────────────────────────────────────────────────────────
-
-/** Parameters for a Profile (contour) operation. */
-export interface ProfileParams {
-  depth: number
-  stepdown?: number | null
-  compensationSide: 'left' | 'right' | 'center'
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
+export interface ParseWarning {
+  line: number | null
+  message: string
 }
 
-/** Parameters for a Pocket operation. */
-export interface PocketParams {
-  depth: number
-  stepdown: number
-  stepoverPercent: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
+/** Composite result of loading a G-code file for the viewer. */
+export interface GcodeViewerLoadResult {
+  stock: GcodeStockMetadata | null
+  tools: GcodeToolMetadata[]
+  lineGeometry: LineGeometryData
+  warnings: ParseWarning[]
 }
 
-/** A single drill hole position. */
-export interface DrillPoint {
-  x: number
-  y: number
-}
-
-/** Parameters for a Drill operation. */
-export interface DrillParams {
-  depth: number
-  peckDepth?: number
-  points: DrillPoint[]
-}
-
-/** Parameters for a Z-Level Roughing operation. */
-export interface ZLevelRoughingParams {
-  depth: number
-  stepdown: number
-  /** Radial stepover as a fraction of tool diameter (0–1). */
-  stepover: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Parameters for a Z-Level Finishing operation. */
-export interface ZLevelFinishingParams {
-  depth: number
-  stepdown: number
-  finishingAllowance: number
-  springPass: boolean
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-  restMachining: boolean
-  restMachiningReferenceId?: string
-}
-
-/** Parameters for an Adaptive Clearing operation. */
-export interface AdaptiveClearingParams {
-  depth: number
-  stepdown: number
-  /** Optimal tool load as a fraction of tool diameter (e.g. 0.25). */
-  optimalLoad: number
-  /** Radial stepover as a percentage of tool diameter (0–100). */
-  stepoverPercent: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Parameters for a Parallel Finishing operation. */
-export interface ParallelFinishingParams {
-  stepover: number
-  directionAngleDeg: number
-  allowance: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Parameters for a Scallop Finishing operation. */
-export interface ScallopFinishingParams {
-  targetScallopHeight: number
-  minStepover: number
-  maxStepover: number
-  directionAngleDeg: number
-  allowance: number
-  toolRadius: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Direction in parameter space for flowline finishing passes. */
-export type FlowlineDirection = 'u' | 'v'
-
-/** Parameters for a Flowline Finishing operation. */
-export interface FlowlineFinishingParams {
-  stepover: number
-  direction: FlowlineDirection
-  allowance: number
-  toolDiameter: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Parameters for a Pencil Milling operation. */
-export interface PencilMillingParams {
-  allowance: number
-  toolDiameter: number
-  curvatureThreshold?: number | null
-  minPassLength: number
-  geometry?: string[] | null
-  arcLeadInRadius?: number | null
-  arcLeadOutRadius?: number | null
-  helicalEntryRadius?: number | null
-  helicalEntryPitch?: number | null
-  rampEntryAngleDeg?: number | null
-}
-
-/** Cut side for 2D profile operations. */
-export type CutType = 'inside' | 'outside' | 'on_line'
-
-/** Milling direction for 2D profile operations. */
-export type MillingDirection = 'climb' | 'conventional'
-
-/** Parameters for a 2D Profile operation. */
-export interface Profile2dParams {
-  curveId: string
-  cutType: CutType
-  direction: MillingDirection
-  topOfCut: number
-  depthOfCut: number
-  stepDown: number
-  feedRate: number
-}
-
-/**
- * A machining operation returned by the backend.
- *
- * The `type` discriminant and `params` object appear at the top level of the
- * JSON (flattened from `OperationParams` in Rust).
- */
-export interface Operation {
-  id: string
-  name: string
-  enabled: boolean
-  toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams | Profile2dParams
-  spindleSpeedOverride?: number | null
-  feedRateOverride?: number | null
-  workpieceMaterial?: string
-}
-
-/**
- * Input for creating or replacing an operation (ID excluded).
- *
- * The `type` and `params` fields correspond to the flattened `OperationParams`
- * in the Rust `OperationInput` struct.
- */
-export interface OperationInput {
-  name: string
-  enabled?: boolean
-  toolId: string
-  type: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
-  params: ProfileParams | PocketParams | DrillParams | ZLevelRoughingParams | ZLevelFinishingParams | AdaptiveClearingParams | ParallelFinishingParams | ScallopFinishingParams | FlowlineFinishingParams | PencilMillingParams | Profile2dParams
-  spindleSpeedOverride?: number | null
-  feedRateOverride?: number | null
-  workpieceMaterial?: string
-}
-
-/** A compact operation summary included in ProjectSnapshot. */
-export interface OperationSummary {
-  id: string
-  name: string
-  operationType: 'profile' | 'pocket' | 'drill' | 'z_level_roughing' | 'z_level_finishing' | 'adaptive_clearing' | 'parallelFinishing' | 'scallopFinishing' | 'flowlineFinishing' | 'pencilMilling' | 'profile_2d'
-  enabled: boolean
-  needsRecalculate: boolean
-  /** UUID of the associated curve for 2D profile operations; absent for all other types. */
-  curveId?: string
-}
-
-// ── ProjectSnapshot ───────────────────────────────────────────────────────────
-
-export type Mode = 'gcode_viewer' | '2d' | '2_5d' | '3d' | 'rotary_2' | 'rotary_3' | '5_axis'
-
-/**
- * Lightweight snapshot of the active project returned by project commands.
- *
- * Mirrors the Rust `ProjectSnapshot` struct (camelCase via serde).
- */
-export interface ProjectSnapshot {
-  /** Absolute path to the loaded model file, or null if none. */
-  modelPath: string | null
-  /** SHA-256 hex digest of the loaded model file, or null if none. */
-  modelChecksum: string | null
-  /** Human-readable project name. */
-  projectName: string
-  /** ISO-8601 last-modified timestamp (empty string when not yet saved). */
-  modifiedAt: string
-  /** Tool library summaries. */
-  tools: ToolSummary[]
-  /** Stock solid definition, or absent/null if not set. */
-  stock?: StockDefinition | null
-  /** Work coordinate systems. */
-  wcs: WorkCoordinateSystem[]
-  /** Machining operation summaries, in program order. */
-  operations: OperationSummary[]
-  /** Whether a project file is currently open (has been saved/loaded). */
-  projectIsOpen: boolean
-  /** Absolute path to the .jcam project file, or null if not yet saved/loaded. */
-  filePath: string | null
-  /** Whether the project has unsaved changes. */
-  dirty: boolean
-  /** Active CNC operation mode (e.g. "3d", "2d", "gcode_viewer"). */
-  mode: Mode
-  /** Safe height for rapid moves in 2D Profiling mode (Z value, mm), or null if unset. */
-  safeHeight: number | null
-  /** Artwork origin offset for 2D Profiling mode as [x, y]. */
-  artworkOrigin: [number, number]
-}
-
-/**
- * Error payload produced by all Rust command handlers.
- *
- * The Rust backend uses adjacently-tagged serde serialization:
- * `{ kind: string; message: string }`.
- * Unit variants (e.g. FileNotFound) omit the `message` field.
- */
+/** Error shape returned by wasm entry points. */
 export interface AppError {
   kind: string
-  message?: string
-}
-
-// ── Post-processor types ──────────────────────────────────────────────────────
-
-/**
- * Metadata for a built-in post-processor.
- * Mirrors the Rust `PostProcessorMeta` struct.
- */
-export interface PostProcessorMeta {
-  id: string
-  name: string
-  description: string
+  message: string
 }
 
 /**
- * Parameters for exporting G-code to a file.
- * Mirrors the Rust `ExportParams` struct.
+ * B-rep face descriptor. Mode 1 doesn't import models with face groups,
+ * but the viewport store still carries the field for future modes.
  */
-export interface ExportParams {
-  operationIds: string[]
-  postProcessorId: string
-  outputPath: string
-  programNumber?: number
-  includeComments: boolean
-}
-
-/** Summary statistics returned after calculating a toolpath. */
-export interface ToolpathStats {
-  totalPointCount: number
-  totalPassCount: number
-  totalPathLengthMm: number
-}
-
-/** Descriptor for a single B-rep face returned by get_model_faces. */
 export interface FaceDescriptor {
   fingerprint: string
   faceIdx: number
   centroid: [number, number, number]
   normal: [number, number, number]
   area: number
-}
-
-/** Descriptor for a detected hole in the loaded model. */
-export interface HoleDescriptor {
-  centerX: number
-  centerY: number
-  radius: number
-  depth: number
-  isThrough: boolean
-}
-
-/** A single point where the toolpath gouges into the model surface. */
-export interface GougeViolation {
-  position: [number, number, number]
-  gougeDepth: number
-  faceIndex: number
-}
-
-/** Result of a gouge check across an entire toolpath. */
-export interface GougeCheckResult {
-  violations: GougeViolation[]
-  passed: boolean
-}
-
-/** Progress event emitted during toolpath calculation. */
-export interface ToolpathProgressEvent {
-  operationId: string
-  percent: number
-  message: string
-}
-
-/** Line geometry data for rendering a toolpath in the 3-D viewport. */
-export interface LineGeometryData {
-  /** XYZ interleaved vertex positions — 3 values per vertex. */
-  positions: number[]
-  /** RGB interleaved vertex colours — 3 values per vertex. */
-  colours: number[]
-  /** Per-segment move type identifier — one value per line segment. */
-  types: number[]
-}
-
-// ── G-code parser types ───────────────────────────────────────────────────────
-
-/** A non-fatal warning generated during G-code parsing or metadata parsing. */
-export interface ParseWarning {
-  /** 1-based line number in the source file where the warning was generated. */
-  line: number
-  /** Human-readable description of the problem. */
-  message: string
-}
-
-/** Parsed stock metadata from a `; @STOCK` comment in a G-code header. */
-export interface GcodeStockMetadata {
-  /** Stock shape identifier. Currently always `'box'`. */
-  stockType: 'box'
-  /** X dimension (mm). */
-  width: number
-  /** Y dimension (mm). */
-  depth: number
-  /** Z dimension (mm). */
-  height: number
-  /** Minimum-XYZ corner in work coordinates. Always present (defaults to origin when absent in file). */
-  origin: Vec3
-}
-
-/** Parsed tool metadata from a `; @TOOL` comment in a G-code header. */
-export interface GcodeToolMetadata {
-  /** Tool number matching the T-word in the G-code body. */
-  number: number
-  /** Tool type string (e.g. `'flat_endmill'`, `'ball_nose'`). */
-  toolType: string
-  /** Cutting diameter (mm). */
-  diameter: number
-  /** Number of flutes (optional). */
-  flutes?: number
-  /** Tool body material string (optional, e.g. `'carbide'`, `'hss'`). */
-  material?: string
-}
-
-/** Composite result returned by the `load_gcode_for_viewer` IPC command. */
-export interface GcodeViewerLoadResult {
-  /** Parsed stock metadata, or null if no valid `; @STOCK` comment was found. */
-  stock: GcodeStockMetadata | null
-  /** Parsed tool metadata entries (one per valid `; @TOOL` comment). */
-  tools: GcodeToolMetadata[]
-  /** Toolpath centerline geometry for immediate 3D viewport display. */
-  lineGeometry: LineGeometryData
-  /** Non-fatal warnings from G-code parsing and metadata parsing combined. */
-  warnings: ParseWarning[]
-}
-
-// ── Material / feeds types ────────────────────────────────────────────────────
-
-/** Metadata for a workpiece material in the feeds/speeds library. */
-export interface MaterialMeta {
-  id: string
-  displayName: string
-}
-
-/** A single feed/speed entry for a material + tool-material + operation combination. */
-export interface FeedEntry {
-  spindleSpeedRpm: number
-  feedRateMmpm: number
-  docMm?: number
 }

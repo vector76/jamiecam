@@ -1,30 +1,5 @@
-import { useCurrentView } from './store/projectStore'
-import { ModeSelector } from './components/modes/ModeSelector'
-import { ModePlaceholder } from './components/modes/ModePlaceholder'
 import { ToolpathViewerMode } from './components/modes/ToolpathViewerMode'
-import { Mode2DMode } from './components/modes/twod/Mode2DMode'
-import { Mode3dMode } from './components/modes/Mode3dMode'
-import { Notifications } from './components/common/Notifications'
-import { UnsavedChangesDialog } from './components/common/UnsavedChangesDialog'
 
 export default function App() {
-  const view = useCurrentView()
-
-  return (
-    <div>
-      <Notifications />
-      <UnsavedChangesDialog />
-      {view === 'selector' ? (
-        <ModeSelector />
-      ) : view === 'gcode_viewer' ? (
-        <ToolpathViewerMode />
-      ) : view === '2d' ? (
-        <Mode2DMode />
-      ) : view === '3d' ? (
-        <Mode3dMode />
-      ) : (
-        <ModePlaceholder mode={view} />
-      )}
-    </div>
-  )
+  return <ToolpathViewerMode />
 }

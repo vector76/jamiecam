@@ -12,7 +12,6 @@ import { buildModelMesh } from './modelMesh'
 import { createAxisTriad } from './controls'
 import { useViewportStore } from '../store/viewportStore'
 import type { DisplayMode } from '../store/viewportStore'
-import { SimulationControls } from '../components/simulation/SimulationControls'
 import { useSimulationLoop } from './useSimulationLoop'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -422,7 +421,6 @@ export function Viewport({ className }: ViewportProps) {
           <Eraser className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <SimulationControls />
     </div>
   )
 }

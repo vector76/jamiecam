@@ -2,12 +2,10 @@ import path from 'path'
 import { defineConfig } from 'vitest/config'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import wasm from 'vite-plugin-wasm'
 
-const host = process.env.TAURI_DEV_HOST
-
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [tailwindcss(), react()],
+  plugins: [tailwindcss(), react(), wasm()],
 
   resolve: {
     alias: {
@@ -15,29 +13,14 @@ export default defineConfig({
     },
   },
 
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  // prevent vite from obscuring rust errors
-  clearScreen: false,
-
-  // Tauri loads assets from the local filesystem, so large chunks are fine.
   build: {
     chunkSizeWarningLimit: 1500,
+    target: 'es2022',
   },
 
   server: {
-    port: 1420,
-    strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: 'ws',
-          host,
-          port: 1421,
-        }
-      : undefined,
     watch: {
-      // tell vite to ignore watching `src-tauri`
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/src-rust/target/**'],
     },
   },
 
@@ -45,5 +28,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     globals: true,
+    exclude: ['node_modules', 'dist', 'src-rust', 'src/wasm-pkg'],
   },
 })

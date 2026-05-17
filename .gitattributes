@@ -1,17 +1,6 @@
-src-tauri/Cargo.toml text eol=lf
+src-rust/Cargo.toml text eol=lf
 
-# Golden test fixtures are byte-exact generator output. Some post-processors
-# (fanuc-0i) emit CRLF while others (grbl, linuxcnc) emit LF, and JSON
-# snapshots are always LF — so line endings are intentional per file and
-# must NOT be touched by core.autocrlf. `-text` disables line-ending
-# conversion while still letting git render readable diffs in PRs.
-tests/fixtures/*.json         -text
-tests/fixtures/*.nc           -text
-tests/fixtures/*.step         -text
-tests/integration/**/*.json   -text
-tests/integration/**/*.nc     -text
-tests/integration/**/*.svg    -text
-tests/integration/**/*.dxf    -text
-
-# Truly binary fixtures.
-tests/fixtures/*.stl          binary
+# Bundled sample G-code: a viewer fixture whose exact bytes the parser checks
+# against in tests. `-text` disables line-ending conversion while still letting
+# git render readable diffs.
+public/samples/*.nc           -text
