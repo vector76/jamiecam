@@ -6,11 +6,14 @@
 //! *separate* collections (the same tool often fits more than one setup); an
 //! [`AvailabilityMatrix`] records which `(setup, tool)` pairs are compatible.
 //!
-//! Resolve-by-id helpers and the typed errors they produce land in a follow-up.
+//! Resolve-by-id helpers ([`WorkingEnvironment::resolve_setup`] /
+//! [`WorkingEnvironment::resolve_tool`]) return [`AppError::MissingSetup`] /
+//! [`AppError::MissingTool`] when an id is not known to the aggregate.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use crate::error::AppError;
 use crate::types::BoxDimensions;
 
 // ── Identifiers ───────────────────────────────────────────────────────────────
@@ -201,6 +204,26 @@ impl WorkingEnvironment {
     pub fn availability_mut(&mut self) -> &mut AvailabilityMatrix {
         &mut self.availability
     }
+
+    /// Look up a setup by id. Returns [`AppError::MissingSetup`] on miss.
+    pub fn resolve_setup(&self, id: &SetupId) -> Result<&MachineSetup, AppError> {
+        self.setups
+            .iter()
+            .find(|s| &s.id == id)
+            .ok_or_else(|| AppError::MissingSetup {
+                id: id.as_str().to_string(),
+            })
+    }
+
+    /// Look up a tool by id. Returns [`AppError::MissingTool`] on miss.
+    pub fn resolve_tool(&self, id: &ToolId) -> Result<&Tool, AppError> {
+        self.tools
+            .iter()
+            .find(|t| &t.id == id)
+            .ok_or_else(|| AppError::MissingTool {
+                id: id.as_str().to_string(),
+            })
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -371,6 +394,54 @@ mod tests {
         let json = serde_json::to_string(&env).unwrap();
         let back: WorkingEnvironment = serde_json::from_str(&json).unwrap();
         assert_eq!(back, env);
+    }
+
+    #[test]
+    fn resolve_setup_returns_reference_on_hit() {
+        let mut env = WorkingEnvironment::new();
+        env.add_setup(sample_setup("s1"));
+        env.add_setup(sample_setup("s2"));
+
+        let got = env.resolve_setup(&SetupId::new("s2")).expect("hit");
+        assert_eq!(got.id, SetupId::new("s2"));
+        assert_eq!(got.name, "Setup s2");
+    }
+
+    #[test]
+    fn resolve_setup_returns_missing_setup_on_miss() {
+        let mut env = WorkingEnvironment::new();
+        env.add_setup(sample_setup("s1"));
+
+        let err = env
+            .resolve_setup(&SetupId::new("missing"))
+            .expect_err("miss");
+        match err {
+            AppError::MissingSetup { id } => assert_eq!(id, "missing"),
+            other => panic!("expected MissingSetup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_tool_returns_reference_on_hit() {
+        let mut env = WorkingEnvironment::new();
+        env.add_tool(sample_tool("t1"));
+        env.add_tool(sample_tool("t2"));
+
+        let got = env.resolve_tool(&ToolId::new("t1")).expect("hit");
+        assert_eq!(got.id, ToolId::new("t1"));
+        assert_eq!(got.name, "Tool t1");
+    }
+
+    #[test]
+    fn resolve_tool_returns_missing_tool_on_miss() {
+        let mut env = WorkingEnvironment::new();
+        env.add_tool(sample_tool("t1"));
+
+        let err = env.resolve_tool(&ToolId::new("nope")).expect_err("miss");
+        match err {
+            AppError::MissingTool { id } => assert_eq!(id, "nope"),
+            other => panic!("expected MissingTool, got {other:?}"),
+        }
     }
 
     #[test]

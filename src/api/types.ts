@@ -99,6 +99,8 @@ export type AppError =
   | { kind: 'Io'; message: string }
   | { kind: 'InvalidInput'; message: string }
   | { kind: 'ParseFailure'; message: ParseFailureDetail }
+  | { kind: 'MissingSetup'; message: { id: string } }
+  | { kind: 'MissingTool'; message: { id: string } }
   | { kind: 'Unknown'; message: string }
   | { kind: 'WorkerError'; message: string }
   | { kind: 'Disposed'; message: string }

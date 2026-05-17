@@ -21,6 +21,12 @@ pub enum AppError {
 
     #[error("{}: {}", .0.source, .0.message)]
     ParseFailure(ParseFailure),
+
+    #[error("missing setup: {id}")]
+    MissingSetup { id: String },
+
+    #[error("missing tool: {id}")]
+    MissingTool { id: String },
 }
 
 /// Detail payload for [`AppError::ParseFailure`]. Used when a parser cannot
@@ -99,6 +105,42 @@ mod tests {
             }
             other => panic!("expected ParseFailure, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn missing_setup_serializes_with_id_payload() {
+        let err = AppError::MissingSetup {
+            id: "setup-uuid-1".into(),
+        };
+        let value = serde_json::to_value(&err).unwrap();
+        assert_eq!(value["kind"], "MissingSetup");
+        assert_eq!(value["message"]["id"], "setup-uuid-1");
+    }
+
+    #[test]
+    fn missing_tool_serializes_with_id_payload() {
+        let err = AppError::MissingTool {
+            id: "tool-uuid-1".into(),
+        };
+        let value = serde_json::to_value(&err).unwrap();
+        assert_eq!(value["kind"], "MissingTool");
+        assert_eq!(value["message"]["id"], "tool-uuid-1");
+    }
+
+    #[test]
+    fn missing_setup_round_trips_via_json() {
+        let err = AppError::MissingSetup { id: "abc".into() };
+        let json = serde_json::to_string(&err).unwrap();
+        let back: AppError = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, AppError::MissingSetup { id } if id == "abc"));
+    }
+
+    #[test]
+    fn missing_tool_round_trips_via_json() {
+        let err = AppError::MissingTool { id: "xyz".into() };
+        let json = serde_json::to_string(&err).unwrap();
+        let back: AppError = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, AppError::MissingTool { id } if id == "xyz"));
     }
 
     #[test]
