@@ -1,5 +1,11 @@
 # G-code Parser
 
+> **Post-pivot note:** This spec predates the Tauri→web pivot. Path
+> references like `src-tauri/...` and the `#[tauri::command]` IPC example
+> at the bottom are obsolete; the parser now lives at
+> `src-rust/src/gcode_parser/` and is exposed via wasm. The grammar, token
+> rules, and motion-resolution logic remain accurate and ship today.
+
 ## Purpose
 
 The existing post-processor (`src-tauri/src/postprocessor/`) generates G-code text

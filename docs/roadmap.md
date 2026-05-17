@@ -1,5 +1,13 @@
 # JamieCam Roadmap
 
+> **Post-pivot note:** This is the forward-looking multi-mode plan. After
+> the Tauri→web pivot only Mode 1 (G-code Viewer) ships; the shared
+> infrastructure rows marked "Done" (OCCT, Clipper2, tool library,
+> toolpath types, post-processor, etc.) describe the deleted Tauri code
+> and are **not** currently available in the web build. They must be
+> reintroduced in WASM-compatible form before the modes that depend on
+> them can land. See `web-port-handoff.md` for the live state.
+
 ## Guiding Principles
 
 **Mode independence.** Each machining mode is almost a separate application
@@ -39,16 +47,16 @@ but no implementation yet.
 | Post-processor engine (GRBL config) | Done | All |
 | Toolpath types, linking, arc fitting | Done | All |
 | Clipper2 integration (offset, boolean) | Done | 2, 3 (required); 4-6 (optional); 7 |
-| `.jcam` project file I/O | Done | All |
+| `.jcam` project file I/O | Done — web (new format) | All |
 | OCCT build, FFI, tessellation | Done | 4-6 (optional); 7 (required) |
 | OCCT surface evaluation | Done | 4-6 (optional); 7 (required) |
 | Viewport shell (orbit, views, display modes) | Done | All |
 | Simulation playback (tool animation) | Done | All |
 | Toolpath cache (SHA-256, persistence) | Done | All |
 | Progress events | Done | All |
-| G-code parser | Spec exists (`gcode-parser.md`) | 1 (primary), all (viewer) |
-| Dexel material removal engine | Spec exists (`dexel-material-removal.md`) | 1 (primary), all (sim) |
-| Tool geometry model (revolution profile) | Spec exists (`tool-geometry-model.md`) | All (via dexel) |
+| G-code parser | Done — web (`gcode-parser.md`) | 1 (primary), all (viewer) |
+| Dexel material removal engine | Done — web (`dexel-material-removal.md`) | 1 (primary), all (sim) |
+| Tool geometry model (revolution profile) | Done — web (`tool-geometry-model.md`) | All (via dexel) |
 | Project format: mode field | Not started | All |
 | SVG/DXF input parser | Not started | 2, 3, 5, 6 |
 | Heightmap input loader | Not started | 4, 5 |
@@ -90,8 +98,9 @@ shell, simulation playback, tool library (tool geometry for simulation).
   G-code text panel, playback controls, tool selection for simulation
 
 **Dependencies on shared infra:** G-code parser, dexel engine, tool geometry
-model. All three have specs and compose as a pipeline (see
-`shared-engine-design-choices.md`).
+model. All three are implemented (`gcode-parser.md`,
+`dexel-material-removal.md`, `tool-geometry-model.md`) and ship in the
+current web build.
 
 **Suggested order within mode:**
 1. G-code parser with unit tests
@@ -281,8 +290,8 @@ algorithms (done, need 4-axis tool orientation extension), gouge detection
 ### Mode 7: 5-Axis
 
 Full simultaneous 5-axis. Unlocks undercuts, turbine blades, impellers,
-deep cavity work. Covered extensively in `toolpath-engine.md` and
-`gcode-postprocessor.md`.
+deep cavity work. (The detailed toolpath-engine and post-processor specs
+lived in pre-pivot docs that have been removed.)
 
 **Reuses:** OCCT surface evaluation (done), all 3D surface algorithms (done),
 gouge detection framework (done), post-processor (done), linking.
@@ -407,4 +416,4 @@ This refactoring is the gate for Mode 2. It should be done early.
 ---
 
 *Document status: Draft*
-*Related documents: `modes-overview.md`, `implementation-status.md`, `shared-engine-design-choices.md`, `gcode-parser.md`, `dexel-material-removal.md`, `tool-geometry-model.md`*
+*Related documents: `modes-overview.md`, `web-port-handoff.md`, `gcode-parser.md`, `dexel-material-removal.md`, `tool-geometry-model.md`*

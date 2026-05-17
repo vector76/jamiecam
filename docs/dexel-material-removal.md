@@ -1,5 +1,11 @@
 # Dexel Material Removal Engine
 
+> **Post-pivot note:** This spec predates the Tauri→web pivot. The
+> `#[tauri::command]` IPC example is obsolete; the engine now lives at
+> `src-rust/src/dexel/` and is exposed via wasm + a Web Worker. The
+> algorithmic specification (dexel grid, swept-volume update, meshing)
+> remains accurate and ships today.
+
 ## Purpose
 
 When a cutting tool moves along a path, it removes material from the workpiece.

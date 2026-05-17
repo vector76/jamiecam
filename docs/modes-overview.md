@@ -1,5 +1,11 @@
 # JamieCam Modes Overview
 
+> **Post-pivot note:** This is forward-looking design. Only Mode 1
+> (G-code Viewer) ships today. The Tauri-era shared infrastructure
+> (OCCT, Clipper2, tool library, CAM algorithms) was deleted in the
+> web pivot and will be reintroduced mode-by-mode in WASM-compatible form.
+> See `web-port-handoff.md` for the live state.
+
 ## Introduction
 
 JamieCam is organized around seven independent modes, each addressing a
@@ -8,7 +14,7 @@ detail: what it does, what input it accepts, which operations it provides,
 how the UI is structured, and what geometry dependencies it requires.
 
 For the high-level rationale behind the mode-based architecture, see
-`application-purpose.md`.
+`roadmap.md`.
 
 ---
 
@@ -283,7 +289,9 @@ queries), Clipper2 (Z-level pocket passes), 5-axis kinematics solver.
 | Head-table | B + C | Hermle, Mazak |
 | Head-head | A + C | Robot arms, gantry mills |
 
-See `toolpath-engine.md` and `gcode-postprocessor.md` for full detail.
+(Detailed toolpath-engine and post-processor specs lived in pre-pivot docs
+that have been removed; they will be re-introduced when their modes are
+brought back online.)
 
 ---
 
@@ -323,4 +331,4 @@ one-way to a more complex mode.
 ---
 
 *Document status: Draft*
-*Related documents: `application-purpose.md`, `toolpath-engine.md`, `gcode-postprocessor.md`, `project-file-format.md`, `shared-engine-design-choices.md`*
+*Related documents: `web-port-handoff.md`, `roadmap.md`, `gcode-parser.md`, `dexel-material-removal.md`*

@@ -1,5 +1,10 @@
 # Tool Geometry Model
 
+> **Post-pivot note:** The `Tool` struct reference below is pre-pivot; the
+> in-tree `Tool` was deleted along with the old tool library. The
+> revolution-profile concept this doc specifies is what the dexel engine
+> consumes today (see `src-rust/src/dexel/tool_profile.rs`).
+
 ## Purpose
 
 The existing `Tool` struct (`src-tauri/src/models/tool.rs`) stores machining parameters:

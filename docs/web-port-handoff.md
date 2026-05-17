@@ -172,7 +172,7 @@ npx pnpm@10.30.2 lint
 npx pnpm@10.30.2 build            # Rebuilds wasm, then production vite build
 
 cd src-rust
-cargo test --lib                  # 234 tests
+cargo test --lib                  # 239 tests
 cargo clippy --lib --all-targets -- -D warnings
 cargo fmt --check
 ```
@@ -210,87 +210,57 @@ it or, better, write a small `scripts/install-hooks.sh` early in Phase 2.
   `src/test-setup.ts` via `FileReader`. Don't use `new Response(blob).text()`
   — that uses Node's undici, which doesn't read jsdom's Blob bytes correctly.
 
-## What ships today (Phase 1)
+## What ships today (Phases 1 + 2)
 
 User experience:
 1. Open the URL.
-2. Click "Open File…" → browser file picker → pick a `.nc` / `.gcode` / `.tap`.
+2. Click "Open G-code…" → browser file picker → pick a `.nc` / `.gcode` / `.tap`.
 3. Or click "Load Sample" → fetches `/samples/demo-pocket.nc`.
-4. Sidebar shows parsed `@STOCK` and `@TOOL` header metadata if present.
-5. Three.js viewport shows toolpath line geometry (rapids in grey, cuts
+4. Or click "Open Project…" → pick a `.jcam` to restore a prior session.
+5. The "Recent" sidebar list (IndexedDB-backed) shows the last few projects.
+6. Sidebar shows parsed `@STOCK` and `@TOOL` header metadata if present.
+7. Three.js viewport shows toolpath line geometry (rapids in grey, cuts
    coloured per tool number).
-6. Parser warnings appear inline.
+8. Click "Simulate" to run the dexel material-removal sim in a Web Worker;
+   the resulting workpiece mesh renders in the viewport.
+9. Click "Save Project" to download a `.jcam` zip of the current state.
+10. Parser warnings appear inline; an "Initializing engine…" indicator is
+    shown while the wasm module first loads.
 
 What's deliberately **not** there yet:
-- Dexel material-removal simulation (the "simulate" button from the
-  desktop app). The Rust `dexel` module compiles fine and has 87 passing
-  tests, but no `#[wasm_bindgen]` wrapper exposes it. Adding it is the
-  first thing in Phase 2.
-- Project save/load.
-- Recent files list.
 - Anything from any other mode.
+- Loading bar for long simulations (just shows "Simulating…").
+- Bundle-size optimization (main chunk is still Three.js-heavy).
 
 ## Phase roadmap
 
 ### Phase 1 — Foundation ✅ shipped (commit 740ba62)
 
-### Phase 2 — Dexel sim + persistence + deploy
+### Phase 2 — Dexel sim + persistence + deploy ✅ shipped
 
-This is the next chunk. Recommended sequence:
+1. Dexel sim exposed via wasm — `d8c2495`.
+2. Sim runs in a Web Worker — `4534fcb`.
+3. `.jcam` save/load + IndexedDB recents — `b38e92c`.
+4. GitHub Pages deploy workflow + `BASE_PATH` — `029590d`.
 
-1. **Expose `simulate_gcode_viewer` through wasm.**
-   - Add `simulate_gcode_viewer_inner(content: &str, origin: Vec3,
-     width: f64, depth: f64, height: f64, tool_diameter: f64,
-     resolution: f64) -> Result<MeshData, AppError>` in `wasm.rs`. The
-     dexel logic is already there; this just wires it up.
-   - Add the `#[wasm_bindgen]` wrapper.
-   - Write Rust `_inner` tests using `include_str!` of a fixture (or
-     inline a small G-code string like in the existing wasm tests).
-   - Add a `simulateGcodeViewer` TS function in `src/api/gcodeViewer.ts`.
-   - Wire it into `ToolpathViewerMode` with a "Simulate" button and the
-     stock/tool overrides that the original desktop UI had (see the
-     git history of `ToolpathViewerMode.tsx` for the original design).
+### Phase 3 — Hardening (in progress)
 
-2. **Run the sim in a Web Worker.** Even single-threaded, a multi-second
-   simulation freezes the UI. Use a dedicated worker that loads the wasm
-   independently and posts the `MeshData` back. The viewport already
-   consumes `MeshData` via `setSimulationMeshData`.
+Done:
+- "Initializing engine…" indicator while the wasm module first loads
+  (covers the ~189 KB / ~91 KB gz wasm download on first visit).
+- `AppError` plumbing verified end-to-end (Rust → wasm → worker → UI),
+  with tests at each layer. Sim validation errors surface cleanly.
+- Stale `docs/` pruned; surviving forward-looking docs banner-tagged.
+- Root `README.md`, `scripts/install-hooks.sh` added.
 
-3. **Project save/load.**
-   - Download path: serialize Mode 1 state (file path-or-name + stock +
-     tool + sim params) to a `.jcam` zip. Trigger via a hidden `<a>` with
-     a Blob URL.
-   - Upload path: file picker → unzip → restore state.
-   - IndexedDB cache: store the most-recent N projects' state with their
-     name; show a "Recent" list in the sidebar.
-   - The original Rust crate had a `.jcam` zip format with
-     `project.json` + binary toolpath caches — that format is gone, so
-     you're free to define a new, simpler one.
-
-4. **Static deploy config.**
-   - Add `base: process.env.GITHUB_PAGES ? '/<repo>/' : '/'` (or however
-     the deploy decides) to `vite.config.ts`. `import.meta.env.BASE_URL`
-     already propagates to `SAMPLE_URL` in `ToolpathViewerMode.tsx`.
-   - Write `.github/workflows/deploy.yml` to: setup-node, install
-     `wasm-pack`, `pnpm install`, `pnpm build`, upload `dist/` to
-     `actions/upload-pages-artifact`, deploy to Pages.
-   - Test the deploy from a branch first.
-
-### Phase 3 — Hardening
-
-- Loading states / progress indicators (especially around the wasm
-  download — first load fetches ~166 KB of wasm).
-- Error mapping: today `AppError::{Io, InvalidInput}` exist but Phase 1
-  never returns one. Phase 2 will (sim validation errors). Make sure
-  the frontend surfaces them cleanly.
-- Bundle analysis: the main JS chunk is currently 787 KB (215 KB gz).
+Still open:
+- Bundle analysis: the main JS chunk is currently ~812 KB (~225 KB gz).
   Mostly Three.js. Consider lazy-loading the viewport if a startup-time
   metric matters.
-- Decide on the threading story: GH Pages can't serve COOP/COEP headers,
-  so SharedArrayBuffer is unavailable, so Rayon stays single-threaded.
-  If the user wants threads, the deploy needs to move to Cloudflare/Netlify
-  (which can set those headers). The `coi-serviceworker` hack works on
-  GH Pages but is fragile.
+- Threading: GH Pages can't serve COOP/COEP headers, so SharedArrayBuffer
+  is unavailable, so Rayon stays single-threaded. If threads matter,
+  the deploy needs to move to Cloudflare/Netlify (which can set those
+  headers). The `coi-serviceworker` hack works on GH Pages but is fragile.
 
 ### Phases 4+ — Other modes
 
@@ -350,50 +320,24 @@ This is a Phase-5+ discussion. Don't take it on early.
    "display mode" dropdown affects the model mesh which Mode 1 doesn't
    load, so 3 of its 4 options are no-ops today.
 
-3. **`AppError::{Io, InvalidInput}` variants exist but are never
-   constructed in Phase 1.** Kept for Phase 2.
-
-4. **`api/types.ts::FaceDescriptor`** is a stub kept in shape with the
+3. **`api/types.ts::FaceDescriptor`** is a stub kept in shape with the
    original (5 required fields) just to satisfy `viewportStore`. Mode 1
    never produces one.
 
-5. **No web-deploy CI workflow.** The old `.github/workflows/{ci,release}.yml`
-   were deleted (they built Tauri + OCCT). Add a Pages deploy in Phase 2.
+4. **`docs/` was pruned post-pivot** — see below.
 
-6. **No README at repo root.** Was missing before too.
+## `docs/` after the pivot prune
 
-7. **Pre-commit hook installation script is gone.** Recreate one in
-   Phase 2 (see Build & development above).
+Pre-pivot docs describing deleted Tauri/OCCT/CAM-algorithm code were
+deleted. What remains:
 
-8. **`docs/` is mostly stale** — see warning below.
-
-## ⚠ `docs/` is stale
-
-The 18 markdown files in `docs/` describe the old Tauri + OCCT design
-system. Specifically:
-- `application-purpose.md`, `system-architecture.md`,
-  `technology-stack.md`, `modes-overview.md`, `roadmap.md`,
-  `implementation-status.md`, `shared-engine-design-choices.md`
-- `geometry-kernel.md`, `gcode-postprocessor.md`,
-  `tool-geometry-model.md`, `toolpath-engine.md`,
-  `viewport-design.md`, `viewport-adaptive-resolution.md`,
-  `project-file-format.md`, `cutting-simulation.md`,
-  `dexel-material-removal.md`
-- `build-and-dev-setup.md`, `windows-build-setup.md`
-
-A few have salvageable content (`gcode-parser.md` describes the surviving
-parser; `dexel-material-removal.md` describes the surviving dexel
-engine). The architecture/build/system docs are flat-out wrong now.
-
-The honest options: (a) delete the stale ones, (b) rewrite them, or (c)
-mark them with a `> ⚠ Stale — pre-web-pivot` banner at the top. The
-current user said earlier "prefer code as source of truth over detailed
-inventories that get stale" — so option (a) is most aligned with their
-expressed preference, but they have not given explicit approval to mass-delete.
-**Ask before deleting.**
-
-This handoff document (`docs/web-port-handoff.md`) is the one source of
-current-state truth in `docs/` until the others are dealt with.
+- `web-port-handoff.md` — this file; the live source of current-state truth.
+- `gcode-parser.md`, `dexel-material-removal.md`, `tool-geometry-model.md`
+  — specs for code that still ships. Carry a post-pivot banner noting the
+  old Tauri path references are stale.
+- `roadmap.md`, `modes-overview.md` — forward-looking multi-mode plan.
+  Carry a banner noting the "Done" shared-infrastructure rows describe
+  the deleted Tauri code and must be reintroduced in WASM-compatible form.
 
 ## Verification checklist
 
@@ -403,12 +347,12 @@ starting work, or after a non-trivial change:
 ```bash
 npx --yes pnpm@10.30.2 install
 npx --yes pnpm@10.30.2 lint              # 0 warnings
-npx --yes pnpm@10.30.2 test               # 253 / 253
+npx --yes pnpm@10.30.2 test               # 288 / 288
 npx --yes pnpm@10.30.2 typecheck          # no errors
 npx --yes pnpm@10.30.2 build              # produces dist/
 
 cd src-rust
-cargo test --lib                          # 234 / 234
+cargo test --lib                          # 239 / 239
 cargo clippy --lib --all-targets -- -D warnings
 cargo fmt --check
 ```
