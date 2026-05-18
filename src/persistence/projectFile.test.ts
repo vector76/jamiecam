@@ -110,12 +110,12 @@ describe('packJcamProject / unpackJcamProject', () => {
     expect(() => unpackJcamProject(bad)).toThrow(/missing required fields/)
   })
 
-  it('throws on an unsupported manifest version (including legacy v1)', () => {
+  it('throws on a future manifest version this build does not know', () => {
     const bad = zipSync({
       'project.json': strToU8(
         JSON.stringify({
           format: 'jamiecam-project',
-          version: 1,
+          version: 99,
           fileName: 'x.nc',
           mode: 'gcode-viewer',
           payload: { sim: SAMPLE.payload.sim },
@@ -155,6 +155,87 @@ describe('packJcamProject / unpackJcamProject', () => {
       ),
     })
     expect(() => unpackJcamProject(bad)).toThrow(/Unknown project mode/)
+  })
+
+  describe('legacy v1 reader', () => {
+    const V1_SIM = SAMPLE.payload.sim
+    const V1_GCODE = '; legacy v1 file\nG0 X0 Y0\nG1 Z-1 F200\n'
+
+    function v1Zip(extra: Record<string, unknown> = {}): Uint8Array {
+      return zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 1,
+            fileName: 'legacy.nc',
+            sim: V1_SIM,
+            ...extra,
+          }),
+        ),
+        'gcode.nc': strToU8(V1_GCODE),
+      })
+    }
+
+    it('migrates a v1 manifest to a gcode-viewer ProjectState', () => {
+      const unpacked = unpackJcamProject(v1Zip())
+      expect(unpacked).toEqual({
+        fileName: 'legacy.nc',
+        mode: 'gcode-viewer',
+        payload: { gcode: V1_GCODE, sim: V1_SIM },
+      })
+    })
+
+    it('defaults mode to gcode-viewer even if a stray mode field is present', () => {
+      // V1 predates `mode`; readers must ignore anything that sneaks in
+      // rather than trusting it (the v1 file format only ever meant
+      // Mode 1 / G-code Viewer).
+      const unpacked = unpackJcamProject(v1Zip({ mode: 'flux-capacitor' }))
+      expect(unpacked.mode).toBe('gcode-viewer')
+    })
+
+    it('throws when a v1 manifest is missing sim', () => {
+      const bad = zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 1,
+            fileName: 'legacy.nc',
+          }),
+        ),
+        'gcode.nc': strToU8(V1_GCODE),
+      })
+      expect(() => unpackJcamProject(bad)).toThrow(/sim/)
+    })
+
+    it('throws when a v1 zip is missing gcode.nc', () => {
+      const bad = zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 1,
+            fileName: 'legacy.nc',
+            sim: V1_SIM,
+          }),
+        ),
+      })
+      expect(() => unpackJcamProject(bad)).toThrow(/Missing gcode\.nc/)
+    })
+  })
+
+  it('reads a hand-built v2 manifest (the same shape bead-1\'s writer emits)', () => {
+    const bytes = zipSync({
+      'project.json': strToU8(
+        JSON.stringify({
+          format: 'jamiecam-project',
+          version: 2,
+          fileName: 'demo.nc',
+          mode: 'gcode-viewer',
+          payload: { sim: SAMPLE.payload.sim },
+        }),
+      ),
+      'gcode.nc': strToU8(SAMPLE.payload.gcode),
+    })
+    expect(unpackJcamProject(bytes)).toEqual(SAMPLE)
   })
 
   it('throws when the gcode-viewer payload is missing sim', () => {

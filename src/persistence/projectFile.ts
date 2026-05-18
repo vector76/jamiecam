@@ -11,12 +11,15 @@
  * with `unzip -p project.jcam project.json | jq .`.
  *
  * Versioning: the manifest carries `format: "jamiecam-project"` and a
- * numeric `version`. Bump `version` when the manifest shape changes
- * incompatibly; readers should refuse anything they don't recognise.
+ * numeric `version`. The writer always emits the current `FORMAT_VERSION`.
+ * The reader accepts every version in `SUPPORTED_READ_VERSIONS` and
+ * migrates older shapes up to the current in-memory `ProjectState`.
  *
  * Mode discriminator: v2 adds a top-level `mode` so a single file format
  * can carry both Mode 1 (G-code Viewer) and Mode 2 (2-D Profile) projects.
- * The `payload` shape is selected by `mode`.
+ * V1 files predate the mode field; the reader treats them as
+ * `gcode-viewer` and wraps the flat `{ sim }` manifest into the v2
+ * `{ payload: { gcode, sim } }` shape.
  */
 
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
@@ -24,6 +27,7 @@ import type { SimulateGcodeViewerParams } from '../api/types'
 
 const FORMAT_TAG = 'jamiecam-project'
 const FORMAT_VERSION = 2
+const SUPPORTED_READ_VERSIONS = [1, 2] as const
 
 export type ProjectMode = 'gcode-viewer' | '2d-profile'
 
@@ -124,16 +128,24 @@ export function unpackJcamProject(bytes: Uint8Array): ProjectState {
     throw new JcamFormatError(`project.json is not valid JSON: ${(err as Error).message}`)
   }
 
-  if (!isManifestShape(manifest)) {
+  if (!isManifestEnvelope(manifest)) {
     throw new JcamFormatError('project.json is missing required fields or has the wrong shape.')
   }
   if (manifest.format !== FORMAT_TAG) {
     throw new JcamFormatError(`Unexpected format tag: ${manifest.format}`)
   }
-  if (manifest.version !== FORMAT_VERSION) {
+  if (!isSupportedVersion(manifest.version)) {
     throw new JcamFormatError(
-      `Unsupported project version ${manifest.version}; this build understands version ${FORMAT_VERSION}.`,
+      `Unsupported project version ${manifest.version}; this build understands versions ${SUPPORTED_READ_VERSIONS.join(', ')}.`,
     )
+  }
+
+  if (manifest.version === 1) {
+    return readV1(manifest, entries)
+  }
+
+  if (!isV2Manifest(manifest)) {
+    throw new JcamFormatError('project.json is missing required fields or has the wrong shape.')
   }
 
   switch (manifest.mode) {
@@ -168,17 +180,60 @@ export function unpackJcamProject(bytes: Uint8Array): ProjectState {
   }
 }
 
-function isManifestShape(value: unknown): value is ProjectManifest {
+interface ManifestEnvelope {
+  format: string
+  version: number
+  fileName: string
+}
+
+/**
+ * Minimal shape shared by every supported manifest version: enough to
+ * dispatch on `format` and `version` before applying a version-specific
+ * validator.
+ */
+function isManifestEnvelope(value: unknown): value is ManifestEnvelope {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
   return (
     typeof v.format === 'string' &&
     typeof v.version === 'number' &&
-    typeof v.fileName === 'string' &&
-    typeof v.mode === 'string' &&
-    !!v.payload &&
-    typeof v.payload === 'object'
+    typeof v.fileName === 'string'
   )
+}
+
+function isSupportedVersion(version: number): boolean {
+  return (SUPPORTED_READ_VERSIONS as readonly number[]).includes(version)
+}
+
+function isV2Manifest(value: ManifestEnvelope): value is ProjectManifest {
+  const v = value as unknown as Record<string, unknown>
+  return typeof v.mode === 'string' && !!v.payload && typeof v.payload === 'object'
+}
+
+/**
+ * V1 manifests predate the `mode` / `payload` envelope and store `sim`
+ * at the top level alongside `fileName`. There was only ever one mode
+ * (the G-code Viewer), so migration is mechanical: read `sim` from the
+ * manifest, read `gcode.nc` from the zip, and return the v2-shaped
+ * `gcode-viewer` state.
+ */
+function readV1(
+  manifest: ManifestEnvelope,
+  entries: Record<string, Uint8Array>,
+): ProjectState {
+  const raw = manifest as unknown as Record<string, unknown>
+  if (!isSimParams(raw.sim)) {
+    throw new JcamFormatError('Legacy v1 project.json is missing valid `sim` parameters.')
+  }
+  const gcodeBytes = entries['gcode.nc']
+  if (!gcodeBytes) {
+    throw new JcamFormatError('Missing gcode.nc inside the project zip.')
+  }
+  return {
+    fileName: manifest.fileName,
+    mode: 'gcode-viewer',
+    payload: { gcode: strFromU8(gcodeBytes), sim: raw.sim },
+  }
 }
 
 function isSimParams(value: unknown): value is SimulateGcodeViewerParams {
