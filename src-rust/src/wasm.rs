@@ -1,9 +1,13 @@
-//! WebAssembly entry points for the Mode 1 (G-code Viewer) frontend.
+//! WebAssembly entry points for the browser frontend.
 //!
-//! The browser passes G-code file contents (already read from a `<input
-//! type="file">` element) as a JavaScript string. Each wasm-bindgen wrapper
-//! delegates to a plain Rust `_inner` function that takes `&str` so it can
-//! be tested without the wasm runtime.
+//! Covers both modes: Mode 1 (G-code Viewer) takes G-code as a `&str`, Mode 2
+//! (2D Profile Cuts) takes SVG/DXF file contents as `&[u8]` and the planner /
+//! emitter inputs as `JsValue` deserialised via `serde_wasm_bindgen`.
+//!
+//! Each `#[wasm_bindgen]` wrapper delegates to a plain Rust `_inner` function
+//! that takes ordinary Rust types, so the core logic can be tested without
+//! the wasm runtime. `AppError` is serialised to a `JsValue` on the error
+//! path so the TS frontend can pattern-match on the `kind` discriminant.
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -14,7 +18,12 @@ use crate::gcode_parser::{
     self, gcode_segments_to_line_geometry, parse_metadata, GcodeStockMetadata, GcodeToolMetadata,
     ParseWarning,
 };
+use crate::geometry2d::Polyline;
+use crate::grbl::emit_grbl;
+use crate::parsers::{dxf as dxf_parser, svg as svg_parser};
+use crate::profile::{generate_profile, ProfileOperationInput, ToolpathOutput};
 use crate::types::{BoxDimensions, LineGeometryData, MeshData, StockDefinition};
+use crate::working_env::Tool;
 
 // ── load_gcode_for_viewer ─────────────────────────────────────────────────────
 
@@ -114,6 +123,106 @@ pub fn simulate_gcode_viewer(content: &str, params: JsValue) -> Result<JsValue, 
         serde_wasm_bindgen::from_value(params).map_err(|e| JsValue::from_str(&e.to_string()))?;
     let mesh = simulate_gcode_viewer_inner(content, &params).map_err(app_error_to_js)?;
     serde_wasm_bindgen::to_value(&mesh).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+// ── parse_svg ─────────────────────────────────────────────────────────────────
+
+/// Serializable result of [`parse_svg_inner`]. Mirrors
+/// [`crate::parsers::svg::ParsedSvg`] but derives `Serialize`/`Deserialize` so
+/// it can cross the wasm boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseSvgResult {
+    pub paths: Vec<Polyline>,
+    pub warnings: Vec<ParseWarning>,
+}
+
+/// Parse an SVG document into 2D polylines in millimetres.
+pub fn parse_svg_inner(bytes: &[u8]) -> Result<ParseSvgResult, AppError> {
+    let parsed = svg_parser::parse_svg(bytes)?;
+    Ok(ParseSvgResult {
+        paths: parsed.paths,
+        warnings: parsed.warnings,
+    })
+}
+
+#[wasm_bindgen(js_name = parseSvg)]
+pub fn parse_svg(bytes: &[u8]) -> Result<JsValue, JsValue> {
+    let result = parse_svg_inner(bytes).map_err(app_error_to_js)?;
+    serde_wasm_bindgen::to_value(&result).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+// ── parse_dxf ─────────────────────────────────────────────────────────────────
+
+/// Serializable result of [`parse_dxf_inner`]. Mirrors
+/// [`crate::parsers::dxf::ParsedDxf`] but derives `Serialize`/`Deserialize` so
+/// it can cross the wasm boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseDxfResult {
+    pub paths: Vec<Polyline>,
+    pub warnings: Vec<ParseWarning>,
+}
+
+/// Parse a DXF document into 2D polylines in millimetres.
+pub fn parse_dxf_inner(bytes: &[u8]) -> Result<ParseDxfResult, AppError> {
+    let parsed = dxf_parser::parse_dxf(bytes)?;
+    Ok(ParseDxfResult {
+        paths: parsed.paths,
+        warnings: parsed.warnings,
+    })
+}
+
+#[wasm_bindgen(js_name = parseDxf)]
+pub fn parse_dxf(bytes: &[u8]) -> Result<JsValue, JsValue> {
+    let result = parse_dxf_inner(bytes).map_err(app_error_to_js)?;
+    serde_wasm_bindgen::to_value(&result).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+// ── generate_profile_toolpath ─────────────────────────────────────────────────
+
+/// Run the Mode 2 profile planner. Inner thin wrapper around
+/// [`crate::profile::generate_profile`] so the wasm shim can stay symmetrical
+/// with the other exports.
+pub fn generate_profile_toolpath_inner(
+    input: &ProfileOperationInput,
+) -> Result<ToolpathOutput, AppError> {
+    generate_profile(input)
+}
+
+#[wasm_bindgen(js_name = generateProfileToolpath)]
+pub fn generate_profile_toolpath(input: JsValue) -> Result<JsValue, JsValue> {
+    let input: ProfileOperationInput =
+        serde_wasm_bindgen::from_value(input).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let toolpath = generate_profile_toolpath_inner(&input).map_err(app_error_to_js)?;
+    serde_wasm_bindgen::to_value(&toolpath).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+// ── emit_grbl_gcode ───────────────────────────────────────────────────────────
+
+/// Render a planner-generated toolpath as a GRBL-flavoured G-code program.
+pub fn emit_grbl_gcode_inner(
+    toolpath: &ToolpathOutput,
+    tool: &Tool,
+    stock: &BoxDimensions,
+) -> Result<String, AppError> {
+    emit_grbl(toolpath, tool, stock)
+}
+
+#[wasm_bindgen(js_name = emitGrblGcode)]
+pub fn emit_grbl_gcode(
+    toolpath: JsValue,
+    tool: JsValue,
+    stock: JsValue,
+) -> Result<JsValue, JsValue> {
+    let toolpath: ToolpathOutput =
+        serde_wasm_bindgen::from_value(toolpath).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let tool: Tool =
+        serde_wasm_bindgen::from_value(tool).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let stock: BoxDimensions =
+        serde_wasm_bindgen::from_value(stock).map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let gcode = emit_grbl_gcode_inner(&toolpath, &tool, &stock).map_err(app_error_to_js)?;
+    serde_wasm_bindgen::to_value(&gcode).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
@@ -286,5 +395,103 @@ M30
             .zip(mesh.normals.chunks_exact(3))
             .filter(|(v, n)| (n[2] - 1.0).abs() < 1e-3 && (v[2] - z).abs() < 1e-3)
             .count()
+    }
+
+    // ── parse_svg_inner ─────────────────────────────────────────────────
+
+    const RECT_SVG: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="10mm" viewBox="0 0 20 10">
+  <rect x="0" y="0" width="20" height="10" fill="black"/>
+</svg>"#;
+
+    #[test]
+    fn parse_svg_inner_returns_paths_for_rect() {
+        let result = parse_svg_inner(RECT_SVG).expect("rect SVG parses");
+        assert!(!result.paths.is_empty(), "expected at least one polyline");
+    }
+
+    // ── parse_dxf_inner ─────────────────────────────────────────────────
+
+    const LINE_DXF: &[u8] = include_bytes!("parsers/dxf_fixtures/line_mm.dxf");
+
+    #[test]
+    fn parse_dxf_inner_returns_paths_for_line() {
+        let result = parse_dxf_inner(LINE_DXF).expect("LINE DXF parses");
+        assert!(!result.paths.is_empty(), "expected at least one polyline");
+    }
+
+    // ── generate_profile_toolpath_inner ─────────────────────────────────
+
+    fn profile_sample_tool() -> crate::working_env::Tool {
+        crate::working_env::Tool {
+            id: crate::working_env::ToolId::new("t1"),
+            name: "1/8\" flat".into(),
+            diameter: 3.175,
+            flute_count: 2,
+            length: 38.0,
+            material: "carbide".into(),
+            recommended: crate::working_env::FeedsAndSpeeds {
+                spindle_rpm: 18000.0,
+                feed_rate: 800.0,
+                plunge_rate: 200.0,
+            },
+        }
+    }
+
+    fn profile_sample_input() -> ProfileOperationInput {
+        use crate::geometry2d::Point2;
+        use crate::profile::CutSide;
+        ProfileOperationInput {
+            boundaries: vec![Polyline::closed(vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(10.0, 0.0),
+                Point2::new(10.0, 10.0),
+                Point2::new(0.0, 10.0),
+            ])],
+            tool: profile_sample_tool(),
+            cut_side: CutSide::Outside,
+            depth_total: 3.0,
+            depth_per_pass: 1.5,
+            safe_z: 5.0,
+            plunge_feed: 200.0,
+            cut_feed: 800.0,
+            spindle_rpm: 18000.0,
+        }
+    }
+
+    #[test]
+    fn generate_profile_toolpath_inner_emits_motions_for_square() {
+        let toolpath =
+            generate_profile_toolpath_inner(&profile_sample_input()).expect("planner succeeds");
+        assert!(!toolpath.is_empty(), "expected at least one motion");
+    }
+
+    // ── emit_grbl_gcode_inner ───────────────────────────────────────────
+
+    #[test]
+    fn emit_grbl_gcode_inner_renders_program_for_simple_toolpath() {
+        use crate::profile::ToolpathMotion;
+        let toolpath = vec![
+            ToolpathMotion::Rapid {
+                to: [0.0, 0.0, 5.0],
+            },
+            ToolpathMotion::Linear {
+                to: [10.0, 0.0, -1.0],
+                feed: 800.0,
+            },
+        ];
+        let tool = profile_sample_tool();
+        let stock = BoxDimensions {
+            origin: crate::types::Vec3::zero(),
+            width: 100.0,
+            depth: 50.0,
+            height: 10.0,
+        };
+        let gcode = emit_grbl_gcode_inner(&toolpath, &tool, &stock).expect("emitter succeeds");
+        assert!(gcode.contains("G21"), "expected mm mode in:\n{gcode}");
+        assert!(
+            gcode.contains("G1 X10 Y0 Z-1 F800"),
+            "expected linear cut line in:\n{gcode}"
+        );
     }
 }
