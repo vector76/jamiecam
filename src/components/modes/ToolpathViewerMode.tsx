@@ -149,9 +149,24 @@ function paramsFromForm(form: SimForm): ParamsResult {
   }
 }
 
-export function ToolpathViewerMode() {
+interface ToolpathViewerModeProps {
+  /**
+   * Optional project to hydrate from on mount. When the App shell opens
+   * a `.jcam` and routes by mode, it passes the unpacked state down here
+   * so this component shows the saved file immediately. Only
+   * `gcode-viewer` payloads are honored; the App shell is responsible
+   * for not handing this component a different mode.
+   */
+  initialProject?: ProjectState | null
+}
+
+export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerModeProps = {}) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const projectInputRef = useRef<HTMLInputElement | null>(null)
+  // Read-once snapshot of the prop so a re-render with a stale parent
+  // reference doesn't trigger a reload — the App shell remounts this
+  // component (via key) whenever it wants fresh hydration.
+  const initialProjectRef = useRef(initialProject)
 
   const [fileName, setFileName] = useState<string | null>(null)
   const [gcodeContent, setGcodeContent] = useState<string | null>(null)
@@ -182,7 +197,6 @@ export function ToolpathViewerMode() {
   useEffect(() => {
     useViewportStore.getState().setToolpathGeometry(null)
     useViewportStore.getState().clearSimulationMesh()
-    void refreshRecents()
     let cancelled = false
     prewarmWasm().then(
       () => {
@@ -194,11 +208,34 @@ export function ToolpathViewerMode() {
         setEngineError(err.message ?? err.kind ?? 'Failed to initialize engine')
       },
     )
+    // Sequence the initial recents refresh before the optional seed
+    // hydration. Both end in setRecents, and loadFromText's own
+    // post-upsert refreshRecents would race with a parallel initial
+    // refresh — last writer wins, so a slow initial listRecents could
+    // clobber the populated list.
+    void (async () => {
+      await refreshRecents()
+      if (cancelled) return
+      const seed = initialProjectRef.current
+      if (seed && seed.mode === 'gcode-viewer') {
+        // Opening a project from the shell should bump it in Recents,
+        // matching the in-sidebar "Open Project…" path. Restoring from
+        // Recents goes via handleRestoreRecent, which sets touchRecents
+        // to false to avoid the timestamp bump.
+        await loadFromText(seed.fileName, seed.payload.gcode, {
+          savedSim: seed.payload.sim,
+        })
+      }
+    })()
     return () => {
       cancelled = true
       useViewportStore.getState().setToolpathGeometry(null)
       useViewportStore.getState().clearSimulationMesh()
     }
+    // loadFromText is recreated each render but only the initial mount
+    // call matters — guarded above by initialProjectRef so it's a no-op
+    // on re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshRecents])
 
   /**
@@ -371,7 +408,7 @@ export function ToolpathViewerMode() {
   const canSaveProject = gcodeContent !== null && fileName !== null
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-full flex-1 flex-col bg-background text-foreground">
       <input
         ref={fileInputRef}
         type="file"
