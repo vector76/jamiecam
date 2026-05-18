@@ -165,11 +165,18 @@ database, in a dedicated object store (`workingEnv`) alongside the
 `recents` store. The store uses out-of-line keys with **one record per
 collection** of the aggregate:
 
-| key            | value                |
-| -------------- | -------------------- |
-| `setups`       | `MachineSetup[]`     |
-| `tools`        | `Tool[]`             |
-| `availability` | `AvailabilityPair[]` |
+| key             | value                |
+| --------------- | -------------------- |
+| `setups`        | `MachineSetup[]`     |
+| `tools`         | `Tool[]`             |
+| `availability`  | `AvailabilityPair[]` |
+| `activeSetupId` | `string` (SetupId)   |
+
+The `activeSetupId` slot is the cross-session memory of which setup
+the user last picked. It lives in the same store rather than in
+`recents` because it's a property of the workbench (the user's CNC),
+not of any particular project — opening a fresh project should land
+on the same machine.
 
 **Why per-collection records rather than one blob keyed `'current'`:**
 a single save writes three small records in one transaction without a
@@ -214,10 +221,15 @@ real consumers rather than guessed at now.
 ## 8. `.jcam` format: add `mode` field
 
 The `project.json` inside a `.jcam` archive gains a required `mode`
-field set at project creation. Values are short kebab-case identifiers
-— e.g. `gcode-viewer` for Mode 1, something like `2d-profile` for Mode
-2 (exact strings to be settled at implementation time). The mode is
-immutable after creation.
+field set at project creation. Values are short kebab-case identifiers.
+The two strings currently in use:
+
+| Mode                   | Identifier     |
+| ---------------------- | -------------- |
+| Mode 1 (G-code Viewer) | `gcode-viewer` |
+| Mode 2 (2-D Profile)   | `2d-profile`   |
+
+The mode is immutable after creation.
 
 **Migration:** existing `.jcam` files written before this change default
 to the Mode 1 identifier on load — they could only have been produced
@@ -235,8 +247,9 @@ A Mode 2 `.jcam` stores the **unmodified SVG/DXF bytes** the user
 imported as a separate zip entry (`imported.svg` or `imported.dxf`),
 alongside `project.json`. The manifest payload carries the parsed
 path cache (so the file opens fast and consistently), the user's path
-selection, the operation params, the active SetupId, and the selected
-ToolId.
+selection, the active SetupId, and the operation params (which include
+the selected ToolId — the tool is one field of the operation form
+rather than a separate top-level slot).
 
 **Why persist the original bytes rather than only the parse cache:**
 
@@ -278,6 +291,33 @@ remains as-is for Mode 1 and for the 3D preview within Mode 2.
 The deleted Tauri build also followed this split — `Canvas2D` as its
 own component — which is evidence the boundary is natural.
 
+### Mode 2 UI panel layout
+
+The Mode 2 surface is a single screen split into the Canvas2D viewport
+(or the 3D Viewport during simulation preview) on the left and a
+fixed-width right-hand sidebar that mirrors Mode 1's section pattern.
+Sidebar sections, top to bottom:
+
+| Section     | Contents                                                                                                                                            |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setup       | Active machine setup selector; "Working Environment…" button opens the setups/tools/availability editor modal.                                      |
+| File        | Open SVG/DXF picker (single-file); "Load Sample…" dropdown of bundled samples; current file name; parse-warning list.                               |
+| Paths       | One row per imported polyline with a selection checkbox, point count, and open/closed marker.                                                       |
+| Operation   | Tool dropdown filtered by the active setup's availability matrix; cut-side radio (outside/inside/onLine); depth, feed, and spindle numeric inputs.  |
+| Generate    | Generate button; blocking-reason hint (no paths / no tool); "Generated N moves" status; error block on planner failures.                            |
+| Simulate    | Simulate button; "Back to 2D" toggle once the 3D preview is showing; gating hint when no toolpath exists yet; error block on simulation failures.   |
+| Export      | Export G-code button (triggers a browser download named after the source stem); gating hint when no toolpath exists yet; error block on emit fail.  |
+
+Error patterns mirror Mode 1: recoverable parse warnings render as an
+inline yellow list (`text-yellow-600`); typed engine errors render as
+a red alert block (`role="alert" className="text-xs text-destructive"`).
+
+The Simulate button swaps the left pane from `Canvas2DViewport` to the
+existing 3D `Viewport`; "Back to 2D" returns. A fresh import or
+regenerate retires any prior simulation mesh and flips back to the 2D
+view so the user sees their new artwork or toolpath immediately rather
+than an empty 3-D scene.
+
 ---
 
 ## 10. Implementation dependencies
@@ -305,7 +345,12 @@ Dependent:
 (`Tool` type), and §7 (G-code emitter input) all need to agree on
 shared Rust types. Whoever lands first sets the shape; later items
 conform. Landing them in roughly that order avoids retroactive type
-churn.
+churn. In practice this landed as the `geometry2d` module
+(`src-rust/src/geometry2d/`) — `Point2`, `Polyline`, and `Region`, all
+f64 millimetres — which the SVG and DXF parsers produce and the profile
+planner consumes directly. Downstream of the planner the shared shape
+is `profile::ToolpathOutput` (a `Vec<ToolpathMotion>`), which the GRBL
+emitter takes alongside `working_env::Tool` and `types::BoxDimensions`.
 
 **Hard ordering rule.** §8's `mode` field must be added *before* any
 Mode 2 `.jcam` file is written (restated from §8 for visibility).
@@ -314,8 +359,9 @@ Mode 2 `.jcam` file is written (restated from §8 for visibility).
 
 ## Status
 
-*Document status: Decisions accepted 2026-05-17. Implementation not yet
-started. Update each section as design evolves during implementation —
-do not let this doc drift from reality.*
+*Document status: Decisions accepted 2026-05-17; first Mode 2 slice
+(profile-only, GRBL emit, Canvas2D workspace, `.jcam` round-trip)
+implemented 2026-05-17/18. Update each section as design evolves during
+implementation — do not let this doc drift from reality.*
 
 *Related documents: `roadmap.md`, `web-port-handoff.md`, `modes-overview.md`.*
