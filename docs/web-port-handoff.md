@@ -415,7 +415,6 @@ deleted. What remains:
 
 - `web-port-handoff.md` — this file; the live source of current-state truth.
 - `phase-4-design.md` — the locked-in Mode 2 design decisions.
-- `phase-4-tasks.md` — the Phase 4 task list (now historical).
 - `gcode-parser.md`, `dexel-material-removal.md`, `tool-geometry-model.md`
   — specs for code that still ships. Carry a post-pivot banner noting the
   old Tauri path references are stale.
