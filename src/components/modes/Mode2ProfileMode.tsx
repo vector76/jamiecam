@@ -10,11 +10,16 @@
  * selection checkbox) and render in the viewport using the `artwork`
  * style. The Operation section is the profile-cut form (tool dropdown
  * filtered by the active setup's availability matrix, cut-side toggle,
- * and the depth / feed / spindle numeric inputs). Form state is held
- * locally — persistence into `.jcam` lands in a later bead. Parse
- * failures surface as a red alert block in File; recoverable
- * ParseWarnings show as a yellow inline list, mirroring Mode 1's
- * load-warning pattern.
+ * and the depth / feed / spindle numeric inputs). Parse failures
+ * surface as a red alert block in File; recoverable ParseWarnings show
+ * as a yellow inline list, mirroring Mode 1's load-warning pattern.
+ *
+ * Persistence: form state, path selection, the source bytes, and the
+ * active SetupId are all serialised into the `Mode2ProfilePayload`
+ * carried by `.jcam` (see `../../persistence/projectFile.ts`). The
+ * component emits a fresh `ProjectState` to `onProjectStateChange` on
+ * every tracked-state change so the shell can save and the Recents
+ * list stays in sync.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -51,7 +56,12 @@ import type {
   ToolpathOutput,
   WorkingEnvironment,
 } from '../../api/types'
-import type { ProjectState } from '../../persistence/projectFile'
+import type {
+  Mode2OperationParams,
+  Mode2ProfilePayload,
+  Mode2SourceFormat,
+  ProjectState,
+} from '../../persistence/projectFile'
 
 type EngineStatus = 'initializing' | 'ready' | 'failed'
 type ImportStatus = 'idle' | 'importing' | 'imported' | 'error'
@@ -79,18 +89,7 @@ function sampleUrl(fileName: string): string {
   return `${import.meta.env.BASE_URL}samples/${fileName}`
 }
 
-interface ProfileOperationFormState {
-  toolId: string | null
-  cutSide: CutSide
-  depthTotal: number
-  depthPerPass: number
-  safeZ: number
-  plungeFeed: number
-  cutFeed: number
-  spindleRpm: number
-}
-
-const DEFAULT_OPERATION: ProfileOperationFormState = {
+const DEFAULT_OPERATION: Mode2OperationParams = {
   toolId: null,
   cutSide: 'outside',
   depthTotal: 5,
@@ -111,11 +110,11 @@ const CUT_SIDE_OPTIONS: ReadonlyArray<{ value: CutSide; label: string }> = [
 
 interface Mode2ProfileModeProps {
   /**
-   * Optional project to hydrate from on mount. Accepted for shape
-   * parity with Mode 1 — actual hydration of Mode 2 payloads (loading
-   * the SVG/DXF source and selected paths) lands in a later bead, so
-   * we currently surface only the file name on the shell so it shows
-   * up in Recents and round-trips through Save Project.
+   * Optional project to hydrate from on mount. When `mode` is
+   * `2d-profile`, the payload's source bytes, parsed paths, path
+   * selection, operation form values, and active SetupId all seed the
+   * matching component state — the component re-renders the project
+   * without re-parsing.
    */
   initialProject?: ProjectState | null
   /**
@@ -135,6 +134,11 @@ export function Mode2ProfileMode({
   // Read-once snapshot for hydration; the shell remounts (via key bump)
   // when it wants a fresh seed, so prop churn shouldn't re-hydrate.
   const initialProjectRef = useRef(initialProject)
+  const initialMode2 = useRef<Mode2ProfilePayload | null>(
+    initialProjectRef.current?.mode === '2d-profile'
+      ? initialProjectRef.current.payload
+      : null,
+  ).current
   const onProjectStateChangeRef = useRef(onProjectStateChange)
   useEffect(() => {
     onProjectStateChangeRef.current = onProjectStateChange
@@ -148,17 +152,33 @@ export function Mode2ProfileMode({
       ? initialProjectRef.current.fileName
       : null,
   )
+  const [sourceFormat, setSourceFormat] = useState<Mode2SourceFormat | null>(
+    initialMode2?.sourceFormat ?? null,
+  )
+  const [sourceBytes, setSourceBytes] = useState<Uint8Array | null>(
+    initialMode2?.sourceBytes ?? null,
+  )
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
   const [importError, setImportError] = useState<string | null>(null)
-  const [paths, setPaths] = useState<Polyline[]>([])
-  const [selected, setSelected] = useState<boolean[]>([])
-  const [warnings, setWarnings] = useState<ParseWarning[]>([])
+  const [paths, setPaths] = useState<Polyline[]>(initialMode2?.paths ?? [])
+  const [selected, setSelected] = useState<boolean[]>(initialMode2?.selectedPaths ?? [])
+  const [warnings, setWarnings] = useState<ParseWarning[]>(initialMode2?.warnings ?? [])
 
   const [workingEnvOpen, setWorkingEnvOpen] = useState(false)
   const [env, setEnv] = useState<WorkingEnvironment>(EMPTY_ENV)
-  const [activeSetupId, setActiveSetupId] = useState<string | null>(null)
+  // Flips true after the first `refreshWorkingEnv` resolves. The tool-
+  // snap useEffect waits on this so it can't clobber a hydrated toolId
+  // during the brief window before env is loaded (when `availableTools`
+  // would compute as `[]` not because the setup has no tools but
+  // because env hasn't arrived yet).
+  const [envLoaded, setEnvLoaded] = useState(false)
+  const [activeSetupId, setActiveSetupId] = useState<string | null>(
+    initialMode2?.activeSetupId ?? null,
+  )
 
-  const [operation, setOperation] = useState<ProfileOperationFormState>(DEFAULT_OPERATION)
+  const [operation, setOperation] = useState<Mode2OperationParams>(
+    initialMode2?.operation ?? DEFAULT_OPERATION,
+  )
 
   const [generateStatus, setGenerateStatus] = useState<GenerateStatus>('idle')
   const [generateError, setGenerateError] = useState<string | null>(null)
@@ -181,20 +201,40 @@ export function Mode2ProfileMode({
   // its own, the consumer owns the draw loop.
   const transform = useViewport2DStore((s) => s.transform)
 
-  // Push the current Mode 2 savable state up to the shell whenever the
-  // loaded source file changes (including the initial hydration emit so
-  // a `.jcam` opened by the shell lands in Recents and re-enables Save).
+  // Push the current Mode 2 savable state up to the shell whenever any
+  // tracked piece of state changes (including the initial hydration
+  // emit so a `.jcam` opened by the shell lands in Recents and
+  // re-enables Save). All three source* fields move together — they
+  // only become non-null together via importBytes — but we guard on
+  // each so a partial mount can't ever leak a malformed state.
   useEffect(() => {
-    if (sourceFileName === null) {
+    if (sourceFileName === null || sourceFormat === null || sourceBytes === null) {
       onProjectStateChangeRef.current?.(null)
       return
     }
     onProjectStateChangeRef.current?.({
       fileName: sourceFileName,
       mode: '2d-profile',
-      payload: { kind: '2d-profile' },
+      payload: {
+        sourceFormat,
+        sourceBytes,
+        paths,
+        warnings,
+        selectedPaths: selected,
+        operation,
+        activeSetupId,
+      },
     })
-  }, [sourceFileName])
+  }, [
+    sourceFileName,
+    sourceFormat,
+    sourceBytes,
+    paths,
+    warnings,
+    selected,
+    operation,
+    activeSetupId,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -229,11 +269,33 @@ export function Mode2ProfileMode({
         ? loadedActive
         : null
     setActiveSetupId(validActive ?? loadedEnv.setups[0]?.id ?? null)
+    setEnvLoaded(true)
   }, [])
 
   useEffect(() => {
-    void refreshWorkingEnv()
-  }, [refreshWorkingEnv])
+    // When hydrating from a Mode 2 project, the project's activeSetupId
+    // takes precedence over whatever's currently persisted as the global
+    // default — the project was authored against a specific setup. Push
+    // that into the global slot so refreshWorkingEnv (which always reads
+    // from IDB) picks it up and the modal-close refresh later doesn't
+    // snap back to a stale persisted value.
+    void (async () => {
+      if (initialMode2 !== null) {
+        await saveActiveSetupId(initialMode2.activeSetupId)
+      }
+      await refreshWorkingEnv()
+    })()
+  }, [refreshWorkingEnv, initialMode2])
+
+  // Seed the viewport extent from hydrated paths so the imported
+  // artwork is framed correctly on a freshly opened project.
+  useEffect(() => {
+    if (initialMode2 !== null && initialMode2.paths.length > 0) {
+      useViewport2DStore.getState().setExtent(computeExtent(initialMode2.paths))
+    }
+    // Mount-only: re-running on every paths change would clobber user pan/zoom.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // `view` is a dep so the redraw fires after a switch back to Canvas2D —
   // the new draw API is committed on remount, but none of the other deps
@@ -283,8 +345,11 @@ export function Mode2ProfileMode({
 
   // Keep the operation's selected tool consistent with what's currently
   // available: clear it when the choice disappears, default it to the
-  // first available tool when nothing is picked.
+  // first available tool when nothing is picked. Gated on `envLoaded`
+  // so a hydrated toolId from `initialProject` isn't clobbered during
+  // the brief mount-to-env-resolve window.
   useEffect(() => {
+    if (!envLoaded) return
     setOperation((prev) => {
       if (prev.toolId !== null && availableTools.some((t) => t.id === prev.toolId)) {
         return prev
@@ -293,7 +358,7 @@ export function Mode2ProfileMode({
       if (prev.toolId === next) return prev
       return { ...prev, toolId: next }
     })
-  }, [availableTools])
+  }, [availableTools, envLoaded])
 
   function handlePickFile() {
     fileInputRef.current?.click()
@@ -325,6 +390,8 @@ export function Mode2ProfileMode({
       setEngineStatus('ready')
       setEngineError(null)
       setSourceFileName(name)
+      setSourceFormat(format)
+      setSourceBytes(bytes)
       setPaths(result.paths)
       setSelected(result.paths.map(() => true))
       setWarnings(result.warnings)
@@ -393,7 +460,7 @@ export function Mode2ProfileMode({
   }
 
   function handleNumberChanged(
-    key: Exclude<keyof ProfileOperationFormState, 'toolId' | 'cutSide'>,
+    key: Exclude<keyof Mode2OperationParams, 'toolId' | 'cutSide'>,
   ) {
     return (event: React.ChangeEvent<HTMLInputElement>) => {
       const parsed = Number(event.target.value)

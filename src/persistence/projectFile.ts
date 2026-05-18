@@ -2,8 +2,9 @@
  * `.jcam` project file format — pack and unpack.
  *
  * Layout (zip):
- *   project.json    Manifest with file name, mode, and mode-specific payload.
- *   gcode.nc        The raw G-code text (only for the `gcode-viewer` mode).
+ *   project.json       Manifest with file name, mode, and mode-specific payload.
+ *   gcode.nc           Raw G-code text (only for the `gcode-viewer` mode).
+ *   imported.svg / .dxf  Original imported bytes (only for the `2d-profile` mode).
  *
  * Why a zip rather than a single JSON: G-code files are often several MB
  * of mostly-repeating ASCII; deflate shrinks them ~5x. Separating the
@@ -23,7 +24,13 @@
  */
 
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
-import type { SimulateGcodeViewerParams } from '../api/types'
+import type {
+  CutSide,
+  ParseWarning,
+  Polyline,
+  SetupId,
+  SimulateGcodeViewerParams,
+} from '../api/types'
 
 const FORMAT_TAG = 'jamiecam-project'
 const FORMAT_VERSION = 2
@@ -36,13 +43,48 @@ export interface GcodeViewerPayload {
   sim: SimulateGcodeViewerParams
 }
 
+/** Imported artwork formats Mode 2 currently understands. */
+export type Mode2SourceFormat = 'svg' | 'dxf'
+
 /**
- * Placeholder for Phase 4B. The `kind` discriminator keeps the type
- * meaningfully distinct from `{}` (which TypeScript treats as "any
- * non-nullish value") and gives the reader something to validate.
+ * Form-shaped parameters for a Mode 2 profile operation. Mirrors the
+ * fields edited in the Operation sidebar so the form can be hydrated
+ * and saved without an extra mapping layer.
+ */
+export interface Mode2OperationParams {
+  toolId: string | null
+  cutSide: CutSide
+  depthTotal: number
+  depthPerPass: number
+  safeZ: number
+  plungeFeed: number
+  cutFeed: number
+  spindleRpm: number
+}
+
+/**
+ * Full savable state for a Mode 2 (2-D Profile) project.
+ *
+ * `sourceBytes` is the unmodified file the user imported. We persist
+ * them — rather than only the parsed `paths` cache — so that re-opening
+ * a project lets the user re-export, re-import, or re-parse with a
+ * future parser version against the exact source they started from.
+ * Parsers evolve; the path cache could become stale or incompatible,
+ * and without the original bytes the project would be unrecoverable.
+ *
+ * The bytes live in a separate zip entry (`imported.svg` /
+ * `imported.dxf`) rather than base64-encoded inside `project.json`, so
+ * deflate can compress them and `project.json` stays small and
+ * inspectable.
  */
 export interface Mode2ProfilePayload {
-  kind: '2d-profile'
+  sourceFormat: Mode2SourceFormat
+  sourceBytes: Uint8Array
+  paths: Polyline[]
+  warnings: ParseWarning[]
+  selectedPaths: boolean[]
+  operation: Mode2OperationParams
+  activeSetupId: SetupId | null
 }
 
 /**
@@ -50,14 +92,24 @@ export interface Mode2ProfilePayload {
  * `mode` so consumers narrow `payload` to the right shape after a single
  * mode check. This is what gets written into a `.jcam` zip and what we
  * round-trip through IndexedDB for the Recents list.
+ *
+ * For Mode 2 projects, `fileName` is the original imported file name
+ * (e.g. `part.svg`) — the Recents list displays it directly.
  */
 export type ProjectState =
   | { fileName: string; mode: 'gcode-viewer'; payload: GcodeViewerPayload }
   | { fileName: string; mode: '2d-profile'; payload: Mode2ProfilePayload }
 
+/**
+ * On-disk shape of the 2d-profile payload. Identical to
+ * `Mode2ProfilePayload` minus `sourceBytes`, which is stored as a
+ * separate zip entry rather than inlined.
+ */
+type Mode2ManifestPayload = Omit<Mode2ProfilePayload, 'sourceBytes'>
+
 type ManifestPayload =
   | { sim: SimulateGcodeViewerParams } // gcode-viewer (gcode is in gcode.nc)
-  | { kind: '2d-profile' }
+  | Mode2ManifestPayload // 2d-profile (sourceBytes is in imported.<format>)
 
 /**
  * The on-disk manifest shape. `mode` is typed as `string` (not
@@ -71,6 +123,10 @@ interface ProjectManifest {
   fileName: string
   mode: string
   payload: ManifestPayload
+}
+
+function importedEntryName(format: Mode2SourceFormat): string {
+  return `imported.${format}`
 }
 
 export function packJcamProject(state: ProjectState): Uint8Array {
@@ -87,6 +143,8 @@ export function packJcamProject(state: ProjectState): Uint8Array {
 
   if (state.mode === 'gcode-viewer') {
     entries['gcode.nc'] = strToU8(state.payload.gcode)
+  } else {
+    entries[importedEntryName(state.payload.sourceFormat)] = state.payload.sourceBytes
   }
 
   return zipSync(entries)
@@ -96,8 +154,17 @@ function manifestPayloadFor(state: ProjectState): ManifestPayload {
   switch (state.mode) {
     case 'gcode-viewer':
       return { sim: state.payload.sim }
-    case '2d-profile':
-      return { kind: '2d-profile' }
+    case '2d-profile': {
+      const p = state.payload
+      return {
+        sourceFormat: p.sourceFormat,
+        paths: p.paths,
+        warnings: p.warnings,
+        selectedPaths: p.selectedPaths,
+        operation: p.operation,
+        activeSetupId: p.activeSetupId,
+      }
+    }
   }
 }
 
@@ -166,13 +233,17 @@ export function unpackJcamProject(bytes: Uint8Array): ProjectState {
     }
     case '2d-profile': {
       const payload = manifest.payload as Record<string, unknown>
-      if (payload.kind !== '2d-profile') {
-        throw new JcamFormatError('Mode `2d-profile` payload has the wrong discriminator.')
+      const mode2 = asMode2ManifestPayload(payload)
+      const sourceBytes = entries[importedEntryName(mode2.sourceFormat)]
+      if (!sourceBytes) {
+        throw new JcamFormatError(
+          `Missing ${importedEntryName(mode2.sourceFormat)} inside the project zip.`,
+        )
       }
       return {
         fileName: manifest.fileName,
         mode: '2d-profile',
-        payload: { kind: '2d-profile' },
+        payload: { ...mode2, sourceBytes },
       }
     }
     default:
@@ -253,5 +324,61 @@ function isSimParams(value: unknown): value is SimulateGcodeViewerParams {
     typeof origin.x === 'number' &&
     typeof origin.y === 'number' &&
     typeof origin.z === 'number'
+  )
+}
+
+function asMode2ManifestPayload(value: Record<string, unknown>): Mode2ManifestPayload {
+  if (value.sourceFormat !== 'svg' && value.sourceFormat !== 'dxf') {
+    throw new JcamFormatError(
+      'Mode `2d-profile` payload has an invalid `sourceFormat`; expected "svg" or "dxf".',
+    )
+  }
+  if (!Array.isArray(value.paths)) {
+    throw new JcamFormatError('Mode `2d-profile` payload is missing `paths` array.')
+  }
+  if (!Array.isArray(value.warnings)) {
+    throw new JcamFormatError('Mode `2d-profile` payload is missing `warnings` array.')
+  }
+  if (!Array.isArray(value.selectedPaths)) {
+    throw new JcamFormatError(
+      'Mode `2d-profile` payload is missing `selectedPaths` array.',
+    )
+  }
+  if (!isOperationParams(value.operation)) {
+    throw new JcamFormatError(
+      'Mode `2d-profile` payload has an invalid `operation` block.',
+    )
+  }
+  const activeSetupId = value.activeSetupId
+  if (activeSetupId !== null && typeof activeSetupId !== 'string') {
+    throw new JcamFormatError(
+      'Mode `2d-profile` payload `activeSetupId` must be a string or null.',
+    )
+  }
+  return {
+    sourceFormat: value.sourceFormat,
+    paths: value.paths as Polyline[],
+    warnings: value.warnings as ParseWarning[],
+    selectedPaths: value.selectedPaths as boolean[],
+    operation: value.operation,
+    activeSetupId,
+  }
+}
+
+function isOperationParams(value: unknown): value is Mode2OperationParams {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  const toolIdOk = v.toolId === null || typeof v.toolId === 'string'
+  const cutSideOk =
+    v.cutSide === 'outside' || v.cutSide === 'inside' || v.cutSide === 'onLine'
+  return (
+    toolIdOk &&
+    cutSideOk &&
+    typeof v.depthTotal === 'number' &&
+    typeof v.depthPerPass === 'number' &&
+    typeof v.safeZ === 'number' &&
+    typeof v.plungeFeed === 'number' &&
+    typeof v.cutFeed === 'number' &&
+    typeof v.spindleRpm === 'number'
   )
 }

@@ -229,6 +229,38 @@ state and lets the loader pick the right mode shell on open.
 
 Add this field **before** any Mode 2 `.jcam` file is written.
 
+### Mode 2 payload: persist the original imported bytes
+
+A Mode 2 `.jcam` stores the **unmodified SVG/DXF bytes** the user
+imported as a separate zip entry (`imported.svg` or `imported.dxf`),
+alongside `project.json`. The manifest payload carries the parsed
+path cache (so the file opens fast and consistently), the user's path
+selection, the operation params, the active SetupId, and the selected
+ToolId.
+
+**Why persist the original bytes rather than only the parse cache:**
+
+- Parsers evolve. A future bug-fix or feature added to `usvg`/`dxf`
+  may produce different (typically better) paths from the same source.
+  Without the original bytes, an old project is frozen against the
+  parser version that authored it.
+- The path cache is a derived view; losing the source means the
+  project can no longer be re-exported as the original artwork or
+  re-imported into another tool. The original bytes are the canonical
+  truth and round-trippable in a way the path cache is not.
+- Storage cost is acceptable. Original SVG/DXF files for hobbyist CNC
+  work are typically tens of KB; deflate brings them well below that.
+  Keeping the source is a small price for full recoverability.
+
+**Why a separate zip entry rather than base64-encoded in
+`project.json`:** deflate can compress the entry, keeps `project.json`
+small and inspectable (`unzip -p project.jcam project.json | jq .`),
+and avoids forcing the bytes through `JSON.stringify`'s text codec.
+
+The in-memory `Mode2ProfilePayload` carries `sourceBytes: Uint8Array`
+directly so it round-trips through Recents (IndexedDB structured
+clone) as well as `.jcam`.
+
 ---
 
 ## 9. 2D viewport: separate Canvas2D component

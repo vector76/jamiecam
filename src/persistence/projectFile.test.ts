@@ -2,6 +2,7 @@ import {
   packJcamProject,
   unpackJcamProject,
   JcamFormatError,
+  type Mode2ProfilePayload,
   type ProjectState,
 } from './projectFile'
 import { strToU8, strFromU8, unzipSync, zipSync } from 'fflate'
@@ -39,25 +40,162 @@ describe('packJcamProject / unpackJcamProject', () => {
     expect(manifest.version).toBe(2)
   })
 
-  it('round-trips a 2d-profile project state (placeholder payload)', () => {
-    const state: ProjectState = {
-      fileName: 'part.svg',
-      mode: '2d-profile',
-      payload: { kind: '2d-profile' },
-    }
-    const packed = packJcamProject(state)
-    const unpacked = unpackJcamProject(packed)
-    expect(unpacked).toEqual(state)
-  })
+  describe('2d-profile round trip', () => {
+    const SVG_BYTES = new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e]) // "<svg/>"
+    const DXF_BYTES = new Uint8Array([0x30, 0x0a, 0x45, 0x4f, 0x46, 0x0a]) // "0\nEOF\n"
 
-  it('does not write gcode.nc for a 2d-profile project', () => {
-    const state: ProjectState = {
-      fileName: 'part.svg',
-      mode: '2d-profile',
-      payload: { kind: '2d-profile' },
+    const FULL_PAYLOAD: Mode2ProfilePayload = {
+      sourceFormat: 'svg',
+      sourceBytes: SVG_BYTES,
+      paths: [
+        {
+          closed: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+            { x: 10, y: 10 },
+            { x: 0, y: 10 },
+          ],
+        },
+        {
+          closed: false,
+          points: [
+            { x: 1, y: 1 },
+            { x: 5, y: 5 },
+          ],
+        },
+      ],
+      warnings: [
+        { line: 7, message: 'skipped <text>' },
+        { line: null, message: 'unsupported transform' },
+      ],
+      selectedPaths: [true, false],
+      operation: {
+        toolId: 'tool-1',
+        cutSide: 'inside',
+        depthTotal: 7.5,
+        depthPerPass: 1.5,
+        safeZ: 6,
+        plungeFeed: 250,
+        cutFeed: 900,
+        spindleRpm: 20000,
+      },
+      activeSetupId: 'setup-1',
     }
-    const entries = unzipSync(packJcamProject(state))
-    expect(entries['gcode.nc']).toBeUndefined()
+
+    it('round-trips a Mode 2 project end-to-end', () => {
+      const state: ProjectState = {
+        fileName: 'shape.svg',
+        mode: '2d-profile',
+        payload: FULL_PAYLOAD,
+      }
+      const unpacked = unpackJcamProject(packJcamProject(state))
+      expect(unpacked).toEqual(state)
+    })
+
+    it('stores original SVG bytes in imported.svg and writes no gcode.nc', () => {
+      const state: ProjectState = {
+        fileName: 'shape.svg',
+        mode: '2d-profile',
+        payload: FULL_PAYLOAD,
+      }
+      const entries = unzipSync(packJcamProject(state))
+      expect(entries['imported.svg']).toEqual(SVG_BYTES)
+      expect(entries['imported.dxf']).toBeUndefined()
+      expect(entries['gcode.nc']).toBeUndefined()
+    })
+
+    it('uses imported.dxf when the source format is DXF', () => {
+      const state: ProjectState = {
+        fileName: 'part.dxf',
+        mode: '2d-profile',
+        payload: { ...FULL_PAYLOAD, sourceFormat: 'dxf', sourceBytes: DXF_BYTES },
+      }
+      const entries = unzipSync(packJcamProject(state))
+      expect(entries['imported.dxf']).toEqual(DXF_BYTES)
+      expect(entries['imported.svg']).toBeUndefined()
+    })
+
+    it('keeps sourceBytes out of project.json', () => {
+      const state: ProjectState = {
+        fileName: 'shape.svg',
+        mode: '2d-profile',
+        payload: FULL_PAYLOAD,
+      }
+      const entries = unzipSync(packJcamProject(state))
+      const manifest = JSON.parse(strFromU8(entries['project.json']))
+      expect(manifest.mode).toBe('2d-profile')
+      expect(manifest.payload.sourceFormat).toBe('svg')
+      expect(manifest.payload).not.toHaveProperty('sourceBytes')
+    })
+
+    it('throws when the imported.<format> entry is missing', () => {
+      const bad = zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 2,
+            fileName: 'shape.svg',
+            mode: '2d-profile',
+            payload: {
+              sourceFormat: 'svg',
+              paths: FULL_PAYLOAD.paths,
+              warnings: FULL_PAYLOAD.warnings,
+              selectedPaths: FULL_PAYLOAD.selectedPaths,
+              operation: FULL_PAYLOAD.operation,
+              activeSetupId: FULL_PAYLOAD.activeSetupId,
+            },
+          }),
+        ),
+      })
+      expect(() => unpackJcamProject(bad)).toThrow(/imported\.svg/)
+    })
+
+    it('throws when sourceFormat is missing or unrecognised', () => {
+      const bad = zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 2,
+            fileName: 'shape.svg',
+            mode: '2d-profile',
+            payload: {
+              sourceFormat: 'pdf',
+              paths: [],
+              warnings: [],
+              selectedPaths: [],
+              operation: FULL_PAYLOAD.operation,
+              activeSetupId: null,
+            },
+          }),
+        ),
+        'imported.pdf': strToU8('%PDF-1.7'),
+      })
+      expect(() => unpackJcamProject(bad)).toThrow(/sourceFormat/)
+    })
+
+    it('throws when operation params are malformed', () => {
+      const bad = zipSync({
+        'project.json': strToU8(
+          JSON.stringify({
+            format: 'jamiecam-project',
+            version: 2,
+            fileName: 'shape.svg',
+            mode: '2d-profile',
+            payload: {
+              sourceFormat: 'svg',
+              paths: [],
+              warnings: [],
+              selectedPaths: [],
+              operation: { toolId: 'x', cutSide: 'spiral' },
+              activeSetupId: null,
+            },
+          }),
+        ),
+        'imported.svg': strToU8('<svg/>'),
+      })
+      expect(() => unpackJcamProject(bad)).toThrow(/operation/)
+    })
   })
 
   it('preserves unicode in the G-code (the file is UTF-8)', () => {

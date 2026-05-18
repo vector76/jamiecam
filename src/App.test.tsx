@@ -62,7 +62,24 @@ function mode2Project(fileName = 'shape.svg'): ProjectState {
   return {
     fileName,
     mode: '2d-profile',
-    payload: { kind: '2d-profile' },
+    payload: {
+      sourceFormat: 'svg',
+      sourceBytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e]),
+      paths: [],
+      warnings: [],
+      selectedPaths: [],
+      operation: {
+        toolId: null,
+        cutSide: 'outside',
+        depthTotal: 5,
+        depthPerPass: 1,
+        safeZ: 5,
+        plungeFeed: 200,
+        cutFeed: 800,
+        spindleRpm: 18000,
+      },
+      activeSetupId: null,
+    },
   }
 }
 

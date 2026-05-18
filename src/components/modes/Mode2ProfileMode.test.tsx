@@ -1191,4 +1191,111 @@ describe('Mode2ProfileMode', () => {
       expect(useViewportStore.getState().simulationMeshData).toBeNull()
     })
   })
+
+  describe('hydration from initialProject', () => {
+    const STOCK_TOOL = makeTool('t1', 'Hydrated mill')
+    const SETUP = makeSetup('s1', 'Hydrated CNC')
+    const ENV: WorkingEnvironment = {
+      setups: [SETUP],
+      tools: [STOCK_TOOL],
+      availability: [{ setupId: 's1', toolId: 't1' }],
+    }
+
+    it('seeds the file name, paths, selection, operation, and active setup from a Mode 2 payload', async () => {
+      await seedEnv(ENV)
+      const payload = {
+        sourceFormat: 'svg' as const,
+        sourceBytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e]),
+        paths: [SQUARE, LINE],
+        warnings: [{ line: 4, message: 'hydrated warning' }],
+        selectedPaths: [true, false],
+        operation: {
+          toolId: 't1',
+          cutSide: 'inside' as const,
+          depthTotal: 9,
+          depthPerPass: 2,
+          safeZ: 7,
+          plungeFeed: 300,
+          cutFeed: 1100,
+          spindleRpm: 22000,
+        },
+        activeSetupId: 's1',
+      }
+      const initialProject = {
+        fileName: 'hydrated.svg',
+        mode: '2d-profile' as const,
+        payload,
+      }
+
+      render(<Mode2ProfileMode initialProject={initialProject} />)
+
+      // Source file label, both rows of the Paths section, and the
+      // hydrated warning all render without ever calling parseSvg.
+      expect(await screen.findByText('hydrated.svg')).toBeInTheDocument()
+      expect(parseSvg).not.toHaveBeenCalled()
+      expect(parseDxf).not.toHaveBeenCalled()
+      const path1 = screen.getByLabelText('Path 1') as HTMLInputElement
+      const path2 = screen.getByLabelText('Path 2') as HTMLInputElement
+      expect(path1.checked).toBe(true)
+      expect(path2.checked).toBe(false)
+      expect(screen.getByText(/hydrated warning/)).toBeInTheDocument()
+
+      // Operation form mirrors the saved values.
+      const inside = screen.getByLabelText('Inside') as HTMLInputElement
+      expect(inside.checked).toBe(true)
+      expect((screen.getByLabelText('Depth total') as HTMLInputElement).value).toBe('9')
+      expect((screen.getByLabelText('Spindle RPM') as HTMLInputElement).value).toBe('22000')
+
+      // Active setup and tool select to the saved values once the env
+      // load resolves.
+      const setupSelect = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      await waitFor(() => expect(setupSelect.value).toBe('s1'))
+      const toolSelect = (await screen.findByLabelText('Tool')) as HTMLSelectElement
+      await waitFor(() => expect(toolSelect.value).toBe('t1'))
+    })
+
+    it('emits the hydrated payload back through onProjectStateChange', async () => {
+      await seedEnv(ENV)
+      const bytes = new Uint8Array([1, 2, 3])
+      const payload = {
+        sourceFormat: 'dxf' as const,
+        sourceBytes: bytes,
+        paths: [SQUARE],
+        warnings: [],
+        selectedPaths: [true],
+        operation: {
+          toolId: 't1',
+          cutSide: 'outside' as const,
+          depthTotal: 5,
+          depthPerPass: 1,
+          safeZ: 5,
+          plungeFeed: 200,
+          cutFeed: 800,
+          spindleRpm: 18000,
+        },
+        activeSetupId: 's1',
+      }
+      const onProjectStateChange = vi.fn()
+
+      render(
+        <Mode2ProfileMode
+          initialProject={{ fileName: 'roundtrip.dxf', mode: '2d-profile', payload }}
+          onProjectStateChange={onProjectStateChange}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(onProjectStateChange).toHaveBeenCalled()
+      })
+      const calls = onProjectStateChange.mock.calls
+      const lastCall = calls[calls.length - 1][0]
+      expect(lastCall).toEqual({
+        fileName: 'roundtrip.dxf',
+        mode: '2d-profile',
+        payload,
+      })
+    })
+  })
 })
