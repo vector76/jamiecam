@@ -30,6 +30,7 @@ import type {
 const KEY_SETUPS = 'setups'
 const KEY_TOOLS = 'tools'
 const KEY_AVAILABILITY = 'availability'
+const KEY_ACTIVE_SETUP = 'activeSetupId'
 
 /**
  * Load the working environment. Missing collections default to empty
@@ -114,6 +115,26 @@ async function writeAll(db: IDBPDatabase, env: WorkingEnvironment): Promise<void
     tx.store.put(env.availability, KEY_AVAILABILITY),
     tx.done,
   ])
+}
+
+/**
+ * Active-setup id is stored alongside the working-env collections in the
+ * same object store. Returns `null` when nothing has been chosen yet — the
+ * UI is responsible for defaulting (e.g. to the first available setup).
+ */
+export async function loadActiveSetupId(): Promise<string | null> {
+  const db = await getDB()
+  const value = (await db.get(STORE, KEY_ACTIVE_SETUP)) as string | undefined
+  return value ?? null
+}
+
+export async function saveActiveSetupId(id: string | null): Promise<void> {
+  const db = await getDB()
+  if (id === null) {
+    await db.delete(STORE, KEY_ACTIVE_SETUP)
+  } else {
+    await db.put(STORE, id, KEY_ACTIVE_SETUP)
+  }
 }
 
 function defaultNewId(): string {

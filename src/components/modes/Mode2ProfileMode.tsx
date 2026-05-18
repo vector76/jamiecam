@@ -2,9 +2,10 @@
  * Mode2ProfileMode — Phase 4 (2-D Profile Cuts) component shell.
  *
  * Lays out the Mode 2 surface: Canvas2DViewport as the primary workspace
- * with a right-hand sidebar mirroring Mode 1's structure. Individual
- * sidebar sections (File, Paths, Operation, Generate, Simulate, Export)
- * are intentionally empty for now — they get fleshed out in later beads.
+ * with a right-hand sidebar mirroring Mode 1's structure. Most sidebar
+ * sections (File, Paths, Operation, Generate, Simulate, Export) are
+ * intentionally empty for now — they get fleshed out in later beads.
+ * The Machine section hosts the Working Environment modal trigger.
  *
  * The engine-init lifecycle mirrors Mode 1: prewarm the shared wasm
  * module on mount and surface its status (initializing / ready / failed)
@@ -15,7 +16,9 @@ import { useEffect, useState } from 'react'
 import { Canvas2DViewport } from '../../viewport2d/Canvas2DViewport'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Button } from '@/components/ui/button'
 import { prewarmWasm } from '../../api/gcodeViewer'
+import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 import type { ProjectState } from '../../persistence/projectFile'
 
 type EngineStatus = 'initializing' | 'ready' | 'failed'
@@ -32,6 +35,7 @@ interface Mode2ProfileModeProps {
 export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('initializing')
   const [engineError, setEngineError] = useState<string | null>(null)
+  const [workingEnvOpen, setWorkingEnvOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -84,6 +88,17 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
               </p>
             </SidebarSection>
 
+            <SidebarSection title="Machine">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setWorkingEnvOpen(true)}
+              >
+                Working Environment…
+              </Button>
+            </SidebarSection>
+
             <SidebarSection title="Operation">
               <p className="text-xs text-muted-foreground">
                 Profile operation settings — coming soon.
@@ -111,6 +126,10 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
           </ScrollArea>
         </aside>
       </div>
+      <WorkingEnvironmentModal
+        open={workingEnvOpen}
+        onClose={() => setWorkingEnvOpen(false)}
+      />
     </div>
   )
 }

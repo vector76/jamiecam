@@ -26,6 +26,7 @@ import {
   type ProjectState,
 } from '../../persistence/projectFile'
 import { listRecents, upsertRecent, type RecentRecord } from '../../persistence/recents'
+import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 
 const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/demo-pocket.nc`
 
@@ -183,6 +184,8 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
 
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('initializing')
   const [engineError, setEngineError] = useState<string | null>(null)
+
+  const [workingEnvOpen, setWorkingEnvOpen] = useState(false)
 
   const refreshRecents = useCallback(async () => {
     try {
@@ -501,6 +504,17 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
               </div>
             </SidebarSection>
 
+            <SidebarSection title="Machine">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setWorkingEnvOpen(true)}
+              >
+                Working Environment…
+              </Button>
+            </SidebarSection>
+
             {recents.length > 0 && (
               <SidebarSection title="Recent">
                 <ul className="flex flex-col gap-1">
@@ -632,6 +646,10 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
           </ScrollArea>
         </aside>
       </div>
+      <WorkingEnvironmentModal
+        open={workingEnvOpen}
+        onClose={() => setWorkingEnvOpen(false)}
+      />
     </div>
   )
 }

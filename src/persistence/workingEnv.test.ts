@@ -1,6 +1,12 @@
 import { IDBFactory } from 'fake-indexeddb'
 import { __resetDBForTests } from './db'
-import { loadWorkingEnv, saveWorkingEnv, seedIfEmpty } from './workingEnv'
+import {
+  loadActiveSetupId,
+  loadWorkingEnv,
+  saveActiveSetupId,
+  saveWorkingEnv,
+  seedIfEmpty,
+} from './workingEnv'
 import type { MachineSetup, Tool, WorkingEnvironment } from '../api/types'
 
 function makeSetup(id: string): MachineSetup {
@@ -90,6 +96,21 @@ describe('workingEnv persistence', () => {
     const env = await seedIfEmpty(() => 'should-not-be-used')
     expect(env).toEqual(preExisting)
     expect(await loadWorkingEnv()).toEqual(preExisting)
+  })
+
+  it('loadActiveSetupId returns null when nothing has been chosen', async () => {
+    expect(await loadActiveSetupId()).toBeNull()
+  })
+
+  it('round-trips active setup id through save+load', async () => {
+    await saveActiveSetupId('setup-42')
+    expect(await loadActiveSetupId()).toBe('setup-42')
+  })
+
+  it('saveActiveSetupId(null) clears the stored id', async () => {
+    await saveActiveSetupId('setup-42')
+    await saveActiveSetupId(null)
+    expect(await loadActiveSetupId()).toBeNull()
   })
 
   it('default seedIfEmpty mints non-empty distinct ids', async () => {
