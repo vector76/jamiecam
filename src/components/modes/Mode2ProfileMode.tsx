@@ -175,6 +175,15 @@ export function Mode2ProfileMode({
   const [activeSetupId, setActiveSetupId] = useState<string | null>(
     initialMode2?.activeSetupId ?? null,
   )
+  // Surfaces a hydrated project's SetupId / ToolId that the current
+  // working environment cannot resolve. Per design doc §6 this is a
+  // recoverable error — the sidebar prompts the user to pick or create
+  // a replacement, and Generate / Simulate / Export are blocked until
+  // one of those resolves. Cleared by any user action that resolves it
+  // (picking a setup/tool from the dropdown, or re-adding the missing
+  // id via Working Environment so the next env refresh sees it).
+  const [missingSetupId, setMissingSetupId] = useState<string | null>(null)
+  const [missingToolId, setMissingToolId] = useState<string | null>(null)
 
   const [operation, setOperation] = useState<Mode2OperationParams>(
     initialMode2?.operation ?? DEFAULT_OPERATION,
@@ -261,16 +270,29 @@ export function Mode2ProfileMode({
     setEnv(loadedEnv)
     // Validate the persisted active id against the loaded setups — a
     // stale id (e.g. left behind by a multi-window deletion) would render
-    // a controlled <select> with no matching <option>. Fall back to the
-    // first setup so the Operation form stays usable on first run; the
-    // user can override via the selector.
-    const validActive =
+    // a controlled <select> with no matching <option>. The resolution
+    // order matters: a hydrated project's required setup outranks the
+    // generic first-available fallback so we can surface MissingSetup
+    // (instead of silently snapping) when the project demanded a
+    // specific id that no longer exists.
+    const loadedActiveMatches =
       loadedActive !== null && loadedEnv.setups.some((s) => s.id === loadedActive)
-        ? loadedActive
-        : null
-    setActiveSetupId(validActive ?? loadedEnv.setups[0]?.id ?? null)
+    const projectSetupId = initialMode2?.activeSetupId ?? null
+    if (loadedActiveMatches) {
+      setActiveSetupId(loadedActive)
+      setMissingSetupId(null)
+    } else if (
+      projectSetupId !== null &&
+      !loadedEnv.setups.some((s) => s.id === projectSetupId)
+    ) {
+      setActiveSetupId(null)
+      setMissingSetupId(projectSetupId)
+    } else {
+      setActiveSetupId(loadedEnv.setups[0]?.id ?? null)
+      setMissingSetupId(null)
+    }
     setEnvLoaded(true)
-  }, [])
+  }, [initialMode2])
 
   useEffect(() => {
     // When hydrating from a Mode 2 project, the project's activeSetupId
@@ -347,18 +369,31 @@ export function Mode2ProfileMode({
   // available: clear it when the choice disappears, default it to the
   // first available tool when nothing is picked. Gated on `envLoaded`
   // so a hydrated toolId from `initialProject` isn't clobbered during
-  // the brief mount-to-env-resolve window.
+  // the brief mount-to-env-resolve window. When the unresolved id was
+  // the one the project required, flag MissingTool rather than snapping
+  // — the user needs to acknowledge that the saved tool is gone.
   useEffect(() => {
     if (!envLoaded) return
     setOperation((prev) => {
       if (prev.toolId !== null && availableTools.some((t) => t.id === prev.toolId)) {
+        setMissingToolId(null)
         return prev
       }
+      const projectToolId = initialMode2?.operation.toolId ?? null
+      if (
+        projectToolId !== null &&
+        prev.toolId === projectToolId &&
+        !availableTools.some((t) => t.id === projectToolId)
+      ) {
+        setMissingToolId(projectToolId)
+        return { ...prev, toolId: null }
+      }
+      setMissingToolId(null)
       const next = availableTools[0]?.id ?? null
       if (prev.toolId === next) return prev
       return { ...prev, toolId: next }
     })
-  }, [availableTools, envLoaded])
+  }, [availableTools, envLoaded, initialMode2])
 
   function handlePickFile() {
     fileInputRef.current?.click()
@@ -447,12 +482,20 @@ export function Mode2ProfileMode({
   async function handleActiveSetupChanged(event: React.ChangeEvent<HTMLSelectElement>) {
     const next = event.target.value || null
     setActiveSetupId(next)
+    // Picking any setup resolves a MissingSetup alert. Clearing
+    // MissingTool too is intentional: the project's tool was anchored to
+    // a particular setup pairing that no longer exists, so the saved
+    // toolId stops being meaningful as soon as the setup changes — the
+    // tool useEffect will pick a fresh default against the new setup.
+    setMissingSetupId(null)
+    setMissingToolId(null)
     await saveActiveSetupId(next)
   }
 
   function handleToolChanged(event: React.ChangeEvent<HTMLSelectElement>) {
     const next = event.target.value || null
     setOperation((prev) => ({ ...prev, toolId: next }))
+    setMissingToolId(null)
   }
 
   function handleCutSideChanged(side: CutSide) {
@@ -495,12 +538,26 @@ export function Mode2ProfileMode({
     [env.setups, activeSetupId],
   )
 
+  // An unresolved MissingSetup / MissingTool from a hydrated project is
+  // treated as a hard block on all downstream actions — the project
+  // doesn't yet describe a runnable operation. Computed once here so the
+  // Generate / Simulate / Export gates speak with one voice.
+  const unresolvedReferenceReason: string | null =
+    missingSetupId !== null
+      ? `This project's setup (${missingSetupId}) is no longer in your working environment. Pick a replacement above or open Working Environment to add it.`
+      : missingToolId !== null
+        ? `This project's tool (${missingToolId}) is no longer available for the active setup. Pick a replacement above or open Working Environment to add it.`
+        : null
+
   // Export needs the toolpath itself plus a tool (for the @TOOL header)
   // and stock dimensions (for the @STOCK header). Mode 2 doesn't yet
   // carry a separate stock model, so the active setup's workspace box
   // stands in — that's the volume the planner is implicitly aimed at.
   const exportBlocked =
-    toolpath === null || selectedTool === null || activeSetup === null
+    toolpath === null ||
+    selectedTool === null ||
+    activeSetup === null ||
+    unresolvedReferenceReason !== null
 
   // The button only makes sense once we have something to plan with —
   // at least one selected path and a tool resolved from the active
@@ -508,11 +565,13 @@ export function Mode2ProfileMode({
   // rather than baked into the disabled state alone, so the user knows
   // *why* generation is unavailable.
   const generateBlockingReason: string | null =
-    selectedBoundaries.length === 0
-      ? 'Select at least one path to generate a toolpath.'
-      : selectedTool === null
-        ? 'Select a tool before generating.'
-        : null
+    unresolvedReferenceReason !== null
+      ? unresolvedReferenceReason
+      : selectedBoundaries.length === 0
+        ? 'Select at least one path to generate a toolpath.'
+        : selectedTool === null
+          ? 'Select a tool before generating.'
+          : null
 
   async function handleGenerate() {
     if (generateBlockingReason !== null || selectedTool === null) return
@@ -552,7 +611,10 @@ export function Mode2ProfileMode({
   // dexel grid resolution. Mode 2 has no stock model yet, so the active
   // setup's workspace stands in — same compromise the Export header makes.
   const simulateBlocked =
-    toolpath === null || selectedTool === null || activeSetup === null
+    toolpath === null ||
+    selectedTool === null ||
+    activeSetup === null ||
+    unresolvedReferenceReason !== null
 
   async function handleSimulate() {
     if (toolpath === null || selectedTool === null || activeSetup === null) return
@@ -625,6 +687,12 @@ export function Mode2ProfileMode({
 
             <SidebarSection title="Setup">
               <div className="flex flex-col gap-2">
+                {missingSetupId !== null && (
+                  <p className="text-xs text-destructive" role="alert">
+                    Project setup not found: {missingSetupId}. Pick a
+                    replacement below or open Working Environment to add it.
+                  </p>
+                )}
                 {env.setups.length === 0 ? (
                   <p className="text-xs text-muted-foreground">
                     No machine setups configured.
@@ -745,6 +813,12 @@ export function Mode2ProfileMode({
 
             <SidebarSection title="Operation">
               <div className="flex flex-col gap-3">
+                {missingToolId !== null && (
+                  <p className="text-xs text-destructive" role="alert">
+                    Project tool not found: {missingToolId}. Pick a
+                    replacement below or open Working Environment to add it.
+                  </p>
+                )}
                 <div className="flex flex-col gap-1 text-xs">
                   <span className="text-muted-foreground">Tool</span>
                   {availableTools.length === 0 ? (

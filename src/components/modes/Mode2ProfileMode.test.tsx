@@ -1256,6 +1256,154 @@ describe('Mode2ProfileMode', () => {
       await waitFor(() => expect(toolSelect.value).toBe('t1'))
     })
 
+    it('surfaces MissingSetup as a recoverable prompt and blocks downstream actions', async () => {
+      // Working env knows about a different setup; the project references
+      // an id that no longer exists. Per design doc §6 this is recoverable
+      // — the sidebar should prompt for a replacement instead of crashing
+      // or silently snapping to whatever happens to be available.
+      await seedEnv({
+        setups: [makeSetup('s2', 'Replacement CNC')],
+        tools: [makeTool('t9', 'Some Tool')],
+        availability: [{ setupId: 's2', toolId: 't9' }],
+      })
+      const payload = {
+        sourceFormat: 'svg' as const,
+        sourceBytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e]),
+        paths: [SQUARE],
+        warnings: [],
+        selectedPaths: [true],
+        operation: {
+          toolId: 't1',
+          cutSide: 'outside' as const,
+          depthTotal: 5,
+          depthPerPass: 1,
+          safeZ: 5,
+          plungeFeed: 200,
+          cutFeed: 800,
+          spindleRpm: 18000,
+        },
+        activeSetupId: 's-missing',
+      }
+
+      render(
+        <Mode2ProfileMode
+          initialProject={{ fileName: 'orphan.svg', mode: '2d-profile', payload }}
+        />,
+      )
+
+      // Alert names the missing id so the user knows which setup is gone.
+      const setupAlert = await screen.findByText(/Project setup not found: s-missing/)
+      expect(setupAlert.getAttribute('role')).toBe('alert')
+
+      // The selector still shows the other available setups so the user
+      // can pick a replacement without leaving the sidebar.
+      const setupSelect = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      expect(
+        Array.from(setupSelect.options).map((o) => o.textContent),
+      ).toContain('Replacement CNC')
+      // The active setup is left blank — we don't silently snap, since
+      // that would mask the missing reference.
+      await waitFor(() => expect(setupSelect.value).toBe(''))
+
+      // Downstream actions stay disabled while the reference is unresolved.
+      const generateBtn = screen.getByRole('button', {
+        name: 'Generate toolpath',
+      }) as HTMLButtonElement
+      const simulateBtn = screen.getByRole('button', {
+        name: 'Simulate toolpath',
+      }) as HTMLButtonElement
+      const exportBtn = screen.getByRole('button', {
+        name: 'Export G-code',
+      }) as HTMLButtonElement
+      expect(generateBtn.disabled).toBe(true)
+      expect(simulateBtn.disabled).toBe(true)
+      expect(exportBtn.disabled).toBe(true)
+      expect(
+        screen.getByText(/This project's setup \(s-missing\) is no longer/),
+      ).toBeInTheDocument()
+
+      // Picking a replacement setup clears the alert and unblocks the
+      // form (Generate is still gated by the usual "select a path / tool"
+      // logic, but the missing-reference reason is gone).
+      fireEvent.change(setupSelect, { target: { value: 's2' } })
+
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/Project setup not found/),
+        ).not.toBeInTheDocument()
+      })
+    })
+
+    it('surfaces MissingTool as a recoverable prompt and blocks downstream actions', async () => {
+      // Active setup exists, but the tool the project saved is no longer
+      // part of that setup's availability. The user picks a replacement
+      // from the Tool dropdown.
+      await seedEnv({
+        setups: [makeSetup('s1', 'Workshop CNC')],
+        tools: [makeTool('t2', 'Replacement Mill')],
+        availability: [{ setupId: 's1', toolId: 't2' }],
+      })
+      const payload = {
+        sourceFormat: 'svg' as const,
+        sourceBytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x2f, 0x3e]),
+        paths: [SQUARE],
+        warnings: [],
+        selectedPaths: [true],
+        operation: {
+          toolId: 't-missing',
+          cutSide: 'outside' as const,
+          depthTotal: 5,
+          depthPerPass: 1,
+          safeZ: 5,
+          plungeFeed: 200,
+          cutFeed: 800,
+          spindleRpm: 18000,
+        },
+        activeSetupId: 's1',
+      }
+
+      render(
+        <Mode2ProfileMode
+          initialProject={{ fileName: 'orphan.svg', mode: '2d-profile', payload }}
+        />,
+      )
+
+      const toolAlert = await screen.findByText(/Project tool not found: t-missing/)
+      expect(toolAlert.getAttribute('role')).toBe('alert')
+
+      // Tool dropdown is rendered with the available replacements so the
+      // user can resolve in-place; the controlled value stays blank.
+      const toolSelect = (await screen.findByLabelText('Tool')) as HTMLSelectElement
+      expect(
+        Array.from(toolSelect.options).map((o) => o.textContent),
+      ).toContain('Replacement Mill')
+      await waitFor(() => expect(toolSelect.value).toBe(''))
+
+      const generateBtn = screen.getByRole('button', {
+        name: 'Generate toolpath',
+      }) as HTMLButtonElement
+      const simulateBtn = screen.getByRole('button', {
+        name: 'Simulate toolpath',
+      }) as HTMLButtonElement
+      const exportBtn = screen.getByRole('button', {
+        name: 'Export G-code',
+      }) as HTMLButtonElement
+      expect(generateBtn.disabled).toBe(true)
+      expect(simulateBtn.disabled).toBe(true)
+      expect(exportBtn.disabled).toBe(true)
+      expect(
+        screen.getByText(/This project's tool \(t-missing\) is no longer/),
+      ).toBeInTheDocument()
+
+      fireEvent.change(toolSelect, { target: { value: 't2' } })
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Project tool not found/)).not.toBeInTheDocument()
+      })
+    })
+
     it('emits the hydrated payload back through onProjectStateChange', async () => {
       await seedEnv(ENV)
       const bytes = new Uint8Array([1, 2, 3])
