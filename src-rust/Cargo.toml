@@ -22,6 +22,9 @@ dxf = "0.6"
 # which we don't need (text is out of scope for Mode 2 imports) and which would
 # pull system-fonts code that doesn't compile cleanly for wasm32.
 usvg = { version = "0.45", default-features = false }
+# Pure-Rust port of Angus Johnson's Clipper2 — polygon clipping and
+# offsetting for Mode 2 profile toolpaths. See docs/phase-4-design.md §2.
+clipper2-rust = "1"
 
 # `dxf` pulls in `uuid` with the `v4` feature, which needs a randomness
 # source. On the wasm target `uuid` requires the `js` feature to wire
