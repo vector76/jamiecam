@@ -5,6 +5,7 @@
 //! planner and emitter never have to worry about source units.
 
 pub mod dxf;
+pub mod svg;
 
 /// Maximum allowed deflection (in millimetres) between an analytic curve and
 /// the polyline that approximates it. Shared by every parser in this module so

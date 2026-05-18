@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="20mm" height="10mm" viewBox="0 0 20 10">
+  <!-- Single cubic Bezier arching upward from (0,0) to (20,0).
+       Control points (5,10) and (15,10) put the apex at y=7.5 in the
+       SVG y-down frame; usvg keeps coordinates in SVG's native y-down
+       convention, so callers see y growing downward here too. -->
+  <path d="M 0 0 C 5 10, 15 10, 20 0" fill="none" stroke="black"/>
+</svg>

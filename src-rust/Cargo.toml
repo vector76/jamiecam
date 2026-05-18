@@ -17,6 +17,11 @@ wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
 console_error_panic_hook = { version = "0.1", optional = true }
 dxf = "0.6"
+# `usvg` brings its own SVG → simplified tree pipeline (units, viewBox, transforms,
+# shape-to-path conversion). We disable defaults to drop the text + fontdb stack,
+# which we don't need (text is out of scope for Mode 2 imports) and which would
+# pull system-fonts code that doesn't compile cleanly for wasm32.
+usvg = { version = "0.45", default-features = false }
 
 # `dxf` pulls in `uuid` with the `v4` feature, which needs a randomness
 # source. On the wasm target `uuid` requires the `js` feature to wire
