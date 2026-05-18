@@ -284,6 +284,72 @@ describe('Mode2ProfileMode', () => {
     })
   })
 
+  it('exposes a Load Sample dropdown with bundled SVG and DXF samples', async () => {
+    render(<Mode2ProfileMode />)
+    const select = screen.getByLabelText('Load Sample') as HTMLSelectElement
+    expect(select.tagName).toBe('SELECT')
+    const optionValues = Array.from(select.options).map((o) => o.value)
+    expect(optionValues).toContain('sample-profile.svg')
+    expect(optionValues).toContain('sample-profile.dxf')
+    await waitForReady()
+  })
+
+  it('fetches and parses the SVG sample when chosen', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('<svg/>', { status: 200 }))
+    vi.mocked(parseSvg).mockResolvedValueOnce({ paths: [SQUARE], warnings: [] })
+
+    render(<Mode2ProfileMode />)
+    const select = screen.getByLabelText('Load Sample') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'sample-profile.svg' } })
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('samples/sample-profile.svg'),
+      )
+      expect(parseSvg).toHaveBeenCalledTimes(1)
+      expect(parseDxf).not.toHaveBeenCalled()
+    })
+
+    expect(await screen.findByText('sample-profile.svg')).toBeInTheDocument()
+    expect(screen.getByLabelText('Path 1')).toBeInTheDocument()
+  })
+
+  it('fetches and parses the DXF sample when chosen', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('0\nEOF\n', { status: 200 }))
+    vi.mocked(parseDxf).mockResolvedValueOnce({ paths: [LINE], warnings: [] })
+
+    render(<Mode2ProfileMode />)
+    const select = screen.getByLabelText('Load Sample') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'sample-profile.dxf' } })
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('samples/sample-profile.dxf'),
+      )
+      expect(parseDxf).toHaveBeenCalledTimes(1)
+      expect(parseSvg).not.toHaveBeenCalled()
+    })
+
+    expect(await screen.findByText('sample-profile.dxf')).toBeInTheDocument()
+  })
+
+  it('surfaces a sample fetch failure as a red alert', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('not found', { status: 404 }),
+    )
+
+    render(<Mode2ProfileMode />)
+    const select = screen.getByLabelText('Load Sample') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: 'sample-profile.svg' } })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Sample fetch failed: 404/)
+    expect(parseSvg).not.toHaveBeenCalled()
+  })
+
   it('updates the viewport store extent to the imported paths bounding box', async () => {
     const result: ParseSvgResult = { paths: [SQUARE], warnings: [] }
     vi.mocked(parseSvg).mockResolvedValueOnce(result)

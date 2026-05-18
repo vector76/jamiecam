@@ -29,6 +29,21 @@ import type { ProjectState } from '../../persistence/projectFile'
 type EngineStatus = 'initializing' | 'ready' | 'failed'
 type ImportStatus = 'idle' | 'importing' | 'imported' | 'error'
 
+interface SampleEntry {
+  label: string
+  fileName: string
+  format: 'svg' | 'dxf'
+}
+
+const SAMPLES: readonly SampleEntry[] = [
+  { label: 'Star (SVG)', fileName: 'sample-profile.svg', format: 'svg' },
+  { label: 'Octagon (DXF)', fileName: 'sample-profile.dxf', format: 'dxf' },
+]
+
+function sampleUrl(fileName: string): string {
+  return `${import.meta.env.BASE_URL}samples/${fileName}`
+}
+
 interface Mode2ProfileModeProps {
   /**
    * Optional project to hydrate from on mount. Accepted for shape
@@ -94,6 +109,29 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     fileInputRef.current?.click()
   }
 
+  async function importBytes(name: string, format: 'svg' | 'dxf', bytes: Uint8Array) {
+    setImportStatus('importing')
+    setImportError(null)
+    setWarnings([])
+    try {
+      const result =
+        format === 'svg' ? await parseSvg(bytes) : await parseDxf(bytes)
+      // A successful parse proves the engine works — clear any stale
+      // failure indicator left over from a transient prewarm error.
+      setEngineStatus('ready')
+      setEngineError(null)
+      setSourceFileName(name)
+      setPaths(result.paths)
+      setSelected(result.paths.map(() => true))
+      setWarnings(result.warnings)
+      setImportStatus('imported')
+      useViewport2DStore.getState().setExtent(computeExtent(result.paths))
+    } catch (e) {
+      setImportStatus('error')
+      setImportError(formatParseError(e))
+    }
+  }
+
   async function handleFileChosen(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -105,26 +143,29 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       setWarnings([])
       return
     }
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    await importBytes(file.name, format, bytes)
+  }
+
+  async function handleSampleChosen(event: React.ChangeEvent<HTMLSelectElement>) {
+    const value = event.target.value
+    event.target.value = ''
+    if (!value) return
+    const sample = SAMPLES.find((s) => s.fileName === value)
+    if (!sample) return
     setImportStatus('importing')
     setImportError(null)
     setWarnings([])
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const result =
-        format === 'svg' ? await parseSvg(bytes) : await parseDxf(bytes)
-      // A successful parse proves the engine works — clear any stale
-      // failure indicator left over from a transient prewarm error.
-      setEngineStatus('ready')
-      setEngineError(null)
-      setSourceFileName(file.name)
-      setPaths(result.paths)
-      setSelected(result.paths.map(() => true))
-      setWarnings(result.warnings)
-      setImportStatus('imported')
-      useViewport2DStore.getState().setExtent(computeExtent(result.paths))
+      const response = await fetch(sampleUrl(sample.fileName))
+      if (!response.ok) {
+        throw new Error(`Sample fetch failed: ${response.status}`)
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      await importBytes(sample.fileName, sample.format, bytes)
     } catch (e) {
       setImportStatus('error')
-      setImportError(formatParseError(e))
+      setImportError((e as Error).message ?? 'Failed to load sample')
     }
   }
 
@@ -165,6 +206,21 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
                 <Button size="sm" className="w-full" onClick={handlePickFile}>
                   Open SVG / DXF…
                 </Button>
+                <select
+                  aria-label="Load Sample"
+                  value=""
+                  onChange={handleSampleChosen}
+                  className="h-8 w-full rounded border border-border bg-secondary px-2 text-xs text-secondary-foreground"
+                >
+                  <option value="" disabled>
+                    Load Sample…
+                  </option>
+                  {SAMPLES.map((s) => (
+                    <option key={s.fileName} value={s.fileName}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
                 {sourceFileName && (
                   <p
                     className="truncate text-xs text-muted-foreground"

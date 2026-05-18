@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample artwork for Mode 2 (2-D Profile Cuts).
+     A regular five-pointed star centred at (25, 25) with outer radius 22 mm
+     and inner radius 8.4 mm (outer * sin(18°)/sin(54°)). Single closed path
+     produces one clean profile loop. Coordinates are in millimetres
+     (viewBox matches the physical size). -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="50mm" height="50mm" viewBox="0 0 50 50">
+  <path d="M 25 3 L 29.9 18.2 L 45.9 18.2 L 33 27.6 L 37.9 42.8 L 25 33.4 L 12.1 42.8 L 17 27.6 L 4.1 18.2 L 20.1 18.2 Z"
+        fill="none" stroke="black" stroke-width="0.2"/>
+</svg>
