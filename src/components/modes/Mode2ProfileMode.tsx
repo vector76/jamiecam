@@ -22,10 +22,11 @@ import {
   Canvas2DViewport,
   type Canvas2DDrawAPI,
 } from '../../viewport2d/Canvas2DViewport'
+import { Viewport } from '../../viewport/Viewport'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { prewarmWasm } from '../../api/gcodeViewer'
+import { prewarmWasm, simulateGcodeViewer } from '../../api/gcodeViewer'
 import {
   emitGrblGcode,
   generateProfileToolpath,
@@ -33,6 +34,7 @@ import {
   parseSvg,
 } from '../../api/mode2'
 import { useViewport2DStore, type Extent2D } from '../../store/viewport2dStore'
+import { useViewportStore } from '../../store/viewportStore'
 import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 import {
   loadActiveSetupId,
@@ -55,6 +57,12 @@ type EngineStatus = 'initializing' | 'ready' | 'failed'
 type ImportStatus = 'idle' | 'importing' | 'imported' | 'error'
 type GenerateStatus = 'idle' | 'generating' | 'generated' | 'error'
 type ExportStatus = 'idle' | 'exporting' | 'error'
+type SimStatus = 'idle' | 'simulating' | 'ready' | 'error'
+type ViewMode = 'canvas2d' | 'viewport3d'
+
+// Stand-in dexel resolution until Mode 2 grows its own simulation controls.
+// Matches Mode 1's DEFAULT_RESOLUTION so the runtime cost is familiar.
+const SIM_RESOLUTION_MM = 0.5
 
 interface SampleEntry {
   label: string
@@ -142,6 +150,10 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle')
   const [exportError, setExportError] = useState<string | null>(null)
 
+  const [simStatus, setSimStatus] = useState<SimStatus>('idle')
+  const [simError, setSimError] = useState<string | null>(null)
+  const [view, setView] = useState<ViewMode>('canvas2d')
+
   // Subscribe to the viewport transform so pan/zoom re-runs the redraw
   // effect below — Canvas2DViewport's imperative API does not redraw on
   // its own, the consumer owns the draw loop.
@@ -186,7 +198,12 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     void refreshWorkingEnv()
   }, [refreshWorkingEnv])
 
+  // `view` is a dep so the redraw fires after a switch back to Canvas2D —
+  // the new draw API is committed on remount, but none of the other deps
+  // (paths/toolpath/transform) would have changed, so without this the
+  // canvas would come back blank.
   useEffect(() => {
+    if (view !== 'canvas2d') return
     const api = drawApiRef.current
     if (!api) return
     api.clear()
@@ -215,7 +232,7 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
         prev = xy
       }
     }
-  }, [paths, toolpath, transform])
+  }, [paths, toolpath, transform, view])
 
   const availableTools = useMemo<Tool[]>(() => {
     if (activeSetupId === null) return []
@@ -256,6 +273,13 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     setGenerateError(null)
     setExportStatus('idle')
     setExportError(null)
+    // A fresh import also retires any prior simulation result — the mesh
+    // was carved against artwork that no longer exists. Drop back to the
+    // 2-D workspace so the user sees their new paths immediately.
+    useViewportStore.getState().clearSimulationMesh()
+    setSimStatus('idle')
+    setSimError(null)
+    setView('canvas2d')
     try {
       const result =
         format === 'svg' ? await parseSvg(bytes) : await parseDxf(bytes)
@@ -390,6 +414,14 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     if (generateBlockingReason !== null || selectedTool === null) return
     setGenerateStatus('generating')
     setGenerateError(null)
+    // A regenerate retires the prior simulation mesh — it was carved
+    // against motions about to be replaced. Flip back to 2D so the user
+    // sees the new toolpath overlay rather than staring at an empty 3-D
+    // scene; they can hit Simulate again if they want a fresh mesh.
+    useViewportStore.getState().clearSimulationMesh()
+    setSimStatus('idle')
+    setSimError(null)
+    setView('canvas2d')
     const input: ProfileOperationInput = {
       boundaries: selectedBoundaries,
       tool: selectedTool,
@@ -411,6 +443,45 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       setGenerateError(formatAppErrorMessage(e))
     }
   }
+
+  // The Simulate pipeline needs the same three pieces as Export plus a
+  // dexel grid resolution. Mode 2 has no stock model yet, so the active
+  // setup's workspace stands in — same compromise the Export header makes.
+  const simulateBlocked =
+    toolpath === null || selectedTool === null || activeSetup === null
+
+  async function handleSimulate() {
+    if (toolpath === null || selectedTool === null || activeSetup === null) return
+    setSimStatus('simulating')
+    setSimError(null)
+    try {
+      const gcode = await emitGrblGcode(toolpath, selectedTool, activeSetup.workspace)
+      const mesh = await simulateGcodeViewer(gcode, {
+        stock: activeSetup.workspace,
+        toolDiameter: selectedTool.diameter,
+        resolution: SIM_RESOLUTION_MM,
+      })
+      useViewportStore.getState().setSimulationMeshData(mesh)
+      setSimStatus('ready')
+      setView('viewport3d')
+    } catch (e) {
+      // Preserve any mesh from a prior successful sim. If this is the
+      // first attempt the store is already empty; if the user re-ran
+      // Simulate from the 3-D preview and it failed, clearing here would
+      // strand them on an empty 3-D scene with only a sidebar error to
+      // explain it. The last good result is the more useful default.
+      setSimStatus('error')
+      setSimError(formatAppErrorMessage(e))
+    }
+  }
+
+  // Make sure we don't leak this mode's simulation mesh into another
+  // mode's viewport — the store is process-wide.
+  useEffect(() => {
+    return () => {
+      useViewportStore.getState().clearSimulationMesh()
+    }
+  }, [])
 
   async function handleExport() {
     if (toolpath === null || selectedTool === null || activeSetup === null) return
@@ -440,7 +511,11 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
         aria-label="SVG or DXF artwork file"
       />
       <div className="flex flex-1 overflow-hidden">
-        <Canvas2DViewport ref={drawApiRef} className="flex-1" />
+        {view === 'canvas2d' ? (
+          <Canvas2DViewport ref={drawApiRef} className="flex-1" />
+        ) : (
+          <Viewport className="flex-1" />
+        )}
         <aside className="w-[280px] shrink-0 border-l border-border">
           <ScrollArea className="h-full">
 
@@ -670,7 +745,8 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
                   onClick={() => void handleGenerate()}
                   disabled={
                     generateBlockingReason !== null ||
-                    generateStatus === 'generating'
+                    generateStatus === 'generating' ||
+                    simStatus === 'simulating'
                   }
                 >
                   {generateStatus === 'generating' ? 'Generating…' : 'Generate'}
@@ -694,9 +770,43 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
             </SidebarSection>
 
             <SidebarSection title="Simulate">
-              <p className="text-xs text-muted-foreground">
-                Material-removal simulation — coming soon.
-              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="sm"
+                  className="w-full"
+                  aria-label="Simulate toolpath"
+                  onClick={() => void handleSimulate()}
+                  disabled={simulateBlocked || simStatus === 'simulating'}
+                >
+                  {simStatus === 'simulating' ? 'Simulating…' : 'Simulate'}
+                </Button>
+                {view === 'viewport3d' && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                    aria-label="Back to 2D"
+                    onClick={() => setView('canvas2d')}
+                  >
+                    Back to 2D
+                  </Button>
+                )}
+                {toolpath === null && (
+                  <p className="text-xs text-muted-foreground">
+                    Generate a toolpath before simulating.
+                  </p>
+                )}
+                {simStatus === 'ready' && (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Simulation complete.
+                  </p>
+                )}
+                {simError && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {simError}
+                  </p>
+                )}
+              </div>
             </SidebarSection>
 
             <SidebarSection title="Export">

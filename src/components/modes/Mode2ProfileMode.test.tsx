@@ -20,6 +20,7 @@ import {
 import type {
   AppError,
   MachineSetup,
+  MeshData,
   ParseDxfResult,
   ParseSvgResult,
   Polyline,
@@ -31,6 +32,7 @@ import type {
 
 vi.mock('../../api/gcodeViewer', () => ({
   prewarmWasm: vi.fn().mockResolvedValue(undefined),
+  simulateGcodeViewer: vi.fn(),
 }))
 
 vi.mock('../../api/mode2', () => ({
@@ -44,7 +46,12 @@ vi.mock('../../viewport2d/Canvas2DViewport', () => ({
   Canvas2DViewport: () => <div data-testid="canvas2d-mock" />,
 }))
 
-import { prewarmWasm } from '../../api/gcodeViewer'
+vi.mock('../../viewport/Viewport', () => ({
+  Viewport: () => <div data-testid="viewport3d-mock" />,
+}))
+
+import { prewarmWasm, simulateGcodeViewer } from '../../api/gcodeViewer'
+import { useViewportStore } from '../../store/viewportStore'
 import {
   emitGrblGcode,
   generateProfileToolpath,
@@ -73,6 +80,7 @@ const LINE: Polyline = {
 beforeEach(() => {
   vi.clearAllMocks()
   useViewport2DStore.getState().reset()
+  useViewportStore.setState({ simulationMeshData: null })
   // Fresh in-memory DB per test so the loaded working-environment state
   // doesn't bleed between tests (the component reads it on mount).
   globalThis.indexedDB = new IDBFactory()
@@ -957,6 +965,230 @@ describe('Mode2ProfileMode', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Export G-code' }))
       const alert = await screen.findByRole('alert')
       expect(alert).toHaveTextContent(/non-finite coordinate/)
+    })
+  })
+
+  describe('Simulate', () => {
+    const STOCK_TOOL = makeTool('t1', '1/8" end mill')
+    const READY_ENV: WorkingEnvironment = {
+      setups: [makeSetup('s1')],
+      tools: [STOCK_TOOL],
+      availability: [{ setupId: 's1', toolId: 't1' }],
+    }
+    const MOTIONS: ToolpathOutput = [
+      { kind: 'rapid', to: [0, 0, 5] },
+      { kind: 'linear', to: [10, 0, -1], feed: 800 },
+    ]
+    const SIM_MESH: MeshData = {
+      vertices: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      normals: [0, 0, 1, 0, 0, 1, 0, 0, 1],
+      indices: [0, 1, 2],
+      faceGroups: [],
+    }
+
+    async function renderWithGeneratedToolpath() {
+      await seedEnv(READY_ENV)
+      await saveActiveSetupId('s1')
+      vi.mocked(parseSvg).mockResolvedValueOnce({ paths: [SQUARE], warnings: [] })
+      vi.mocked(generateProfileToolpath).mockResolvedValueOnce(MOTIONS)
+
+      render(<Mode2ProfileMode />)
+      const input = screen.getByLabelText('SVG or DXF artwork file') as HTMLInputElement
+      fireEvent.change(input, {
+        target: { files: [new File(['<svg/>'], 'p.svg', { type: 'image/svg+xml' })] },
+      })
+      await screen.findByLabelText('Path 1')
+      await waitFor(() => {
+        const sel = screen.getByLabelText('Tool') as HTMLSelectElement
+        expect(sel.value).toBe('t1')
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+      await screen.findByText(/Generated 2 moves/)
+    }
+
+    it('disables Simulate until a toolpath has been generated', async () => {
+      render(<Mode2ProfileMode />)
+      const btn = (await screen.findByRole('button', {
+        name: 'Simulate toolpath',
+      })) as HTMLButtonElement
+      expect(btn.disabled).toBe(true)
+      expect(
+        screen.getByText(/Generate a toolpath before simulating/),
+      ).toBeInTheDocument()
+      await waitForReady()
+    })
+
+    it('emits G-code, runs the dexel sim, and swaps in the 3-D viewport', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nG90\nG0 X0 Y0 Z5\nM2\n')
+      vi.mocked(simulateGcodeViewer).mockResolvedValueOnce(SIM_MESH)
+
+      await renderWithGeneratedToolpath()
+      expect(screen.getByTestId('canvas2d-mock')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+
+      await waitFor(() => {
+        expect(emitGrblGcode).toHaveBeenCalledTimes(1)
+        expect(simulateGcodeViewer).toHaveBeenCalledTimes(1)
+      })
+
+      const [emittedToolpath, emittedTool, emittedStock] = vi.mocked(emitGrblGcode)
+        .mock.calls[0]
+      expect(emittedToolpath).toEqual(MOTIONS)
+      expect(emittedTool.id).toBe('t1')
+      expect(emittedStock.width).toBe(300)
+
+      const [simContent, simParams] = vi.mocked(simulateGcodeViewer).mock.calls[0]
+      expect(simContent).toBe('G21\nG90\nG0 X0 Y0 Z5\nM2\n')
+      expect(simParams.stock.width).toBe(300)
+      expect(simParams.toolDiameter).toBe(STOCK_TOOL.diameter)
+      expect(simParams.resolution).toBeGreaterThan(0)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('viewport3d-mock')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('canvas2d-mock')).not.toBeInTheDocument()
+      expect(useViewportStore.getState().simulationMeshData).toBe(SIM_MESH)
+    })
+
+    it('surfaces a worker AppError as a red alert and stays in 2-D', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nM2\n')
+      vi.mocked(simulateGcodeViewer).mockRejectedValueOnce({
+        kind: 'WorkerError',
+        message: 'simulation worker crashed',
+      } satisfies AppError)
+
+      await renderWithGeneratedToolpath()
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/simulation worker crashed/)
+      expect(screen.getByTestId('canvas2d-mock')).toBeInTheDocument()
+      expect(screen.queryByTestId('viewport3d-mock')).not.toBeInTheDocument()
+      expect(useViewportStore.getState().simulationMeshData).toBeNull()
+    })
+
+    it('keeps the prior simulation mesh when a retry from 3-D fails', async () => {
+      // First sim succeeds and lands the user in 3-D.
+      vi.mocked(emitGrblGcode)
+        .mockResolvedValueOnce('G21\nM2\n')
+        .mockResolvedValueOnce('G21\nM2\n')
+      vi.mocked(simulateGcodeViewer)
+        .mockResolvedValueOnce(SIM_MESH)
+        .mockRejectedValueOnce({
+          kind: 'WorkerError',
+          message: 'worker died mid-retry',
+        } satisfies AppError)
+
+      await renderWithGeneratedToolpath()
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+      await screen.findByTestId('viewport3d-mock')
+      expect(useViewportStore.getState().simulationMeshData).toBe(SIM_MESH)
+
+      // Retry from 3-D — the second simulate rejects.
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/worker died mid-retry/)
+
+      // The user should still see the original good mesh, not an empty 3-D scene.
+      expect(useViewportStore.getState().simulationMeshData).toBe(SIM_MESH)
+      expect(screen.getByTestId('viewport3d-mock')).toBeInTheDocument()
+    })
+
+    it('returns to the 2-D viewport without losing the toolpath state', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nM2\n')
+      vi.mocked(simulateGcodeViewer).mockResolvedValueOnce(SIM_MESH)
+
+      await renderWithGeneratedToolpath()
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+      await screen.findByTestId('viewport3d-mock')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Back to 2D' }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('canvas2d-mock')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('viewport3d-mock')).not.toBeInTheDocument()
+      // The "Generated N moves" status is driven off component-state
+      // `toolpath`; if switching back wiped it the status would vanish
+      // and Export would re-disable.
+      const statuses = screen.getAllByRole('status').map((el) => el.textContent)
+      expect(statuses).toEqual(
+        expect.arrayContaining([expect.stringMatching(/Generated 2 moves/)]),
+      )
+      const exportBtn = screen.getByRole('button', {
+        name: 'Export G-code',
+      }) as HTMLButtonElement
+      expect(exportBtn.disabled).toBe(false)
+    })
+
+    it('flips back to 2-D when the user regenerates while previewing in 3-D', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nM2\n')
+      vi.mocked(simulateGcodeViewer).mockResolvedValueOnce(SIM_MESH)
+
+      await renderWithGeneratedToolpath()
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+      await screen.findByTestId('viewport3d-mock')
+
+      // Queue the regenerate's planner response only now — renderWith…
+      // already consumed the first slot for the initial Generate.
+      vi.mocked(generateProfileToolpath).mockResolvedValueOnce([
+        { kind: 'rapid', to: [0, 0, 5] },
+      ])
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('canvas2d-mock')).toBeInTheDocument()
+      })
+      expect(useViewportStore.getState().simulationMeshData).toBeNull()
+    })
+
+    it('disables Generate while a simulation is in flight', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nM2\n')
+      let resolveSim!: (mesh: MeshData) => void
+      vi.mocked(simulateGcodeViewer).mockReturnValueOnce(
+        new Promise<MeshData>((resolve) => {
+          resolveSim = resolve
+        }),
+      )
+
+      await renderWithGeneratedToolpath()
+      const generateBtn = screen.getByRole('button', {
+        name: 'Generate toolpath',
+      }) as HTMLButtonElement
+      expect(generateBtn.disabled).toBe(false)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+
+      // Wait for the in-flight sim to register so Generate flips disabled.
+      await waitFor(() => expect(generateBtn.disabled).toBe(true))
+
+      resolveSim(SIM_MESH)
+      await waitFor(() => expect(generateBtn.disabled).toBe(false))
+    })
+
+    it('clears the simulation mesh and returns to 2-D when a fresh import lands', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nM2\n')
+      vi.mocked(simulateGcodeViewer).mockResolvedValueOnce(SIM_MESH)
+
+      await renderWithGeneratedToolpath()
+      fireEvent.click(screen.getByRole('button', { name: 'Simulate toolpath' }))
+      await screen.findByTestId('viewport3d-mock')
+
+      vi.mocked(parseSvg).mockResolvedValueOnce({ paths: [LINE], warnings: [] })
+      fireEvent.change(
+        screen.getByLabelText('SVG or DXF artwork file') as HTMLInputElement,
+        {
+          target: {
+            files: [new File(['<svg/>'], 'new.svg', { type: 'image/svg+xml' })],
+          },
+        },
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('canvas2d-mock')).toBeInTheDocument()
+      })
+      expect(useViewportStore.getState().simulationMeshData).toBeNull()
     })
   })
 })
