@@ -23,7 +23,9 @@ import type {
   ParseDxfResult,
   ParseSvgResult,
   Polyline,
+  ProfileOperationInput,
   Tool,
+  ToolpathOutput,
   WorkingEnvironment,
 } from '../../api/types'
 
@@ -34,6 +36,7 @@ vi.mock('../../api/gcodeViewer', () => ({
 vi.mock('../../api/mode2', () => ({
   parseSvg: vi.fn(),
   parseDxf: vi.fn(),
+  generateProfileToolpath: vi.fn(),
 }))
 
 vi.mock('../../viewport2d/Canvas2DViewport', () => ({
@@ -41,7 +44,7 @@ vi.mock('../../viewport2d/Canvas2DViewport', () => ({
 }))
 
 import { prewarmWasm } from '../../api/gcodeViewer'
-import { parseDxf, parseSvg } from '../../api/mode2'
+import { generateProfileToolpath, parseDxf, parseSvg } from '../../api/mode2'
 
 const SQUARE: Polyline = {
   closed: true,
@@ -692,6 +695,160 @@ describe('Mode2ProfileMode', () => {
       fireEvent.change(rpm, { target: { value: '24000' } })
       expect(rpm.value).toBe('24000')
       await waitForReady()
+    })
+  })
+
+  describe('Generate', () => {
+    const STOCK_TOOL = makeTool('t1', '1/8" end mill')
+    const READY_ENV: WorkingEnvironment = {
+      setups: [makeSetup('s1')],
+      tools: [STOCK_TOOL],
+      availability: [{ setupId: 's1', toolId: 't1' }],
+    }
+
+    async function renderReady(paths: Polyline[] = [SQUARE]) {
+      await seedEnv(READY_ENV)
+      await saveActiveSetupId('s1')
+      vi.mocked(parseSvg).mockResolvedValueOnce({ paths, warnings: [] })
+
+      render(<Mode2ProfileMode />)
+      const input = screen.getByLabelText('SVG or DXF artwork file') as HTMLInputElement
+      fireEvent.change(input, {
+        target: { files: [new File(['<svg/>'], 'p.svg', { type: 'image/svg+xml' })] },
+      })
+      // Wait until both the working-env load and the import settle so the
+      // tool dropdown has resolved and the Path rows are present.
+      await screen.findByLabelText('Path 1')
+      await waitFor(() => {
+        const sel = screen.getByLabelText('Tool') as HTMLSelectElement
+        expect(sel.value).toBe('t1')
+      })
+    }
+
+    it('disables the Generate button until paths and a tool are available', async () => {
+      render(<Mode2ProfileMode />)
+      const btn = (await screen.findByRole('button', {
+        name: 'Generate toolpath',
+      })) as HTMLButtonElement
+      expect(btn.disabled).toBe(true)
+      expect(
+        screen.getByText(/Select at least one path to generate a toolpath/),
+      ).toBeInTheDocument()
+      await waitForReady()
+    })
+
+    it('calls generateProfileToolpath with the selected paths, tool, and operation params', async () => {
+      const motions: ToolpathOutput = [
+        { kind: 'rapid', to: [0, 0, 5] },
+        { kind: 'linear', to: [0, 0, -1.5], feed: 200 },
+        { kind: 'linear', to: [10, 0, -1.5], feed: 800 },
+        { kind: 'rapid', to: [10, 0, 5] },
+      ]
+      vi.mocked(generateProfileToolpath).mockResolvedValueOnce(motions)
+
+      await renderReady([SQUARE, LINE])
+
+      // Deselect the second path so we can confirm the boundary subset
+      // makes it into the planner input intact.
+      fireEvent.click(screen.getByLabelText('Path 2'))
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+
+      await waitFor(() => {
+        expect(generateProfileToolpath).toHaveBeenCalledTimes(1)
+      })
+      const arg = vi.mocked(generateProfileToolpath).mock.calls[0][0] as ProfileOperationInput
+      expect(arg.boundaries).toEqual([SQUARE])
+      expect(arg.tool.id).toBe('t1')
+      expect(arg.cutSide).toBe('outside')
+      expect(arg.depthTotal).toBe(5)
+      expect(arg.depthPerPass).toBe(1)
+      expect(arg.safeZ).toBe(5)
+      expect(arg.plungeFeed).toBe(200)
+      expect(arg.cutFeed).toBe(800)
+      expect(arg.spindleRpm).toBe(18000)
+
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        /Generated 4 moves/,
+      )
+    })
+
+    it('surfaces the boundary-too-small AppError as a red alert', async () => {
+      const failure: AppError = {
+        kind: 'InvalidInput',
+        message:
+          'boundary at (0.000, 0.000) is smaller than tool diameter 3.175 mm; inside cut would remove the entire shape',
+      }
+      vi.mocked(generateProfileToolpath).mockRejectedValueOnce(failure)
+
+      await renderReady([SQUARE])
+      fireEvent.click(screen.getByLabelText('Inside'))
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/smaller than tool diameter/)
+      expect(alert).toHaveTextContent(/inside cut/)
+      // The arg's cut-side should reflect the toggle the user made.
+      const arg = vi.mocked(generateProfileToolpath).mock.calls[0][0] as ProfileOperationInput
+      expect(arg.cutSide).toBe('inside')
+    })
+
+    it('clears a stale error message once a regenerate succeeds', async () => {
+      vi.mocked(generateProfileToolpath)
+        .mockRejectedValueOnce({
+          kind: 'InvalidInput',
+          message: 'first failure',
+        } satisfies AppError)
+        .mockResolvedValueOnce([{ kind: 'rapid', to: [0, 0, 5] }])
+
+      await renderReady([SQUARE])
+      const btn = screen.getByRole('button', { name: 'Generate toolpath' })
+
+      fireEvent.click(btn)
+      await screen.findByText(/first failure/)
+
+      fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.queryByText(/first failure/)).not.toBeInTheDocument()
+      })
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        /Generated 1 moves/,
+      )
+    })
+
+    it('persists the last-generated toolpath until a new import lands', async () => {
+      vi.mocked(generateProfileToolpath).mockResolvedValueOnce([
+        { kind: 'rapid', to: [0, 0, 5] },
+        { kind: 'linear', to: [1, 0, -1], feed: 800 },
+      ])
+      await renderReady([SQUARE])
+
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        /Generated 2 moves/,
+      )
+
+      // Toolpath should outlive an unrelated re-render — for example,
+      // toggling a path selection or editing a numeric field — so
+      // downstream Simulate/Export can reuse it without regenerating.
+      fireEvent.change(screen.getByLabelText('Spindle RPM'), {
+        target: { value: '24000' },
+      })
+      expect(screen.getByRole('status')).toHaveTextContent(/Generated 2 moves/)
+
+      // A fresh import invalidates the result — the artwork the toolpath
+      // was planned against is gone.
+      vi.mocked(parseSvg).mockResolvedValueOnce({ paths: [LINE], warnings: [] })
+      fireEvent.change(
+        screen.getByLabelText('SVG or DXF artwork file') as HTMLInputElement,
+        {
+          target: {
+            files: [new File(['<svg/>'], 'second.svg', { type: 'image/svg+xml' })],
+          },
+        },
+      )
+      await waitFor(() => {
+        expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      })
     })
   })
 })

@@ -26,7 +26,7 @@ import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { prewarmWasm } from '../../api/gcodeViewer'
-import { parseDxf, parseSvg } from '../../api/mode2'
+import { generateProfileToolpath, parseDxf, parseSvg } from '../../api/mode2'
 import { useViewport2DStore, type Extent2D } from '../../store/viewport2dStore'
 import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 import {
@@ -39,13 +39,16 @@ import type {
   CutSide,
   ParseWarning,
   Polyline,
+  ProfileOperationInput,
   Tool,
+  ToolpathOutput,
   WorkingEnvironment,
 } from '../../api/types'
 import type { ProjectState } from '../../persistence/projectFile'
 
 type EngineStatus = 'initializing' | 'ready' | 'failed'
 type ImportStatus = 'idle' | 'importing' | 'imported' | 'error'
+type GenerateStatus = 'idle' | 'generating' | 'generated' | 'error'
 
 interface SampleEntry {
   label: string
@@ -121,6 +124,15 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
 
   const [operation, setOperation] = useState<ProfileOperationFormState>(DEFAULT_OPERATION)
 
+  const [generateStatus, setGenerateStatus] = useState<GenerateStatus>('idle')
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  // The last successful planner output. Kept in component state so that
+  // downstream actions (Simulate, Export — landed in later beads) can
+  // reuse it without re-running the planner. Cleared whenever a fresh
+  // import lands or a regenerate fails, since the prior result would
+  // then refer to artwork or parameters the UI no longer shows.
+  const [toolpath, setToolpath] = useState<ToolpathOutput | null>(null)
+
   // Subscribe to the viewport transform so pan/zoom re-runs the redraw
   // effect below — Canvas2DViewport's imperative API does not redraw on
   // its own, the consumer owns the draw loop.
@@ -177,7 +189,24 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       if (path.closed) api.polygon(pts, 'artwork')
       else api.polyline(pts, 'artwork')
     }
-  }, [paths, transform])
+    if (toolpath && toolpath.length > 0) {
+      // Each motion's `to` is absolute machine XY; segments are drawn
+      // pairwise from the previous endpoint. The very first motion has
+      // no predecessor — there is no "where the spindle was" to draw
+      // from — so we only seed `prev` and start emitting segments from
+      // the second motion onward. Linear moves render as toolpath
+      // strokes; rapids render as rapid strokes.
+      let prev: readonly [number, number] | null = null
+      for (const m of toolpath) {
+        const xy = [m.to[0], m.to[1]] as const
+        if (prev) {
+          const style = m.kind === 'rapid' ? 'rapid' : 'toolpath'
+          api.polyline([prev, xy], style)
+        }
+        prev = xy
+      }
+    }
+  }, [paths, toolpath, transform])
 
   const availableTools = useMemo<Tool[]>(() => {
     if (activeSetupId === null) return []
@@ -211,6 +240,11 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     setImportStatus('importing')
     setImportError(null)
     setWarnings([])
+    // A new import invalidates any previously generated toolpath: the
+    // motions reference boundaries that are about to be replaced.
+    setToolpath(null)
+    setGenerateStatus('idle')
+    setGenerateError(null)
     try {
       const result =
         format === 'svg' ? await parseSvg(bytes) : await parseDxf(bytes)
@@ -226,7 +260,7 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       useViewport2DStore.getState().setExtent(computeExtent(result.paths))
     } catch (e) {
       setImportStatus('error')
-      setImportError(formatParseError(e))
+      setImportError(formatAppErrorMessage(e))
     }
   }
 
@@ -299,6 +333,57 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   async function handleWorkingEnvClose() {
     setWorkingEnvOpen(false)
     await refreshWorkingEnv()
+  }
+
+  const selectedBoundaries = useMemo<Polyline[]>(
+    () => paths.filter((_, i) => selected[i]),
+    [paths, selected],
+  )
+
+  const selectedTool = useMemo<Tool | null>(
+    () =>
+      operation.toolId === null
+        ? null
+        : env.tools.find((t) => t.id === operation.toolId) ?? null,
+    [env.tools, operation.toolId],
+  )
+
+  // The button only makes sense once we have something to plan with —
+  // at least one selected path and a tool resolved from the active
+  // setup's availability. Anything missing is reported below the button
+  // rather than baked into the disabled state alone, so the user knows
+  // *why* generation is unavailable.
+  const generateBlockingReason: string | null =
+    selectedBoundaries.length === 0
+      ? 'Select at least one path to generate a toolpath.'
+      : selectedTool === null
+        ? 'Select a tool before generating.'
+        : null
+
+  async function handleGenerate() {
+    if (generateBlockingReason !== null || selectedTool === null) return
+    setGenerateStatus('generating')
+    setGenerateError(null)
+    const input: ProfileOperationInput = {
+      boundaries: selectedBoundaries,
+      tool: selectedTool,
+      cutSide: operation.cutSide,
+      depthTotal: operation.depthTotal,
+      depthPerPass: operation.depthPerPass,
+      safeZ: operation.safeZ,
+      plungeFeed: operation.plungeFeed,
+      cutFeed: operation.cutFeed,
+      spindleRpm: operation.spindleRpm,
+    }
+    try {
+      const result = await generateProfileToolpath(input)
+      setToolpath(result)
+      setGenerateStatus('generated')
+    } catch (e) {
+      setToolpath(null)
+      setGenerateStatus('error')
+      setGenerateError(formatAppErrorMessage(e))
+    }
   }
 
   return (
@@ -537,9 +622,35 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
             </SidebarSection>
 
             <SidebarSection title="Generate">
-              <p className="text-xs text-muted-foreground">
-                Toolpath generation — coming soon.
-              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="sm"
+                  className="w-full"
+                  aria-label="Generate toolpath"
+                  onClick={() => void handleGenerate()}
+                  disabled={
+                    generateBlockingReason !== null ||
+                    generateStatus === 'generating'
+                  }
+                >
+                  {generateStatus === 'generating' ? 'Generating…' : 'Generate'}
+                </Button>
+                {generateBlockingReason !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    {generateBlockingReason}
+                  </p>
+                )}
+                {generateStatus === 'generated' && toolpath !== null && (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Generated {toolpath.length} moves
+                  </p>
+                )}
+                {generateError && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {generateError}
+                  </p>
+                )}
+              </div>
             </SidebarSection>
 
             <SidebarSection title="Simulate">
@@ -604,18 +715,21 @@ function isAppError(err: unknown): err is AppError {
   )
 }
 
-function formatParseError(err: unknown): string {
+function formatAppErrorMessage(err: unknown): string {
   if (isAppError(err)) {
     if (err.kind === 'ParseFailure') {
       const detail = err.message
       const lineSuffix = detail.line !== null ? ` (line ${detail.line})` : ''
       return `${detail.source}: ${detail.message}${lineSuffix}`
     }
+    if (err.kind === 'MissingSetup' || err.kind === 'MissingTool') {
+      return `${err.kind}: ${err.message.id}`
+    }
     if (typeof err.message === 'string') return err.message
     return err.kind
   }
   if (err instanceof Error) return err.message
-  return 'Failed to import file'
+  return 'Unknown error'
 }
 
 function computeExtent(paths: Polyline[]): Extent2D | null {
