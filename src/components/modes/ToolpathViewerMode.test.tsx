@@ -1,10 +1,12 @@
 /**
- * Tests for ToolpathViewerMode — the only mode in the web build.
+ * Tests for ToolpathViewerMode — the G-code Viewer mode in the web build.
  *
  * The wasm-backed API is mocked so these tests don't need to load the
  * actual WebAssembly module; we just check that the component wires its
  * pieces together correctly: file picker invokes the API, sample fetch
  * uses BASE_URL, results populate the sidebar and the viewport store.
+ * Open Project / Save Project / Recents are now owned by the shell —
+ * see App.test.tsx for that coverage.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -12,8 +14,8 @@ import { IDBFactory } from 'fake-indexeddb'
 import { ToolpathViewerMode } from './ToolpathViewerMode'
 import { useViewportStore } from '../../store/viewportStore'
 import type { GcodeViewerLoadResult } from '../../api/types'
-import { __resetRecentsForTests, upsertRecent } from '../../persistence/recents'
-import { packJcamProject, type ProjectState } from '../../persistence/projectFile'
+import { __resetRecentsForTests } from '../../persistence/recents'
+import type { ProjectState } from '../../persistence/projectFile'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -71,9 +73,10 @@ describe('ToolpathViewerMode', () => {
   it('renders the file-action buttons', async () => {
     render(<ToolpathViewerMode />)
     expect(screen.getByText('Open G-code…')).toBeInTheDocument()
-    expect(screen.getByText('Open Project…')).toBeInTheDocument()
-    expect(screen.getByText('Save Project')).toBeInTheDocument()
     expect(screen.getByText('Load Sample')).toBeInTheDocument()
+    // Open / Save Project moved to the shell — assert they are NOT here.
+    expect(screen.queryByText('Open Project…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Save Project')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
     })
@@ -255,54 +258,13 @@ describe('ToolpathViewerMode', () => {
     })
   })
 
-  it('Save Project is disabled until a G-code file is loaded', async () => {
-    render(<ToolpathViewerMode />)
-    expect(screen.getByText('Save Project')).toBeDisabled()
-    // Wait for the prewarm useEffect to settle so its setState doesn't
-    // fire after the test returns (would trigger an act() warning).
-    await waitFor(() => {
-      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
-    })
-  })
-
-  it('Save Project triggers a .jcam download after loading a file', async () => {
+  it('hydrates from an initialProject prop on mount', async () => {
     vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
-
-    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:fake')
-    const revokeObjectURL = vi.fn<(url: string) => void>()
-    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
-    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    render(<ToolpathViewerMode />)
-    const input = screen.getByLabelText('G-code file') as HTMLInputElement
-    fireEvent.change(input, {
-      target: { files: [new File(['G0 X0\n'], 'pocket.nc', { type: 'text/plain' })] },
-    })
-    await waitFor(() => expect(screen.getByText('Save Project')).not.toBeDisabled())
-
-    fireEvent.click(screen.getByText('Save Project'))
-
-    expect(createObjectURL).toHaveBeenCalledTimes(1)
-    const blob = createObjectURL.mock.calls[0][0]
-    expect(blob.type).toBe('application/zip')
-    expect(blob.size).toBeGreaterThan(0)
-    expect(anchorClick).toHaveBeenCalledTimes(1)
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake')
-
-    anchorClick.mockRestore()
-    vi.unstubAllGlobals()
-  })
-
-  it('Open Project restores the saved sim params (not the file metadata)', async () => {
-    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
-
-    // Saved sim uses different dims than SAMPLE_RESULT's @STOCK metadata
-    // (200×60×8 vs 100×50×10) so we can tell which one wins on restore.
-    const saved: ProjectState = {
-      fileName: 'archived.nc',
+    const seed: ProjectState = {
+      fileName: 'seeded.nc',
       mode: 'gcode-viewer',
       payload: {
-        gcode: '; some other gcode\nG0 X0\n',
+        gcode: '; seeded\nG0 X0\n',
         sim: {
           stock: { origin: { x: 1, y: 2, z: 3 }, width: 200, depth: 60, height: 8 },
           toolDiameter: 12,
@@ -310,103 +272,63 @@ describe('ToolpathViewerMode', () => {
         },
       },
     }
-    const bytes = packJcamProject(saved)
-    const jcamFile = new File([new Uint8Array(bytes)], 'archived.jcam', {
-      type: 'application/zip',
+
+    render(<ToolpathViewerMode initialProject={seed} />)
+
+    await waitFor(() => {
+      expect(loadGcodeForViewer).toHaveBeenCalledWith('; seeded\nG0 X0\n')
     })
-
-    render(<ToolpathViewerMode />)
-    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
-    fireEvent.change(projectInput, { target: { files: [jcamFile] } })
-
+    // Saved sim wins over file metadata (SAMPLE_RESULT) — 200 not 100.
     await waitFor(() => {
       expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('200')
     })
     expect((screen.getByLabelText('Tool Ø') as HTMLInputElement).value).toBe('12')
-    expect((screen.getByLabelText('Resolution') as HTMLInputElement).value).toBe('0.25')
-    expect((screen.getByLabelText('Origin Z') as HTMLInputElement).value).toBe('3')
-    if (saved.mode !== 'gcode-viewer') throw new Error('fixture mode mismatch')
-    expect(loadGcodeForViewer).toHaveBeenCalledWith(saved.payload.gcode)
   })
 
-  it('Open Project shows a clear error for a non-jcam file', async () => {
-    render(<ToolpathViewerMode />)
-    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
-    fireEvent.change(projectInput, {
-      target: { files: [new File(['hello'], 'junk.jcam', { type: 'application/zip' })] },
-    })
-    expect(await screen.findByRole('alert')).toHaveTextContent(/valid zip|JamieCam project/i)
-  })
+  it('emits savable state to onProjectStateChange after a metadata load', async () => {
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(SAMPLE_RESULT)
+    const onChange = vi.fn()
 
-  it('Open Project rejects a 2d-profile project (G-code Viewer mode can\'t open it)', async () => {
-    const mode2: ProjectState = {
-      fileName: 'shape.svg',
-      mode: '2d-profile',
-      payload: { kind: '2d-profile' },
-    }
-    const jcamFile = new File([new Uint8Array(packJcamProject(mode2))], 'shape.jcam', {
-      type: 'application/zip',
-    })
-
-    render(<ToolpathViewerMode />)
-    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
-    fireEvent.change(projectInput, { target: { files: [jcamFile] } })
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/2d-profile/)
-    expect(loadGcodeForViewer).not.toHaveBeenCalled()
-  })
-
-  it('Recent list appears after loading a file and restores it on click', async () => {
-    vi.mocked(loadGcodeForViewer).mockResolvedValue(SAMPLE_RESULT)
-
-    render(<ToolpathViewerMode />)
+    render(<ToolpathViewerMode onProjectStateChange={onChange} />)
     const input = screen.getByLabelText('G-code file') as HTMLInputElement
     fireEvent.change(input, {
-      target: { files: [new File(['G0 X0\n'], 'first.nc', { type: 'text/plain' })] },
+      target: { files: [new File(['G0 X0\n'], 'p.nc', { type: 'text/plain' })] },
     })
 
-    // After load, the Recent section should appear with the file in it.
-    const recentBtn = await screen.findByRole('button', { name: 'first.nc' })
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileName: 'p.nc',
+          mode: 'gcode-viewer',
+        }),
+      )
+    })
+    const last = onChange.mock.calls[onChange.mock.calls.length - 1][0]
+    expect(last.payload.sim.stock.width).toBe(100)
+    expect(last.payload.sim.toolDiameter).toBe(6)
+  })
 
-    // Now load a different file so we can verify clicking Recent restores
-    // back to the first one.
+  it('emits null to onProjectStateChange when loaded file has no metadata', async () => {
+    const bareResult: GcodeViewerLoadResult = {
+      stock: null,
+      tools: [],
+      lineGeometry: { positions: [], colours: [], types: [] },
+      warnings: [],
+    }
+    vi.mocked(loadGcodeForViewer).mockResolvedValueOnce(bareResult)
+    const onChange = vi.fn()
+
+    render(<ToolpathViewerMode onProjectStateChange={onChange} />)
+    const input = screen.getByLabelText('G-code file') as HTMLInputElement
     fireEvent.change(input, {
-      target: { files: [new File(['G1 X1\n'], 'second.nc', { type: 'text/plain' })] },
+      target: { files: [new File(['G0 X0\n'], 'bare.nc', { type: 'text/plain' })] },
     })
-    await waitFor(() => expect(screen.getByText('second.nc')).toBeInTheDocument())
-
-    vi.mocked(loadGcodeForViewer).mockClear()
-    fireEvent.click(recentBtn)
 
     await waitFor(() => {
-      expect(loadGcodeForViewer).toHaveBeenCalledWith('G0 X0\n')
+      // The most recent emit should be null because there's no @STOCK/@TOOL
+      // metadata and the user hasn't filled the form yet.
+      expect(onChange).toHaveBeenLastCalledWith(null)
     })
-  })
-
-  it('hides the Recent section when IndexedDB has no entries', async () => {
-    render(<ToolpathViewerMode />)
-    // No files loaded → no recents → no section header.
-    await waitFor(() => {
-      expect(screen.queryByText('Recent')).not.toBeInTheDocument()
-    })
-  })
-
-  it('seeded recents are visible on mount', async () => {
-    await upsertRecent({
-      fileName: 'seeded.nc',
-      mode: 'gcode-viewer',
-      payload: {
-        gcode: 'G0\n',
-        sim: {
-          stock: { origin: { x: 0, y: 0, z: 0 }, width: 50, depth: 50, height: 5 },
-          toolDiameter: 3,
-          resolution: 0.5,
-        },
-      },
-    })
-
-    render(<ToolpathViewerMode />)
-    expect(await screen.findByRole('button', { name: 'seeded.nc' })).toBeInTheDocument()
   })
 
   it('blocks simulation when required inputs are missing', async () => {

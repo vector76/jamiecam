@@ -7,7 +7,7 @@
  * material-removal engine and renders the resulting workpiece mesh.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Viewport } from '../../viewport/Viewport'
 import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -19,13 +19,7 @@ import {
 } from '../../api/gcodeViewer'
 import { useViewportStore } from '../../store/viewportStore'
 import type { GcodeViewerLoadResult, SimulateGcodeViewerParams } from '../../api/types'
-import {
-  packJcamProject,
-  unpackJcamProject,
-  JcamFormatError,
-  type ProjectState,
-} from '../../persistence/projectFile'
-import { listRecents, upsertRecent, type RecentRecord } from '../../persistence/recents'
+import type { ProjectState } from '../../persistence/projectFile'
 import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 
 const SAMPLE_URL = `${import.meta.env.BASE_URL}samples/demo-pocket.nc`
@@ -74,23 +68,6 @@ function formFromSavedSim(sim: SimulateGcodeViewerParams): SimForm {
     toolDiameter: String(sim.toolDiameter),
     resolution: String(sim.resolution),
   }
-}
-
-function jcamFileName(gcodeName: string): string {
-  const dot = gcodeName.lastIndexOf('.')
-  const stem = dot > 0 ? gcodeName.slice(0, dot) : gcodeName
-  return `${stem}.jcam`
-}
-
-function triggerDownload(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
 }
 
 function formFromMetadata(result: GcodeViewerLoadResult, prev: SimForm): SimForm {
@@ -159,15 +136,31 @@ interface ToolpathViewerModeProps {
    * for not handing this component a different mode.
    */
   initialProject?: ProjectState | null
+  /**
+   * Called whenever this mode's savable project state changes. The shell
+   * uses it to drive Save Project and to keep the mode-agnostic Recents
+   * list in sync. `null` means "nothing savable right now" (no file
+   * loaded, or loaded file has no @STOCK/@TOOL metadata and the user
+   * hasn't filled the sim form).
+   */
+  onProjectStateChange?: (state: ProjectState | null) => void
 }
 
-export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerModeProps = {}) {
+export function ToolpathViewerMode({
+  initialProject = null,
+  onProjectStateChange,
+}: ToolpathViewerModeProps = {}) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const projectInputRef = useRef<HTMLInputElement | null>(null)
   // Read-once snapshot of the prop so a re-render with a stale parent
   // reference doesn't trigger a reload — the App shell remounts this
   // component (via key) whenever it wants fresh hydration.
   const initialProjectRef = useRef(initialProject)
+  // Keep the latest callback in a ref so loadFromText/handleSimulate can
+  // call it without being re-created on every render of the parent.
+  const onProjectStateChangeRef = useRef(onProjectStateChange)
+  useEffect(() => {
+    onProjectStateChangeRef.current = onProjectStateChange
+  }, [onProjectStateChange])
 
   const [fileName, setFileName] = useState<string | null>(null)
   const [gcodeContent, setGcodeContent] = useState<string | null>(null)
@@ -179,23 +172,10 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
   const [simStatus, setSimStatus] = useState<SimStatus>('idle')
   const [simError, setSimError] = useState<string | null>(null)
 
-  const [recents, setRecents] = useState<RecentRecord[]>([])
-  const [projectError, setProjectError] = useState<string | null>(null)
-
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('initializing')
   const [engineError, setEngineError] = useState<string | null>(null)
 
   const [workingEnvOpen, setWorkingEnvOpen] = useState(false)
-
-  const refreshRecents = useCallback(async () => {
-    try {
-      setRecents(await listRecents())
-    } catch {
-      // IndexedDB unavailable (private-mode Firefox, locked-down browser);
-      // silently degrade — recents list just stays empty.
-      setRecents([])
-    }
-  }, [])
 
   useEffect(() => {
     useViewportStore.getState().setToolpathGeometry(null)
@@ -211,20 +191,10 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
         setEngineError(err.message ?? err.kind ?? 'Failed to initialize engine')
       },
     )
-    // Sequence the initial recents refresh before the optional seed
-    // hydration. Both end in setRecents, and loadFromText's own
-    // post-upsert refreshRecents would race with a parallel initial
-    // refresh — last writer wins, so a slow initial listRecents could
-    // clobber the populated list.
     void (async () => {
-      await refreshRecents()
       if (cancelled) return
       const seed = initialProjectRef.current
       if (seed && seed.mode === 'gcode-viewer') {
-        // Opening a project from the shell should bump it in Recents,
-        // matching the in-sidebar "Open Project…" path. Restoring from
-        // Recents goes via handleRestoreRecent, which sets touchRecents
-        // to false to avoid the timestamp bump.
         await loadFromText(seed.fileName, seed.payload.gcode, {
           savedSim: seed.payload.sim,
         })
@@ -239,7 +209,7 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
     // call matters — guarded above by initialProjectRef so it's a no-op
     // on re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshRecents])
+  }, [])
 
   /**
    * Parse + restore the viewport for the given G-code, and merge whatever
@@ -249,7 +219,7 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
   async function loadFromText(
     name: string,
     content: string,
-    options: { savedSim?: SimulateGcodeViewerParams; touchRecents?: boolean } = {},
+    options: { savedSim?: SimulateGcodeViewerParams } = {},
   ) {
     setLoadStatus('loading')
     setLoadError(null)
@@ -272,20 +242,20 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
       useViewportStore.getState().setToolpathGeometry(result.lineGeometry)
       useViewportStore.getState().clearSimulationMesh()
 
-      // Auto-recent when we have valid sim params; files without
-      // @STOCK/@TOOL metadata get recented later if/when the user
-      // fills the form and runs Simulate (handleSimulate also calls
-      // upsertRecent), so they're not lost forever — just deferred.
-      if (options.touchRecents !== false) {
-        const built = paramsFromForm(nextForm)
-        if (built.ok) {
-          await upsertRecent({
-            fileName: name,
-            mode: 'gcode-viewer',
-            payload: { gcode: content, sim: built.value },
-          })
-          await refreshRecents()
-        }
+      // Emit savable state up to the shell when the loaded file has the
+      // metadata needed to round-trip a project. Files without
+      // @STOCK/@TOOL headers leave the form blank; we emit `null` so the
+      // shell's Save button stays disabled until the user fills it in and
+      // runs Simulate (which re-emits a valid state).
+      const built = paramsFromForm(nextForm)
+      if (built.ok) {
+        onProjectStateChangeRef.current?.({
+          fileName: name,
+          mode: 'gcode-viewer',
+          payload: { gcode: content, sim: built.value },
+        })
+      } else {
+        onProjectStateChangeRef.current?.(null)
       }
     } catch (e) {
       const err = e as { message?: string; kind?: string }
@@ -336,69 +306,18 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
       const mesh = await simulateGcodeViewer(gcodeContent, built.value)
       useViewportStore.getState().setSimulationMeshData(mesh)
       setSimStatus('ready')
-      // Persist the now-valid sim params so they round-trip via Recent.
-      await upsertRecent({
+      // Re-emit the now-valid sim params so the shell can update Save
+      // Project and bump the Recents timestamp.
+      onProjectStateChangeRef.current?.({
         fileName,
         mode: 'gcode-viewer',
         payload: { gcode: gcodeContent, sim: built.value },
       })
-      await refreshRecents()
     } catch (e) {
       const err = e as { message?: string; kind?: string }
       setSimStatus('error')
       setSimError(err.message ?? err.kind ?? 'Simulation failed')
     }
-  }
-
-  function handleSaveProject() {
-    if (!gcodeContent || !fileName) return
-    setProjectError(null)
-    const built = paramsFromForm(simForm)
-    if (!built.ok) {
-      setProjectError(built.error)
-      return
-    }
-    const state: ProjectState = {
-      fileName,
-      mode: 'gcode-viewer',
-      payload: { gcode: gcodeContent, sim: built.value },
-    }
-    const bytes = packJcamProject(state)
-    const blob = new Blob([new Uint8Array(bytes)], { type: 'application/zip' })
-    triggerDownload(blob, jcamFileName(fileName))
-  }
-
-  function handlePickProject() {
-    projectInputRef.current?.click()
-  }
-
-  async function handleProjectChosen(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setProjectError(null)
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      const state = unpackJcamProject(bytes)
-      if (state.mode !== 'gcode-viewer') {
-        setProjectError(`This build can't yet open '${state.mode}' projects.`)
-        return
-      }
-      await loadFromText(state.fileName, state.payload.gcode, { savedSim: state.payload.sim })
-    } catch (err) {
-      const msg = err instanceof JcamFormatError ? err.message : (err as Error).message
-      setProjectError(msg || 'Failed to open project file')
-    }
-  }
-
-  async function handleRestoreRecent(record: RecentRecord) {
-    // Don't re-insert into recents on restore — bumping the timestamp on
-    // every click would be confusing UX.
-    if (record.state.mode !== 'gcode-viewer') return
-    await loadFromText(record.state.fileName, record.state.payload.gcode, {
-      savedSim: record.state.payload.sim,
-      touchRecents: false,
-    })
   }
 
   function setField<K extends keyof SimForm>(key: K, value: string) {
@@ -408,7 +327,6 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
   const metaStock = loadResult?.stock
   const firstTool = loadResult?.tools[0]
   const canSimulate = gcodeContent !== null && simStatus !== 'simulating'
-  const canSaveProject = gcodeContent !== null && fileName !== null
 
   return (
     <div className="flex h-full flex-1 flex-col bg-background text-foreground">
@@ -419,14 +337,6 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
         onChange={handleFileChosen}
         className="hidden"
         aria-label="G-code file"
-      />
-      <input
-        ref={projectInputRef}
-        type="file"
-        accept=".jcam"
-        onChange={handleProjectChosen}
-        className="hidden"
-        aria-label="Project file"
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -453,32 +363,10 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
                   size="sm"
                   variant="secondary"
                   className="w-full"
-                  onClick={handlePickProject}
-                >
-                  Open Project…
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="w-full"
-                  onClick={handleSaveProject}
-                  disabled={!canSaveProject}
-                >
-                  Save Project
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="w-full"
                   onClick={handleLoadSample}
                 >
                   Load Sample
                 </Button>
-                {projectError && (
-                  <p className="text-xs text-destructive" role="alert">
-                    {projectError}
-                  </p>
-                )}
                 {fileName && (
                   <p className="truncate text-xs text-muted-foreground" title={fileName}>
                     {fileName}
@@ -514,25 +402,6 @@ export function ToolpathViewerMode({ initialProject = null }: ToolpathViewerMode
                 Working Environment…
               </Button>
             </SidebarSection>
-
-            {recents.length > 0 && (
-              <SidebarSection title="Recent">
-                <ul className="flex flex-col gap-1">
-                  {recents.map((r) => (
-                    <li key={r.fileName}>
-                      <button
-                        type="button"
-                        onClick={() => void handleRestoreRecent(r)}
-                        className="w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-accent"
-                        title={`${r.fileName}\nLast opened ${new Date(r.savedAt).toLocaleString()}`}
-                      >
-                        {r.fileName}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </SidebarSection>
-            )}
 
             {metaStock && (
               <SidebarSection title="Stock">

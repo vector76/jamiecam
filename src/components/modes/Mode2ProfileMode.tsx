@@ -112,20 +112,42 @@ const CUT_SIDE_OPTIONS: ReadonlyArray<{ value: CutSide; label: string }> = [
 interface Mode2ProfileModeProps {
   /**
    * Optional project to hydrate from on mount. Accepted for shape
-   * parity with Mode 1 — actual hydration of Mode 2 payloads lands in
-   * a later bead, so the prop is currently unused.
+   * parity with Mode 1 — actual hydration of Mode 2 payloads (loading
+   * the SVG/DXF source and selected paths) lands in a later bead, so
+   * we currently surface only the file name on the shell so it shows
+   * up in Recents and round-trips through Save Project.
    */
   initialProject?: ProjectState | null
+  /**
+   * Called whenever this mode's savable project state changes. The shell
+   * uses it to drive Save Project and to keep the mode-agnostic Recents
+   * list in sync.
+   */
+  onProjectStateChange?: (state: ProjectState | null) => void
 }
 
-export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
+export function Mode2ProfileMode({
+  initialProject = null,
+  onProjectStateChange,
+}: Mode2ProfileModeProps = {}) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const drawApiRef = useRef<Canvas2DDrawAPI | null>(null)
+  // Read-once snapshot for hydration; the shell remounts (via key bump)
+  // when it wants a fresh seed, so prop churn shouldn't re-hydrate.
+  const initialProjectRef = useRef(initialProject)
+  const onProjectStateChangeRef = useRef(onProjectStateChange)
+  useEffect(() => {
+    onProjectStateChangeRef.current = onProjectStateChange
+  }, [onProjectStateChange])
 
   const [engineStatus, setEngineStatus] = useState<EngineStatus>('initializing')
   const [engineError, setEngineError] = useState<string | null>(null)
 
-  const [sourceFileName, setSourceFileName] = useState<string | null>(null)
+  const [sourceFileName, setSourceFileName] = useState<string | null>(
+    initialProjectRef.current?.mode === '2d-profile'
+      ? initialProjectRef.current.fileName
+      : null,
+  )
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
   const [importError, setImportError] = useState<string | null>(null)
   const [paths, setPaths] = useState<Polyline[]>([])
@@ -158,6 +180,21 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   // effect below — Canvas2DViewport's imperative API does not redraw on
   // its own, the consumer owns the draw loop.
   const transform = useViewport2DStore((s) => s.transform)
+
+  // Push the current Mode 2 savable state up to the shell whenever the
+  // loaded source file changes (including the initial hydration emit so
+  // a `.jcam` opened by the shell lands in Recents and re-enables Save).
+  useEffect(() => {
+    if (sourceFileName === null) {
+      onProjectStateChangeRef.current?.(null)
+      return
+    }
+    onProjectStateChangeRef.current?.({
+      fileName: sourceFileName,
+      mode: '2d-profile',
+      payload: { kind: '2d-profile' },
+    })
+  }, [sourceFileName])
 
   useEffect(() => {
     let cancelled = false
