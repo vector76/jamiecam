@@ -12,13 +12,16 @@ and a React/TypeScript frontend. As of commit `740ba62`
 **pivoted to a static web app** whose compute core is the same Rust code
 compiled to WebAssembly via `wasm-pack`.
 
-Only **Mode 1 (G-code Viewer)** ships today. All other modes (2D, 2.5D, 3D,
-2+rotary, 3+rotary, 5-axis), the OCCT/Clipper2 FFI, the project state
-model, the toolpath planner, and all 43 `#[tauri::command]` handlers were
-deleted, not just hidden.
+**Mode 1 (G-code Viewer)** and **Mode 2 (2D Profile cuts, MVP)** both
+ship today. All other modes (2.5D, 3D, 2+rotary, 3+rotary, 5-axis), the
+OCCT FFI, the original toolpath planner, and all 43 `#[tauri::command]`
+handlers were deleted, not just hidden. Mode 2 was re-introduced in
+Phase 4 in profile-only form on top of a new pure-Rust stack
+(`clipper2-rust`, `usvg`, `dxf`) — see `docs/phase-4-design.md` for the
+decisions that shaped it.
 
-The intended deployment target is GitHub Pages or any static CDN. The
-deploy workflow is not yet written.
+The deployment target is GitHub Pages; the deploy workflow ships and
+publishes on push to `main`.
 
 ## Origin: the Tauri → web pivot
 
@@ -27,12 +30,17 @@ The original app was 7 "modes" sharing a unified desktop UI:
 | Mode | Description | Status today |
 |---|---|---|
 | 1 | G-code Viewer | **Shipped (Phase 1)** |
-| 2 | 2D Profiling (SVG/DXF → toolpath) | Deleted; Rust modules gone |
+| 2 | 2D Profile cuts (SVG/DXF → GRBL G-code) | **Shipped (Phase 4, profile-only MVP)** |
 | 2.5D | 2D with multi-depth | Deleted |
 | 3 | 3D (heightmap/STL/STEP) | Deleted |
 | 2+rotary | 2D wrapped on rotary axis | Deleted |
 | 3+rotary | 3D + rotary | Deleted |
 | 5-axis | STEP/IGES + 5-axis | Deleted |
+
+Mode 2 today covers **profile cuts only** — pocket clearing, drilling,
+island pockets, and tab retention are deliberately out of scope for the
+first ship; they will land as follow-ups. See
+`docs/phase-4-design.md` §5.
 
 The user's decisions that shaped the pivot:
 - **No backend.** Targets GitHub Pages and similar static hosts. No
@@ -45,8 +53,10 @@ The user's decisions that shaped the pivot:
   pure-TS rewrite.
 - **Mode 1 first** because it has zero dependencies on Clipper2/OCCT and
   proves the whole pipeline end-to-end.
-- **Project persistence will be download/upload of `.jcam` zips + an
-  IndexedDB cache.** Not implemented yet; deferred to Phase 2.
+- **Project persistence is download/upload of `.jcam` zips + an
+  IndexedDB Recents cache.** Shipped in Phase 2; the `workingEnv`
+  IndexedDB store added in Phase 4 follows the same "browser-local,
+  no server" framing.
 
 ## Architecture
 
@@ -62,29 +72,46 @@ jamiecam/
 │       ├── types.rs       # Vec3, BoxDimensions, StockDefinition,
 │       │                  # MeshData, FaceGroup, LineGeometryData
 │       ├── error.rs       # AppError (serde-tagged enum)
-│       ├── gcode_parser/  # Pure-Rust G-code parser
-│       └── dexel/         # Pure-Rust dexel material-removal engine
-│                          # (compiled but not yet exposed via wasm —
-│                          #  LTO removes it from the wasm output)
+│       ├── parse_warning.rs  # Shared ParseWarning shape (line + message)
+│       ├── gcode_parser/  # Pure-Rust G-code parser (Mode 1)
+│       ├── dexel/         # Pure-Rust dexel material-removal engine
+│       │                  # (used by both modes via the worker)
+│       ├── parsers/       # SVG (usvg) and DXF (dxf) → Polyline (Mode 2)
+│       ├── clipper/       # Thin facade over clipper2-rust for offsets
+│       ├── geometry2d/    # Point2 / Polyline / Region — the shared
+│       │                  # 2D millimetre types Mode 2 passes around
+│       ├── profile/       # Mode 2 profile-cut planner (offset + passes)
+│       ├── grbl/          # Hardcoded GRBL G-code emitter
+│       └── working_env/   # Mode 2 machine setups, tools, availability
 ├── src/                   # Frontend (Vite, React 19, TypeScript)
 │   ├── main.tsx           # Trivial — just renders <App/>
-│   ├── App.tsx            # Trivial — renders <ToolpathViewerMode/>
+│   ├── App.tsx            # Mode-aware shell: New Project picker,
+│   │                      # Open/Save .jcam, Recents list, mode dispatch
 │   ├── api/
-│   │   ├── gcodeViewer.ts # Dynamically imports the wasm module
+│   │   ├── gcodeViewer.ts # Mode 1 wasm bridge + prewarm
+│   │   ├── mode2.ts       # Mode 2 wasm bridge (parse, plan, emit)
+│   │   ├── simulation.worker.ts        # Web Worker entry: dexel sim
+│   │   ├── simulationWorkerClient.ts   # Promise wrapper around the worker
 │   │   └── types.ts       # TS mirror of the Rust wasm boundary
 │   ├── components/
-│   │   ├── modes/ToolpathViewerMode.tsx  # The only mode
-│   │   └── ui/            # 3 shadcn primitives (button, scroll-area,
-│   │                      #  sidebar-section). All others deleted.
-│   ├── viewport/          # Three.js viewport (unchanged from desktop)
+│   │   ├── modes/ToolpathViewerMode.tsx  # Mode 1 shell
+│   │   ├── modes/Mode2ProfileMode.tsx    # Mode 2 shell
+│   │   ├── working-env/   # WorkingEnvironmentModal: shared CRUD UI
+│   │   │                  #  for setups, tools, availability matrix
+│   │   └── ui/            # shadcn primitives (button, scroll-area,
+│   │                      #  sidebar-section, etc.)
+│   ├── viewport/          # Three.js 3D viewport (Mode 1 + Mode 2 sim preview)
+│   ├── viewport2d/        # Canvas2D viewport (Mode 2 primary workspace)
+│   ├── persistence/       # .jcam pack/unpack + IndexedDB (recents, workingEnv)
 │   ├── store/             # Zustand viewportStore (has dead state — see
 │   │                      #  Tech Debt below)
 │   ├── lib/utils.ts       # shadcn cn() helper
-│   ├── test-setup.ts      # Polyfills Blob.prototype.text for jsdom
+│   ├── test-setup.ts      # Polyfills (Blob.text, fake-indexeddb) for jsdom
 │   ├── wasm-pkg/          # GENERATED by wasm-pack — gitignored
 │   └── index.css
-├── public/samples/demo-pocket.nc   # Bundled sample G-code
-├── docs/                   # MOSTLY STALE — see warning below
+├── public/samples/        # Bundled samples: demo-pocket.nc (Mode 1),
+│                          # sample-profile.svg, sample-profile.dxf (Mode 2)
+├── docs/                   # See "docs/ after the pivot prune" below
 ├── index.html              # Vite entrypoint
 ├── vite.config.ts          # vite-plugin-wasm; target es2022
 ├── tsconfig.json
@@ -150,10 +177,31 @@ export async function loadGcodeForViewer(content: string)
 
 ### State
 
-There's no project state, no IPC, no global tool library. The frontend
-holds whatever the user has loaded in component state and a single
-viewport store (`src/store/viewportStore.ts`). The wasm module is
-stateless — every call is a pure function of its inputs.
+The wasm module is stateless — every call is a pure function of its
+inputs. Frontend state lives in three places:
+
+- **In-memory** per active mode: the loaded G-code (Mode 1) or the
+  imported artwork + selection + operation params + generated toolpath
+  (Mode 2). Each mode reports its "savable" shape up to the shell as a
+  `ProjectState`.
+- **`.jcam` zip files** for explicit save/load — see `projectFile.ts`.
+  `project.json` carries a required `mode` field (`"gcode-viewer"` or
+  `"2d-profile"`); the discriminated payload contains the mode-specific
+  state. Mode 2 also persists the original imported SVG/DXF bytes as a
+  separate zip entry so projects survive parser changes.
+- **IndexedDB (`jamiecam` database)** holds two object stores:
+  - `recents` — last-opened projects (keyed by file name), auto-upserted
+    so a tab close doesn't lose work.
+  - `workingEnv` — the **working environment**: machine setups, tools,
+    and the tool↔setup availability matrix, plus the cross-session
+    `activeSetupId`. This is intentionally **outside `.jcam`** because
+    it describes the user's CNC hardware, not the project. See
+    `docs/phase-4-design.md` §6 for the design and
+    `src/persistence/workingEnv.ts` for the schema. On first run a
+    placeholder setup + tool + availability pair are seeded so Mode 2
+    always has something to render.
+
+There is still no IPC, no server, and no shared cross-tab state.
 
 ## Build & development
 
@@ -172,7 +220,7 @@ npx pnpm@10.30.2 lint
 npx pnpm@10.30.2 build            # Rebuilds wasm, then production vite build
 
 cd src-rust
-cargo test --lib                  # 239 tests
+cargo test --lib                  # 361 tests
 cargo clippy --lib --all-targets -- -D warnings
 cargo fmt --check
 ```
@@ -187,14 +235,14 @@ gate `pnpm install` on having `wasm-pack` on PATH).
 
 ### Pre-commit hook
 
-`.git/hooks/pre-commit` (not tracked) runs:
+Install with `scripts/install-hooks.sh` (idempotent — re-running
+overwrites). It writes a `.git/hooks/pre-commit` that runs:
 1. `cargo fmt --manifest-path src-rust/Cargo.toml --all -- --check`
 2. `cargo clippy --manifest-path src-rust/Cargo.toml --lib --all-targets -- -D warnings`
 3. `pnpm typecheck`
 
-There is no script to install this hook (the old `scripts/install-hooks.sh`
-was deleted). If a teammate clones fresh, the hook is missing — recreate
-it or, better, write a small `scripts/install-hooks.sh` early in Phase 2.
+The hook itself is not tracked; the installer is. Re-run after a fresh
+clone so the checks run on every commit.
 
 ### Tooling quirks
 
@@ -210,25 +258,40 @@ it or, better, write a small `scripts/install-hooks.sh` early in Phase 2.
   `src/test-setup.ts` via `FileReader`. Don't use `new Response(blob).text()`
   — that uses Node's undici, which doesn't read jsdom's Blob bytes correctly.
 
-## What ships today (Phases 1 + 2)
+## What ships today (Phases 1, 2, 4)
 
-User experience:
-1. Open the URL.
-2. Click "Open G-code…" → browser file picker → pick a `.nc` / `.gcode` / `.tap`.
-3. Or click "Load Sample" → fetches `/samples/demo-pocket.nc`.
-4. Or click "Open Project…" → pick a `.jcam` to restore a prior session.
-5. The "Recent" sidebar list (IndexedDB-backed) shows the last few projects.
-6. Sidebar shows parsed `@STOCK` and `@TOOL` header metadata if present.
-7. Three.js viewport shows toolpath line geometry (rapids in grey, cuts
+The shell header picks a mode for a New Project, opens a `.jcam`
+(autoselects its mode), saves the current project, and lists Recents.
+
+**Mode 1 — G-code Viewer:**
+1. "Open G-code…" → pick a `.nc` / `.gcode` / `.tap`, or "Load Sample"
+   for `/samples/demo-pocket.nc`.
+2. Sidebar shows parsed `@STOCK` / `@TOOL` header metadata if present.
+3. Three.js viewport renders toolpath line geometry (rapids grey, cuts
    coloured per tool number).
-8. Click "Simulate" to run the dexel material-removal sim in a Web Worker;
-   the resulting workpiece mesh renders in the viewport.
-9. Click "Save Project" to download a `.jcam` zip of the current state.
-10. Parser warnings appear inline; an "Initializing engine…" indicator is
-    shown while the wasm module first loads.
+4. "Simulate" runs the dexel material-removal sim in a Web Worker and
+   renders the resulting workpiece mesh.
+
+**Mode 2 — 2D Profile cuts (MVP):**
+1. "Working Environment…" opens the modal to edit machine setups, tools,
+   and the availability matrix (all persisted to IndexedDB).
+2. "Open SVG/DXF…" or "Load Sample…" imports artwork; parsed polylines
+   appear in the Paths panel with per-row selection checkboxes.
+3. Operation editor: tool dropdown (filtered by the active setup's
+   availability), cut-side (outside/inside/onLine), depth/feed/spindle.
+4. "Generate" produces a profile toolpath overlay in the Canvas2D view.
+5. "Simulate" emits the GRBL G-code, feeds it through the same dexel
+   worker Mode 1 uses, and swaps the left pane to the 3D preview.
+   "Back to 2D" returns to the Canvas2D view.
+6. "Export G-code" downloads the GRBL program. "Save Project" writes a
+   `.jcam` that includes the original imported SVG/DXF bytes alongside
+   the parsed cache, path selection, and operation params.
 
 What's deliberately **not** there yet:
 - Anything from any other mode.
+- Mode 2 operations other than profile cuts (no pocket / drill / island
+  pocket / tab retention; see `docs/phase-4-design.md` §5).
+- Pluggable post-processors (GRBL only; see §7).
 - Loading bar for long simulations (just shows "Simulating…").
 - Bundle-size optimization (main chunk is still Three.js-heavy).
 
@@ -243,7 +306,7 @@ What's deliberately **not** there yet:
 3. `.jcam` save/load + IndexedDB recents — `b38e92c`.
 4. GitHub Pages deploy workflow + `BASE_PATH` — `029590d`.
 
-### Phase 3 — Hardening (in progress)
+### Phase 3 — Hardening (mostly done; remaining items deferred)
 
 Done:
 - "Initializing engine…" indicator while the wasm module first loads
@@ -253,33 +316,53 @@ Done:
 - Stale `docs/` pruned; surviving forward-looking docs banner-tagged.
 - Root `README.md`, `scripts/install-hooks.sh` added.
 
-Still open:
-- Bundle analysis: the main JS chunk is currently ~812 KB (~225 KB gz).
-  Mostly Three.js. Consider lazy-loading the viewport if a startup-time
-  metric matters.
-- Threading: GH Pages can't serve COOP/COEP headers, so SharedArrayBuffer
-  is unavailable, so Rayon stays single-threaded. If threads matter,
-  the deploy needs to move to Cloudflare/Netlify (which can set those
-  headers). The `coi-serviceworker` hack works on GH Pages but is fragile.
+Explicitly deferred (per `docs/phase-4-design.md` §1 — no user-visible
+problem motivates them yet):
+- Bundle analysis / Three.js lazy-load.
+- SharedArrayBuffer / Rayon threading (would need a host that can serve
+  COOP/COEP headers — GH Pages can't).
 
-### Phases 4+ — Other modes
+### Phase 4 — Mode 2 (2D profile cuts) ✅ shipped
+
+Profile-only MVP of Mode 2. The full design and the rationale for each
+choice live in `docs/phase-4-design.md`; the short version:
+
+- `clipper2-rust` (pure-Rust port) replaces the deleted C++ Clipper2
+  FFI; geometry stays Rust-side.
+- `usvg` + `dxf` crates parse SVG and DXF into the new
+  `geometry2d::{Point2, Polyline, Region}` types.
+- Profile toolpath generator (`profile::generate_profile`) applies a
+  tool-radius offset and step-down passes.
+- Hardcoded GRBL emitter (`grbl`) — no pluggable post-processor yet.
+- Working-environment model (`working_env`): machine setups, tools, and
+  the tool↔setup availability matrix, persisted to the IndexedDB
+  `workingEnv` store.
+- `.jcam` gains a required `mode` field; old files default to
+  `"gcode-viewer"`. Mode 2 `.jcam` files persist the unmodified
+  imported bytes alongside the parsed cache.
+- The planner stays 2D-only — no speculative `GeometrySource` enum
+  (`phase-4-design.md` §4). The next non-2D consumer gets to design the
+  abstraction against a real second user.
+- Mode 2 simulation routes through the GRBL emitter into the existing
+  dexel worker (`phase-4-design.md` §5, route (a)), so what's previewed
+  is exactly what's exported.
+- Canvas2D component is the primary Mode 2 workspace; the Three.js
+  viewport handles only the sim preview.
+
+Follow-up Mode 2 work (out of scope for the first ship): pocket
+clearing, drilling, island pockets, tab retention; multi-dialect
+post-processor; editor UX polish for setups/tools beyond the minimal
+modal.
+
+### Phases 5+ — Other modes
 
 Each mode is roughly: get the mode's Rust modules wasm-compatible,
 expose via wasm-bindgen, add a TS API wrapper, wire UI.
 
-**Mode 2 (2D Profiling)** is the natural next target after Phase 2/3
-because it shares the dexel sim infrastructure. The blocker is
-**Clipper2**: the original desktop code linked the C++ Clipper2 library
-via build.rs. For the web port, there's a maintained
-[`clipper2-wasm`](https://www.npmjs.com/package/clipper2-wasm) port. The
-work is to rewrite the Rust `geometry::clipper` shims (deleted) to call
-into the WASM Clipper2 API from JS, OR build a Rust→C++ Clipper2 FFI
-that compiles to WASM via Emscripten. The JS-side approach is simpler.
+**Mode 3 (3D, heightmap/STL only)** is a plausible next target. STL is
+pure Rust. STEP/IGES requires OCCT.
 
-**Mode 3 (3D, heightmap/STL only)** is the third target. STL is pure
-Rust. STEP/IGES requires OCCT.
-
-**Modes 4–6 (rotary)** are mostly the same as 2/3 with extra kinematics.
+**Modes 4–6 (rotary)** are mostly the same as 3 with extra kinematics.
 
 **Mode 7 (5-axis)** depends on OCCT. See "OCCT possibilities" below.
 
@@ -309,20 +392,19 @@ This is a Phase-5+ discussion. Don't take it on early.
    fields and methods for face selection (`selectionMode`,
    `hoveredFaceIdx`, `selectedFaceFingerprints`, `faceDescriptors`,
    `toggleFaceSelection`, `setFaceDescriptors`, etc.), measurement
-   history, and simulation playback. The face-selection state is
-   genuinely dead until STEP import returns (Phase 4+); the measurement
-   state is wired to working toolbar buttons in `Viewport.tsx`; the
-   simulation state will be reused in Phase 2. Trimming requires also
+   history, and simulation playback. The face-selection state is dead
+   until STEP import returns (Phase 5+); the measurement state is wired
+   to working toolbar buttons in `Viewport.tsx`. Trimming requires also
    editing `Viewport.tsx` and `viewportStore.test.ts`.
 
 2. **`Viewport.tsx` toolbar has 5 buttons (Persp/Ortho, display mode,
    distance, angle, clear measurements).** All function, but the
-   "display mode" dropdown affects the model mesh which Mode 1 doesn't
-   load, so 3 of its 4 options are no-ops today.
+   "display mode" dropdown affects the model mesh which neither mode
+   loads, so 3 of its 4 options are no-ops today.
 
 3. **`api/types.ts::FaceDescriptor`** is a stub kept in shape with the
-   original (5 required fields) just to satisfy `viewportStore`. Mode 1
-   never produces one.
+   original (5 required fields) just to satisfy `viewportStore`. No
+   shipped mode produces one.
 
 4. **`docs/` was pruned post-pivot** — see below.
 
@@ -332,12 +414,16 @@ Pre-pivot docs describing deleted Tauri/OCCT/CAM-algorithm code were
 deleted. What remains:
 
 - `web-port-handoff.md` — this file; the live source of current-state truth.
+- `phase-4-design.md` — the locked-in Mode 2 design decisions.
+- `phase-4-tasks.md` — the Phase 4 task list (now historical).
 - `gcode-parser.md`, `dexel-material-removal.md`, `tool-geometry-model.md`
   — specs for code that still ships. Carry a post-pivot banner noting the
   old Tauri path references are stale.
 - `roadmap.md`, `modes-overview.md` — forward-looking multi-mode plan.
-  Carry a banner noting the "Done" shared-infrastructure rows describe
-  the deleted Tauri code and must be reintroduced in WASM-compatible form.
+  Carry a banner noting the "Done" shared-infrastructure rows that
+  describe deleted Tauri code (OCCT, original post-processor, etc.)
+  must be reintroduced in WASM-compatible form before the modes that
+  depend on them can land.
 
 ## Verification checklist
 
@@ -347,12 +433,12 @@ starting work, or after a non-trivial change:
 ```bash
 npx --yes pnpm@10.30.2 install
 npx --yes pnpm@10.30.2 lint              # 0 warnings
-npx --yes pnpm@10.30.2 test               # 288 / 288
+npx --yes pnpm@10.30.2 test               # 438 / 438
 npx --yes pnpm@10.30.2 typecheck          # no errors
 npx --yes pnpm@10.30.2 build              # produces dist/
 
 cd src-rust
-cargo test --lib                          # 239 / 239
+cargo test --lib                          # 361 / 361
 cargo clippy --lib --all-targets -- -D warnings
 cargo fmt --check
 ```
@@ -361,14 +447,20 @@ End-to-end browser smoke test:
 ```bash
 npx --yes pnpm@10.30.2 vite preview --port 4173 --host 127.0.0.1 &
 sleep 5
-curl -s http://127.0.0.1:4173/ | head -5                            # SPA HTML
-curl -sI http://127.0.0.1:4173/samples/demo-pocket.nc | head -3     # 200
-curl -sI http://127.0.0.1:4173/assets/jamiecam_bg-*.wasm | head -3  # 200, application/wasm
+curl -s http://127.0.0.1:4173/ | head -5                                   # SPA HTML
+curl -sI http://127.0.0.1:4173/samples/demo-pocket.nc | head -3            # 200
+curl -sI http://127.0.0.1:4173/samples/sample-profile.svg | head -3        # 200
+curl -sI http://127.0.0.1:4173/samples/sample-profile.dxf | head -3        # 200
+curl -sI http://127.0.0.1:4173/assets/jamiecam_bg-*.wasm | head -3         # 200, application/wasm
 ```
 
-Open `http://127.0.0.1:4173/` in a browser, click "Load Sample", confirm
-the viewport shows toolpath lines and the sidebar shows the stock and
-tool metadata from the sample's `@STOCK`/`@TOOL` header comments.
+In a browser:
+1. Mode 1: stay on the default "G-code Viewer" mode, click "Load Sample",
+   confirm the viewport shows toolpath lines and the sidebar shows the
+   stock and tool metadata from the sample's `@STOCK`/`@TOOL` headers.
+2. Mode 2: switch the shell to "2-D Profile", "Load Sample…" →
+   `sample-profile.svg`, pick the seeded tool, click Generate then
+   Simulate, and confirm the 3-D preview shows the carved sample.
 
 ## Conversational ground rules (from the user)
 
@@ -384,3 +476,8 @@ These came up explicitly in the pivot conversation. Carry them forward:
 - **Pivot decisions are settled.** Don't relitigate "should we keep
   Tauri" / "should we preserve Mode 7" / etc. The user committed to the
   web-only + Mode-1-first approach.
+- **Phase 4 (Mode 2) decisions are also settled.** See
+  `docs/phase-4-design.md` — read it before proposing alternatives to
+  `clipper2-rust`, the profile-only MVP scope, the GRBL-only emitter,
+  the working-environment storage shape, the Canvas2D split, or the
+  decision to keep the planner 2D-only.

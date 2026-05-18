@@ -1,12 +1,21 @@
 # JamieCam Roadmap
 
-> **Post-pivot note:** This is the forward-looking multi-mode plan. After
-> the Tauri→web pivot only Mode 1 (G-code Viewer) ships; the shared
-> infrastructure rows marked "Done" (OCCT, Clipper2, tool library,
-> toolpath types, post-processor, etc.) describe the deleted Tauri code
-> and are **not** currently available in the web build. They must be
-> reintroduced in WASM-compatible form before the modes that depend on
-> them can land. See `web-port-handoff.md` for the live state.
+> **Post-pivot note:** This is the forward-looking multi-mode plan.
+> After the Tauri→web pivot, **Mode 1 (G-code Viewer)** and **Mode 2
+> (2D Profile cuts, MVP)** ship in the web build. Shared-infrastructure
+> rows annotated "Done — web" describe code that is live and
+> WASM-compatible. Rows annotated "Done (Tauri only)" describe deleted
+> desktop code that must be reintroduced in WASM-compatible form before
+> the modes that depend on them can land.
+>
+> The Phase 4 design decisions that scope the Mode 2 MVP — pure-Rust
+> `clipper2-rust`, profile-cuts only, separate machine-setup model,
+> GRBL-only emitter, Canvas2D workspace, **no speculative
+> `GeometrySource` abstraction in the planner** — are recorded in
+> `phase-4-design.md`. The forward-looking notes below should be read in
+> light of that document.
+>
+> See `web-port-handoff.md` for the live state of the codebase.
 
 ## Guiding Principles
 
@@ -43,38 +52,48 @@ but no implementation yet.
 
 | Component | Status | Used by modes |
 |---|---|---|
-| Tool library (data model, CRUD, UI) | Done | All |
-| Post-processor engine (GRBL config) | Done | All |
-| Toolpath types, linking, arc fitting | Done | All |
-| Clipper2 integration (offset, boolean) | Done | 2, 3 (required); 4-6 (optional); 7 |
-| `.jcam` project file I/O | Done — web (new format) | All |
-| OCCT build, FFI, tessellation | Done | 4-6 (optional); 7 (required) |
-| OCCT surface evaluation | Done | 4-6 (optional); 7 (required) |
-| Viewport shell (orbit, views, display modes) | Done | All |
-| Simulation playback (tool animation) | Done | All |
-| Toolpath cache (SHA-256, persistence) | Done | All |
-| Progress events | Done | All |
+| Tool library (data model, CRUD, UI) | Done — web (minimal CRUD modal; `working_env` Rust module + IndexedDB `workingEnv` store; see `phase-4-design.md` §6) | All |
+| Machine setups + tool↔setup availability matrix | Done — web (same modal + `working_env`) | All |
+| Post-processor engine (GRBL emitter) | Done — web (hardcoded GRBL only — see `phase-4-design.md` §7) | 2 (today); all (eventually) |
+| Pluggable / multi-dialect post-processor | Not started — deliberately deferred until a second dialect is demanded (§7) | All |
+| Toolpath types, linking, arc fitting | Done (Tauri only) — reintroduce as Mode 2+ follow-ups require | 2 (extensions), 3+ |
+| Clipper2 integration (offset, boolean) | Done — web (`clipper2-rust` pure-Rust port; `src-rust/src/clipper/`) | 2, 3 (required); 4-6 (optional); 7 |
+| `.jcam` project file I/O | Done — web (zip with required `mode` field; Mode 2 round-trip persists original imported bytes) | All |
+| OCCT build, FFI, tessellation | Done (Tauri only) — needs WASM strategy before Mode 7 (see `web-port-handoff.md` "OCCT possibilities") | 4-6 (optional); 7 (required) |
+| OCCT surface evaluation | Done (Tauri only) | 4-6 (optional); 7 (required) |
+| Viewport shell (orbit, views, display modes) | Done — web (Three.js; toolbar has dead state, see handoff) | 1, 2 (sim preview), 3+ |
+| Canvas2D viewport | Done — web (`src/viewport2d/`) | 2 (primary workspace), 3+ |
+| Simulation playback (tool animation) | Done (Tauri only) | All |
+| Toolpath cache (SHA-256, persistence) | Done (Tauri only) | All |
+| Progress events | Done (Tauri only) | All |
 | G-code parser | Done — web (`gcode-parser.md`) | 1 (primary), all (viewer) |
-| Dexel material removal engine | Done — web (`dexel-material-removal.md`) | 1 (primary), all (sim) |
+| Dexel material removal engine | Done — web (`dexel-material-removal.md`) | 1 (primary), 2 (via GRBL→worker, route (a)), all (sim) |
 | Tool geometry model (revolution profile) | Done — web (`tool-geometry-model.md`) | All (via dexel) |
-| Project format: mode field | Not started | All |
-| SVG/DXF input parser | Not started | 2, 3, 5, 6 |
+| Project format: mode field | Done — web (required field, legacy files default to `gcode-viewer`) | All |
+| SVG/DXF input parser | Done — web (`usvg` + `dxf` crates; `src-rust/src/parsers/`) | 2, 3, 5, 6 |
+| 2D geometry pipeline (`Point2`/`Polyline`/`Region`) | Done — web (`src-rust/src/geometry2d/`) | 2, 3, 5, 6 |
+| Profile toolpath generator (offset + step-down passes) | Done — web (`src-rust/src/profile/`) | 2 |
+| Pocket / drill / island / tab Mode 2 operations | Not started — Mode 2 MVP is profile-only (`phase-4-design.md` §5) | 2 |
 | Heightmap input loader | Not started | 4, 5 |
 | STL/OBJ mesh parser | Not started | 4, 5, 7 |
 
-### Project format updates
+### Project format
 
-The `.jcam` `project.json` needs a `mode` field set at project creation.
-The mode determines which file formats, operations, and UI panels are
-available. Mode cannot be changed after creation (avoids invalid state).
-One-way upgrade from simpler to more complex modes is permitted.
+The `.jcam` `project.json` has a required `mode` field set at project
+creation (currently `"gcode-viewer"` or `"2d-profile"`). The mode
+determines which file formats, operations, and UI panels are available
+and is immutable after creation. Pre-Phase-4 `.jcam` files default to
+`"gcode-viewer"` on load. See `phase-4-design.md` §8.
 
-### Viewport shell enhancements
+### Viewport shell
 
-The viewport currently assumes a 3D scene with an OCCT-tessellated mesh.
-Modes 2 and 3 need a 2D canvas as the primary workspace (pan/zoom on XY).
-Mode 4 needs a heightmap displacement mesh. The viewport needs an
-abstraction that supports these different presentation modes.
+Mode 1 and Mode 2 (sim preview) use the existing Three.js viewport.
+Mode 2's primary workspace is a separate Canvas2D component
+(`src/viewport2d/Canvas2DViewport.tsx`), not the Three.js viewport with
+a locked orthographic camera — see `phase-4-design.md` §9 for the
+rationale. Mode 4 will need a heightmap displacement mesh; whether to
+extend the existing 3-D viewport or introduce another presentation
+class is an open question for that work.
 
 ---
 
@@ -114,39 +133,37 @@ current web build.
 
 ### Mode 2: 2D (SVG/DXF, fixed-depth operations)
 
-2D vector artwork input. Profile, pocket, drill, island pocket, tab
-retention. Each operation has a fixed Z depth. Primary workspace is a 2D
-canvas.
+2D vector artwork input. Each operation has a fixed Z depth. Primary
+workspace is a Canvas2D component.
 
-**Reuses:** pocket clearing algorithm, profile contouring algorithm, drill
-algorithm, Clipper2 integration, linking, arc fitting, post-processor,
-toolpath cache, progress events.
+**Shipped (Phase 4 MVP):**
+- SVG + DXF import (`usvg`, `dxf` crates → `geometry2d::Polyline`).
+- Path selection UI and per-path open/closed display.
+- Profile cut operation: tool-radius offset + step-down passes
+  (`src-rust/src/profile/`).
+- Hardcoded GRBL G-code emitter (`src-rust/src/grbl/`).
+- Working environment editor (machine setups, tools, availability matrix)
+  persisted to IndexedDB.
+- Simulation via the existing dexel worker fed with the emitted GRBL
+  G-code (route (a) in `phase-4-design.md` §5).
+- Canvas2D primary workspace; Three.js sim preview swap-in.
+- `.jcam` round-trip with original imported bytes preserved.
 
-**Needs new:**
-- SVG parser (Rust, using `usvg` crate)
-- DXF parser (Rust, using `dxf` crate)
-- 2D geometry pipeline: parsed artwork to `Vec<Polyline>` / `Vec<ClosedRegion>`
-  that the existing pocket/profile algorithms can consume (currently they
-  require OCCT face boundary polygons -- see "What Existing Code Needs to
-  Change" below)
-- Island pocket algorithm (pocket with interior keep-out regions)
-- Tab retention (bridges left at intervals during profile cuts)
-- 2D canvas viewport mode (pan/zoom on XY, colored operation overlays)
-- Simple 3D preview (extruded mesh from 2D paths, no OCCT)
-- Mode-specific operation editor forms
+**Follow-ups (deliberately out of MVP scope, see `phase-4-design.md` §5):**
+- Pocket clearing algorithm.
+- Drill operations.
+- Island pocket algorithm (pocket with interior keep-out regions).
+- Tab retention (bridges left at intervals during profile cuts).
+- Editor UX polish for setups/tools beyond the minimal CRUD modal.
+- Multi-dialect post-processor (GRBL is sufficient for now, see §7).
 
-**Dependencies on shared infra:** Clipper2 (done), post-processor (done),
-project format mode field.
-
-**Suggested order within mode:**
-1. SVG parser with path extraction and unit tests
-2. DXF parser with entity extraction and unit tests
-3. 2D geometry pipeline adapter (parsed paths to boundary polygons)
-4. Wire existing pocket/profile/drill through 2D pipeline; golden tests
-5. Island pocket algorithm
-6. Tab retention algorithm
-7. 2D canvas viewport
-8. Operation editor forms and UI shell
+**Suggested order for follow-ups:**
+1. Pocket clearing on top of the existing `geometry2d` + clipper offset
+   facade.
+2. Drill operation.
+3. Island pocket (pocket + interior boundaries via clipper).
+4. Tab retention on the profile generator.
+5. Editor polish.
 
 ---
 
@@ -332,14 +349,18 @@ shared components before any mode depends on them. It also delivers immediate
 user value: anyone with G-code can use it, regardless of what CAM software
 produced the code.
 
-**Mode 2 (2D) second.** This is the largest user base -- flat panel work,
-signs, PCB cutouts. It reuses the existing pocket, profile, and drill
-algorithms but requires a new SVG/DXF input pipeline. The key work is
-building the 2D geometry pipeline that bypasses OCCT (see "What Existing
-Code Needs to Change").
+**Mode 2 (2D) — profile cuts shipped (Phase 4).** This is the largest
+user base -- flat panel work, signs, PCB cutouts. The MVP covers profile
+cuts only on a pure-Rust stack (`clipper2-rust`, `usvg`, `dxf`). Pocket,
+drill, island pocket, and tab retention are the next slice — see the
+Mode 2 entry above for the suggested order. The Phase 4 work also
+delivered the shared `geometry2d` types, the working-environment data
+model, the GRBL emitter, and the Canvas2D component, all of which
+later 2D-input modes (3, 5, 6) will reuse.
 
-**Mode 3 (2.5D) third.** It shares the vector artwork pipeline with Mode 2
-and adds the V-carve algorithm. Natural extension after Mode 2 ships.
+**Mode 3 (2.5D) next.** It shares the vector artwork pipeline with
+Mode 2 and adds the V-carve algorithm. Natural extension after Mode 2's
+profile-cut follow-ups (pocket/drill/island/tab) ship.
 
 **Mode 4 (3D heightmap) could run in parallel with Modes 2-3.** It is
 independent of the 2D pipeline. The main new work is the heightmap loader
@@ -382,36 +403,40 @@ infrastructure specs live in their own documents (`gcode-parser.md`,
 
 ## What Existing Code Needs to Change
 
-The most significant refactoring task is decoupling the toolpath planner from
-OCCT-based geometry input.
+The pre-pivot version of this section described a refactor of the
+OCCT-coupled toolpath planner so that 2D and surface inputs could share
+the same planner entry point. **That refactor was retired by the Phase 4
+design** (see `phase-4-design.md` §4) for two reasons:
 
-**Current state:** The planner (`planner.rs`) resolves operation geometry by
-calling `enumerate_faces` on an `OcctShape`, matching face fingerprints, and
-extracting boundary polygons via OCCT. This works for solid models but
-cannot serve modes that use non-OCCT geometry sources (heightmaps, STL
-meshes, SVG/DXF paths).
+1. The original OCCT-coupled planner was deleted in the Tauri→web
+   pivot, so there is nothing left to decouple.
+2. We do not introduce speculative abstractions ahead of a concrete
+   second consumer; the Mode 2 planner therefore takes
+   `&[Polyline]`-shaped 2D input directly. A `GeometrySource` enum that
+   tries to model OCCT faces, heightmaps, meshes, and polylines before
+   any of those non-polyline consumers exist would be designed against
+   imaginary requirements and impossible to test honestly under our TDD
+   convention.
 
-**Required change:** The planner needs an alternative geometry input path.
-Operations in Modes 2-3 receive their boundary polygons directly from the
-SVG/DXF parser (via Clipper2 processing). Mode 4 receives a heightmap,
-mesh, or OCCT surface via the `SurfaceModel` trait. Mode 5 may receive
-any of these plus SVG/DXF paths. Mode 1 has no planner at all (it only
-views G-code).
+**Current shape of the planner surface:**
+- `profile::generate_profile(input: &ProfileOperationInput)`
+  (`src-rust/src/profile/mod.rs`) bundles its inputs into one struct:
+  `boundaries: Vec<Polyline>` (from `geometry2d`), `tool: Tool` (from
+  `working_env`), `cut_side`, depth/feed/spindle params. It returns
+  `ToolpathOutput = Vec<ToolpathMotion>` (Rapid / Linear moves). Any
+  `geometry2d::Region`s with holes appear only internally as the
+  intermediate result of `clipper::offset_region`.
+- `grbl::emit_grbl(toolpath, tool, stock)` (`src-rust/src/grbl/mod.rs`)
+  takes that `ToolpathOutput` plus the active `Tool` and
+  `types::BoxDimensions` stock, and produces a G-code string.
 
-Concretely:
-- `pocket_passes` and `profile_passes` already accept `boundary: &[(f64, f64)]`
-  as a parameter. The OCCT dependency is in the boundary *resolution* step,
-  not in the algorithms themselves.
-- The planner's `resolve_geometry_boundary()` function needs to be generalized.
-  For 2D modes, the boundary comes from parsed artwork paths. For solid modes,
-  it comes from OCCT face analysis. The algorithms downstream are unchanged.
-- A `GeometrySource` enum or trait could abstract over these input paths:
-  `GeometrySource::OcctFaces(shape, fingerprints)`,
-  `GeometrySource::Polygon(boundary)`,
-  `GeometrySource::Heightmap(grid)`,
-  `GeometrySource::Mesh(mesh)`.
-
-This refactoring is the gate for Mode 2. It should be done early.
+**When a non-2D geometry consumer actually appears** — e.g. Mode 4
+heightmap finishing or Mode 7 STEP-fed roughing — the right move is to
+design the abstraction against *that* concrete second consumer plus the
+existing 2D consumer, not to invent it now. The candidate shapes
+mentioned previously (`GeometrySource::Heightmap(grid)`,
+`SurfaceModel` trait, etc.) are still reasonable starting points to
+revisit at that time.
 
 ---
 

@@ -1,10 +1,13 @@
 # JamieCam Modes Overview
 
-> **Post-pivot note:** This is forward-looking design. Only Mode 1
-> (G-code Viewer) ships today. The Tauri-era shared infrastructure
-> (OCCT, Clipper2, tool library, CAM algorithms) was deleted in the
-> web pivot and will be reintroduced mode-by-mode in WASM-compatible form.
-> See `web-port-handoff.md` for the live state.
+> **Post-pivot note:** This is forward-looking design. Today Mode 1
+> (G-code Viewer) and Mode 2 (2D Profile cuts, MVP — profile-only) ship.
+> The Tauri-era shared infrastructure (OCCT, the original CAM
+> algorithms, the rich post-processor, the cached toolpath store) was
+> deleted in the web pivot and will be reintroduced mode-by-mode in
+> WASM-compatible form. Clipper2 is back as the pure-Rust
+> `clipper2-rust` port. See `web-port-handoff.md` for the live state
+> and `phase-4-design.md` for the Mode 2 design decisions.
 
 ## Introduction
 
