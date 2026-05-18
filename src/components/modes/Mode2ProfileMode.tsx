@@ -2,16 +2,22 @@
  * Mode2ProfileMode — Phase 4 (2-D Profile Cuts) component.
  *
  * Lays out the Mode 2 surface: Canvas2DViewport as the primary workspace
- * with a right-hand sidebar mirroring Mode 1's structure. The File
- * section exposes a single-file SVG/DXF picker that dispatches to
- * `parseSvg` / `parseDxf` based on extension; imported paths populate
- * the Paths section (one row per polyline with a selection checkbox)
- * and render in the viewport using the `artwork` style. Parse failures
- * surface as a red alert block in File; recoverable ParseWarnings show
- * as a yellow inline list, mirroring Mode 1's load-warning pattern.
+ * with a right-hand sidebar mirroring Mode 1's structure. The Setup
+ * section exposes the active machine setup selector at the top of the
+ * sidebar. The File section exposes a single-file SVG/DXF picker that
+ * dispatches to `parseSvg` / `parseDxf` based on extension; imported
+ * paths populate the Paths section (one row per polyline with a
+ * selection checkbox) and render in the viewport using the `artwork`
+ * style. The Operation section is the profile-cut form (tool dropdown
+ * filtered by the active setup's availability matrix, cut-side toggle,
+ * and the depth / feed / spindle numeric inputs). Form state is held
+ * locally — persistence into `.jcam` lands in a later bead. Parse
+ * failures surface as a red alert block in File; recoverable
+ * ParseWarnings show as a yellow inline list, mirroring Mode 1's
+ * load-warning pattern.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Canvas2DViewport,
   type Canvas2DDrawAPI,
@@ -23,7 +29,19 @@ import { prewarmWasm } from '../../api/gcodeViewer'
 import { parseDxf, parseSvg } from '../../api/mode2'
 import { useViewport2DStore, type Extent2D } from '../../store/viewport2dStore'
 import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
-import type { AppError, ParseWarning, Polyline } from '../../api/types'
+import {
+  loadActiveSetupId,
+  loadWorkingEnv,
+  saveActiveSetupId,
+} from '../../persistence/workingEnv'
+import type {
+  AppError,
+  CutSide,
+  ParseWarning,
+  Polyline,
+  Tool,
+  WorkingEnvironment,
+} from '../../api/types'
 import type { ProjectState } from '../../persistence/projectFile'
 
 type EngineStatus = 'initializing' | 'ready' | 'failed'
@@ -43,6 +61,36 @@ const SAMPLES: readonly SampleEntry[] = [
 function sampleUrl(fileName: string): string {
   return `${import.meta.env.BASE_URL}samples/${fileName}`
 }
+
+interface ProfileOperationFormState {
+  toolId: string | null
+  cutSide: CutSide
+  depthTotal: number
+  depthPerPass: number
+  safeZ: number
+  plungeFeed: number
+  cutFeed: number
+  spindleRpm: number
+}
+
+const DEFAULT_OPERATION: ProfileOperationFormState = {
+  toolId: null,
+  cutSide: 'outside',
+  depthTotal: 5,
+  depthPerPass: 1,
+  safeZ: 5,
+  plungeFeed: 200,
+  cutFeed: 800,
+  spindleRpm: 18000,
+}
+
+const EMPTY_ENV: WorkingEnvironment = { setups: [], tools: [], availability: [] }
+
+const CUT_SIDE_OPTIONS: ReadonlyArray<{ value: CutSide; label: string }> = [
+  { value: 'outside', label: 'Outside' },
+  { value: 'inside', label: 'Inside' },
+  { value: 'onLine', label: 'On Line' },
+]
 
 interface Mode2ProfileModeProps {
   /**
@@ -68,6 +116,10 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   const [warnings, setWarnings] = useState<ParseWarning[]>([])
 
   const [workingEnvOpen, setWorkingEnvOpen] = useState(false)
+  const [env, setEnv] = useState<WorkingEnvironment>(EMPTY_ENV)
+  const [activeSetupId, setActiveSetupId] = useState<string | null>(null)
+
+  const [operation, setOperation] = useState<ProfileOperationFormState>(DEFAULT_OPERATION)
 
   // Subscribe to the viewport transform so pan/zoom re-runs the redraw
   // effect below — Canvas2DViewport's imperative API does not redraw on
@@ -91,6 +143,28 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     }
   }, [])
 
+  const refreshWorkingEnv = useCallback(async () => {
+    const [loadedEnv, loadedActive] = await Promise.all([
+      loadWorkingEnv(),
+      loadActiveSetupId(),
+    ])
+    setEnv(loadedEnv)
+    // Validate the persisted active id against the loaded setups — a
+    // stale id (e.g. left behind by a multi-window deletion) would render
+    // a controlled <select> with no matching <option>. Fall back to the
+    // first setup so the Operation form stays usable on first run; the
+    // user can override via the selector.
+    const validActive =
+      loadedActive !== null && loadedEnv.setups.some((s) => s.id === loadedActive)
+        ? loadedActive
+        : null
+    setActiveSetupId(validActive ?? loadedEnv.setups[0]?.id ?? null)
+  }, [])
+
+  useEffect(() => {
+    void refreshWorkingEnv()
+  }, [refreshWorkingEnv])
+
   useEffect(() => {
     const api = drawApiRef.current
     if (!api) return
@@ -104,6 +178,30 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       else api.polyline(pts, 'artwork')
     }
   }, [paths, transform])
+
+  const availableTools = useMemo<Tool[]>(() => {
+    if (activeSetupId === null) return []
+    const toolIds = new Set(
+      env.availability
+        .filter((p) => p.setupId === activeSetupId)
+        .map((p) => p.toolId),
+    )
+    return env.tools.filter((t) => toolIds.has(t.id))
+  }, [env, activeSetupId])
+
+  // Keep the operation's selected tool consistent with what's currently
+  // available: clear it when the choice disappears, default it to the
+  // first available tool when nothing is picked.
+  useEffect(() => {
+    setOperation((prev) => {
+      if (prev.toolId !== null && availableTools.some((t) => t.id === prev.toolId)) {
+        return prev
+      }
+      const next = availableTools[0]?.id ?? null
+      if (prev.toolId === next) return prev
+      return { ...prev, toolId: next }
+    })
+  }, [availableTools])
 
   function handlePickFile() {
     fileInputRef.current?.click()
@@ -173,6 +271,36 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     setSelected((prev) => prev.map((v, idx) => (idx === i ? !v : v)))
   }
 
+  async function handleActiveSetupChanged(event: React.ChangeEvent<HTMLSelectElement>) {
+    const next = event.target.value || null
+    setActiveSetupId(next)
+    await saveActiveSetupId(next)
+  }
+
+  function handleToolChanged(event: React.ChangeEvent<HTMLSelectElement>) {
+    const next = event.target.value || null
+    setOperation((prev) => ({ ...prev, toolId: next }))
+  }
+
+  function handleCutSideChanged(side: CutSide) {
+    setOperation((prev) => ({ ...prev, cutSide: side }))
+  }
+
+  function handleNumberChanged(
+    key: Exclude<keyof ProfileOperationFormState, 'toolId' | 'cutSide'>,
+  ) {
+    return (event: React.ChangeEvent<HTMLInputElement>) => {
+      const parsed = Number(event.target.value)
+      if (!Number.isFinite(parsed)) return
+      setOperation((prev) => ({ ...prev, [key]: parsed }))
+    }
+  }
+
+  async function handleWorkingEnvClose() {
+    setWorkingEnvOpen(false)
+    await refreshWorkingEnv()
+  }
+
   return (
     <div
       data-testid="mode2-root"
@@ -190,6 +318,40 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
         <Canvas2DViewport ref={drawApiRef} className="flex-1" />
         <aside className="w-[280px] shrink-0 border-l border-border">
           <ScrollArea className="h-full">
+
+            <SidebarSection title="Setup">
+              <div className="flex flex-col gap-2">
+                {env.setups.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No machine setups configured.
+                  </p>
+                ) : (
+                  <select
+                    aria-label="Active machine setup"
+                    value={activeSetupId ?? ''}
+                    onChange={handleActiveSetupChanged}
+                    className="h-8 w-full rounded border border-border bg-secondary px-2 text-xs text-secondary-foreground"
+                  >
+                    <option value="" disabled>
+                      Choose setup…
+                    </option>
+                    {env.setups.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full"
+                  onClick={() => setWorkingEnvOpen(true)}
+                >
+                  Working Environment…
+                </Button>
+              </div>
+            </SidebarSection>
 
             <SidebarSection title="File">
               <div className="flex flex-col gap-2">
@@ -277,21 +439,101 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
               )}
             </SidebarSection>
 
-            <SidebarSection title="Machine">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setWorkingEnvOpen(true)}
-              >
-                Working Environment…
-              </Button>
-            </SidebarSection>
-
             <SidebarSection title="Operation">
-              <p className="text-xs text-muted-foreground">
-                Profile operation settings — coming soon.
-              </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1 text-xs">
+                  <span className="text-muted-foreground">Tool</span>
+                  {availableTools.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {activeSetupId === null
+                        ? 'Choose an active setup to see its tools.'
+                        : 'No tools available for this setup.'}
+                    </p>
+                  ) : (
+                    <select
+                      aria-label="Tool"
+                      value={operation.toolId ?? ''}
+                      onChange={handleToolChanged}
+                      className="h-8 w-full rounded border border-border bg-secondary px-2 text-xs text-secondary-foreground"
+                    >
+                      <option value="" disabled>
+                        Choose tool…
+                      </option>
+                      {availableTools.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <fieldset className="flex flex-col gap-1 text-xs">
+                  <legend className="text-muted-foreground">Cut side</legend>
+                  <div className="flex gap-3">
+                    {CUT_SIDE_OPTIONS.map((opt) => (
+                      <label key={opt.value} className="flex items-center gap-1">
+                        <input
+                          type="radio"
+                          name="cut-side"
+                          value={opt.value}
+                          checked={operation.cutSide === opt.value}
+                          onChange={() => handleCutSideChanged(opt.value)}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <NumberField
+                  label="Depth total (mm)"
+                  ariaLabel="Depth total"
+                  value={operation.depthTotal}
+                  step={0.1}
+                  min={0}
+                  onChange={handleNumberChanged('depthTotal')}
+                />
+                <NumberField
+                  label="Depth per pass (mm)"
+                  ariaLabel="Depth per pass"
+                  value={operation.depthPerPass}
+                  step={0.1}
+                  min={0}
+                  onChange={handleNumberChanged('depthPerPass')}
+                />
+                <NumberField
+                  label="Safe Z (mm)"
+                  ariaLabel="Safe Z"
+                  value={operation.safeZ}
+                  step={0.1}
+                  onChange={handleNumberChanged('safeZ')}
+                />
+                <NumberField
+                  label="Plunge feed (mm/min)"
+                  ariaLabel="Plunge feed"
+                  value={operation.plungeFeed}
+                  step={10}
+                  min={0}
+                  onChange={handleNumberChanged('plungeFeed')}
+                />
+                <NumberField
+                  label="Cut feed (mm/min)"
+                  ariaLabel="Cut feed"
+                  value={operation.cutFeed}
+                  step={10}
+                  min={0}
+                  onChange={handleNumberChanged('cutFeed')}
+                />
+                <NumberField
+                  label="Spindle RPM"
+                  ariaLabel="Spindle RPM"
+                  value={operation.spindleRpm}
+                  step={100}
+                  min={0}
+                  onChange={handleNumberChanged('spindleRpm')}
+                />
+              </div>
             </SidebarSection>
 
             <SidebarSection title="Generate">
@@ -317,9 +559,35 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       </div>
       <WorkingEnvironmentModal
         open={workingEnvOpen}
-        onClose={() => setWorkingEnvOpen(false)}
+        onClose={() => void handleWorkingEnvClose()}
       />
     </div>
+  )
+}
+
+interface NumberFieldProps {
+  label: string
+  ariaLabel: string
+  value: number
+  step?: number
+  min?: number
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+}
+
+function NumberField({ label, ariaLabel, value, step, min, onChange }: NumberFieldProps) {
+  return (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <input
+        type="number"
+        aria-label={ariaLabel}
+        value={value}
+        step={step}
+        min={min}
+        onChange={onChange}
+        className="h-8 w-full rounded border border-border bg-background px-2 text-xs"
+      />
+    </label>
   )
 }
 

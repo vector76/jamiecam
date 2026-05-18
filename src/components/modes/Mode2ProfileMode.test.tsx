@@ -7,14 +7,24 @@
  * or a real canvas.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { IDBFactory } from 'fake-indexeddb'
 import { Mode2ProfileMode } from './Mode2ProfileMode'
 import { useViewport2DStore } from '../../store/viewport2dStore'
+import { __resetDBForTests } from '../../persistence/db'
+import {
+  loadActiveSetupId,
+  saveActiveSetupId,
+  saveWorkingEnv,
+} from '../../persistence/workingEnv'
 import type {
   AppError,
+  MachineSetup,
   ParseDxfResult,
   ParseSvgResult,
   Polyline,
+  Tool,
+  WorkingEnvironment,
 } from '../../api/types'
 
 vi.mock('../../api/gcodeViewer', () => ({
@@ -54,7 +64,38 @@ const LINE: Polyline = {
 beforeEach(() => {
   vi.clearAllMocks()
   useViewport2DStore.getState().reset()
+  // Fresh in-memory DB per test so the loaded working-environment state
+  // doesn't bleed between tests (the component reads it on mount).
+  globalThis.indexedDB = new IDBFactory()
+  __resetDBForTests()
 })
+
+function makeSetup(id: string, name = `Setup ${id}`): MachineSetup {
+  return {
+    id,
+    name,
+    workspace: { origin: { x: 0, y: 0, z: 0 }, width: 300, depth: 200, height: 80 },
+    kinematics: '3-axis-router',
+    postProcessor: 'grbl-1.1',
+    safety: { safeZ: 5, rapidFeedRate: 3000 },
+  }
+}
+
+function makeTool(id: string, name = `Tool ${id}`): Tool {
+  return {
+    id,
+    name,
+    diameter: 3.175,
+    fluteCount: 2,
+    length: 38,
+    material: 'carbide',
+    recommended: { spindleRpm: 18000, feedRate: 800, plungeRate: 200 },
+  }
+}
+
+async function seedEnv(env: WorkingEnvironment): Promise<void> {
+  await saveWorkingEnv(env)
+}
 
 async function waitForReady() {
   await waitFor(() => {
@@ -367,6 +408,290 @@ describe('Mode2ProfileMode', () => {
         maxX: 10,
         maxY: 10,
       })
+    })
+  })
+
+  describe('Setup section', () => {
+    it('shows an empty-state message when no setups are configured', async () => {
+      render(<Mode2ProfileMode />)
+      expect(
+        await screen.findByText(/No machine setups configured/),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText('Active machine setup')).not.toBeInTheDocument()
+      await waitForReady()
+    })
+
+    it('lists persisted setups in the active-setup selector', async () => {
+      await seedEnv({
+        setups: [makeSetup('s1', 'Workshop CNC'), makeSetup('s2', 'Garage CNC')],
+        tools: [],
+        availability: [],
+      })
+      await saveActiveSetupId('s2')
+
+      render(<Mode2ProfileMode />)
+
+      const select = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      const labels = Array.from(select.options).map((o) => o.textContent)
+      expect(labels).toContain('Workshop CNC')
+      expect(labels).toContain('Garage CNC')
+      expect(select.value).toBe('s2')
+    })
+
+    it('falls back to the first setup when the persisted active id is stale', async () => {
+      await seedEnv({
+        setups: [makeSetup('s1'), makeSetup('s2')],
+        tools: [],
+        availability: [],
+      })
+      // Simulate stale state — e.g. another tab deleted the setup we
+      // were active on, leaving the orphan id in IDB.
+      await saveActiveSetupId('s-ghost')
+
+      render(<Mode2ProfileMode />)
+
+      const select = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      await waitFor(() => expect(select.value).toBe('s1'))
+    })
+
+    it('defaults the active setup to the first one if none is persisted', async () => {
+      await seedEnv({
+        setups: [makeSetup('s1'), makeSetup('s2')],
+        tools: [],
+        availability: [],
+      })
+
+      render(<Mode2ProfileMode />)
+
+      const select = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      await waitFor(() => expect(select.value).toBe('s1'))
+    })
+
+    it('persists a new active-setup choice', async () => {
+      await seedEnv({
+        setups: [makeSetup('s1'), makeSetup('s2')],
+        tools: [],
+        availability: [],
+      })
+      await saveActiveSetupId('s1')
+
+      render(<Mode2ProfileMode />)
+
+      const select = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      fireEvent.change(select, { target: { value: 's2' } })
+
+      await waitFor(async () => {
+        expect(await loadActiveSetupId()).toBe('s2')
+      })
+    })
+
+    it('re-reads the working environment after the modal closes', async () => {
+      render(<Mode2ProfileMode />)
+      // First-run: nothing seeded yet, so the empty-state message renders.
+      expect(
+        await screen.findByText(/No machine setups configured/),
+      ).toBeInTheDocument()
+
+      // Open the modal and wait for its own internal load to settle so we
+      // don't leak a setState past the test's assertions.
+      fireEvent.click(screen.getByRole('button', { name: /Working Environment…/ }))
+      await screen.findByRole('button', { name: /add setup/i })
+
+      // Simulate the modal having added a setup by writing directly to IDB
+      // (the parent doesn't care which UI mutated the store, only that it
+      // re-reads after onClose fires).
+      await saveWorkingEnv({
+        setups: [makeSetup('s1', 'Just Added')],
+        tools: [],
+        availability: [],
+      })
+
+      // Close the modal — the parent's onClose handler must trigger a refresh.
+      fireEvent.click(screen.getByRole('button', { name: /close/i }))
+
+      const select = (await screen.findByLabelText(
+        'Active machine setup',
+      )) as HTMLSelectElement
+      await waitFor(() => expect(select.value).toBe('s1'))
+      expect(
+        Array.from(select.options).map((o) => o.textContent),
+      ).toContain('Just Added')
+    })
+  })
+
+  describe('Operation form', () => {
+    async function renderWithEnv(env: WorkingEnvironment, activeId: string | null) {
+      await seedEnv(env)
+      if (activeId !== null) await saveActiveSetupId(activeId)
+      const result = render(<Mode2ProfileMode />)
+      // Wait until the working-environment load resolves so subsequent
+      // queries see the tool dropdown / form fields.
+      await waitForReady()
+      return result
+    }
+
+    it('shows a prompt when no setup is active', async () => {
+      render(<Mode2ProfileMode />)
+      expect(
+        await screen.findByText(/Choose an active setup to see its tools/),
+      ).toBeInTheDocument()
+      await waitForReady()
+    })
+
+    it('only lists tools whose availability pair matches the active setup', async () => {
+      await renderWithEnv(
+        {
+          setups: [makeSetup('s1'), makeSetup('s2')],
+          tools: [
+            makeTool('t1', '1/8" end mill'),
+            makeTool('t2', '1/4" end mill'),
+            makeTool('t3', '60° V-bit'),
+          ],
+          availability: [
+            { setupId: 's1', toolId: 't1' },
+            { setupId: 's1', toolId: 't3' },
+            { setupId: 's2', toolId: 't2' },
+          ],
+        },
+        's1',
+      )
+
+      const toolSelect = (await screen.findByLabelText('Tool')) as HTMLSelectElement
+      const labels = Array.from(toolSelect.options)
+        .map((o) => o.textContent)
+        .filter((l) => l && !l.startsWith('Choose'))
+      expect(labels).toEqual(['1/8" end mill', '60° V-bit'])
+    })
+
+    it('selects the first available tool by default', async () => {
+      await renderWithEnv(
+        {
+          setups: [makeSetup('s1')],
+          tools: [makeTool('t1', 'A'), makeTool('t2', 'B')],
+          availability: [
+            { setupId: 's1', toolId: 't1' },
+            { setupId: 's1', toolId: 't2' },
+          ],
+        },
+        's1',
+      )
+
+      const toolSelect = (await screen.findByLabelText('Tool')) as HTMLSelectElement
+      await waitFor(() => expect(toolSelect.value).toBe('t1'))
+    })
+
+    it('re-snaps the tool selection when the active setup changes', async () => {
+      await renderWithEnv(
+        {
+          setups: [makeSetup('s1'), makeSetup('s2')],
+          tools: [makeTool('t1', 'A'), makeTool('t2', 'B')],
+          availability: [
+            { setupId: 's1', toolId: 't1' },
+            { setupId: 's2', toolId: 't2' },
+          ],
+        },
+        's1',
+      )
+
+      const toolSelect = (await screen.findByLabelText('Tool')) as HTMLSelectElement
+      await waitFor(() => expect(toolSelect.value).toBe('t1'))
+
+      const setupSelect = screen.getByLabelText('Active machine setup') as HTMLSelectElement
+      fireEvent.change(setupSelect, { target: { value: 's2' } })
+
+      await waitFor(() => {
+        const refreshedTool = screen.getByLabelText('Tool') as HTMLSelectElement
+        expect(refreshedTool.value).toBe('t2')
+      })
+    })
+
+    it('reports an empty-tool-list state when the active setup has no compatible tools', async () => {
+      await renderWithEnv(
+        {
+          setups: [makeSetup('s1')],
+          tools: [makeTool('t1')],
+          availability: [],
+        },
+        's1',
+      )
+
+      expect(
+        await screen.findByText(/No tools available for this setup/),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText('Tool')).not.toBeInTheDocument()
+    })
+
+    it('renders the three cut-side options with Outside selected by default', async () => {
+      render(<Mode2ProfileMode />)
+      const fieldset = (await screen.findByRole('group', {
+        name: 'Cut side',
+      })) as HTMLFieldSetElement
+
+      const outside = within(fieldset).getByLabelText('Outside') as HTMLInputElement
+      const inside = within(fieldset).getByLabelText('Inside') as HTMLInputElement
+      const onLine = within(fieldset).getByLabelText('On Line') as HTMLInputElement
+
+      expect(outside.checked).toBe(true)
+      expect(inside.checked).toBe(false)
+      expect(onLine.checked).toBe(false)
+      await waitForReady()
+    })
+
+    it('toggles cut-side between Outside, Inside, and On Line', async () => {
+      render(<Mode2ProfileMode />)
+      const inside = (await screen.findByLabelText('Inside')) as HTMLInputElement
+      const onLine = screen.getByLabelText('On Line') as HTMLInputElement
+      const outside = screen.getByLabelText('Outside') as HTMLInputElement
+
+      fireEvent.click(inside)
+      expect(inside.checked).toBe(true)
+      expect(outside.checked).toBe(false)
+      expect(onLine.checked).toBe(false)
+
+      fireEvent.click(onLine)
+      expect(onLine.checked).toBe(true)
+      expect(inside.checked).toBe(false)
+      await waitForReady()
+    })
+
+    it('exposes the six numeric inputs with sensible defaults', async () => {
+      render(<Mode2ProfileMode />)
+      const fields: Array<[string, string]> = [
+        ['Depth total', '5'],
+        ['Depth per pass', '1'],
+        ['Safe Z', '5'],
+        ['Plunge feed', '200'],
+        ['Cut feed', '800'],
+        ['Spindle RPM', '18000'],
+      ]
+      for (const [label, defaultValue] of fields) {
+        const input = (await screen.findByLabelText(label)) as HTMLInputElement
+        expect(input.type).toBe('number')
+        expect(input.value).toBe(defaultValue)
+      }
+      await waitForReady()
+    })
+
+    it('updates a numeric field when edited', async () => {
+      render(<Mode2ProfileMode />)
+      const depthTotal = (await screen.findByLabelText(
+        'Depth total',
+      )) as HTMLInputElement
+      fireEvent.change(depthTotal, { target: { value: '12.5' } })
+      expect(depthTotal.value).toBe('12.5')
+
+      const rpm = screen.getByLabelText('Spindle RPM') as HTMLInputElement
+      fireEvent.change(rpm, { target: { value: '24000' } })
+      expect(rpm.value).toBe('24000')
+      await waitForReady()
     })
   })
 })
