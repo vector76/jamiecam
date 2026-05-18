@@ -26,6 +26,12 @@ vi.mock('./viewport/Viewport', () => ({
   Viewport: () => <div data-testid="viewport-mock" />,
 }))
 
+// Mode 2 mounts a real <canvas>; jsdom doesn't implement getContext,
+// which would otherwise spam stderr from every Mode 2 mount.
+vi.mock('./viewport2d/Canvas2DViewport', () => ({
+  Canvas2DViewport: () => <div data-testid="canvas2d-mock" />,
+}))
+
 import { loadGcodeForViewer } from './api/gcodeViewer'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -80,8 +86,8 @@ describe('App shell', () => {
     render(<App />)
     // Mode 1 surface — "Open G-code…" button is its calling card.
     expect(screen.getByText('Open G-code…')).toBeInTheDocument()
-    // Mode 2 placeholder is absent.
-    expect(screen.queryByTestId('mode2-placeholder')).not.toBeInTheDocument()
+    // Mode 2 surface is absent.
+    expect(screen.queryByTestId('mode2-root')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
     })
@@ -91,18 +97,23 @@ describe('App shell', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '2-D Profile' }))
 
-    expect(screen.getByTestId('mode2-placeholder')).toBeInTheDocument()
+    expect(screen.getByTestId('mode2-root')).toBeInTheDocument()
     expect(screen.queryByText('Open G-code…')).not.toBeInTheDocument()
+    // Let Mode 2's prewarm useEffect settle so its setState doesn't fire
+    // after the test returns (would trigger an act() warning).
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
   })
 
   it('switches back to Mode 1 from Mode 2 via "New Project"', async () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: '2-D Profile' }))
-    expect(screen.getByTestId('mode2-placeholder')).toBeInTheDocument()
+    expect(screen.getByTestId('mode2-root')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'G-code Viewer' }))
     expect(screen.getByText('Open G-code…')).toBeInTheDocument()
-    expect(screen.queryByTestId('mode2-placeholder')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mode2-root')).not.toBeInTheDocument()
     // Let Mode 1's prewarm useEffect settle so its setState doesn't fire
     // after the test returns (would trigger an act() warning).
     await waitFor(() => {
@@ -120,7 +131,7 @@ describe('App shell', () => {
       expect(loadGcodeForViewer).toHaveBeenCalledWith('; @TOOL\nG0 X0\n')
     })
     expect(screen.getByText('Open G-code…')).toBeInTheDocument()
-    expect(screen.queryByTestId('mode2-placeholder')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('mode2-root')).not.toBeInTheDocument()
   })
 
   it('shell-opened projects appear in the Recent list', async () => {
@@ -144,13 +155,16 @@ describe('App shell', () => {
     fireEvent.change(input, { target: { files: [jcamFile(mode2Project(), 'shape.jcam')] } })
 
     await waitFor(() => {
-      expect(screen.getByTestId('mode2-placeholder')).toBeInTheDocument()
+      expect(screen.getByTestId('mode2-root')).toBeInTheDocument()
     })
     expect(screen.queryByText('Open G-code…')).not.toBeInTheDocument()
     // Mode 1 mounted at cold start with no initialProject, then unmounted
     // when we switched. It must never have been asked to parse anything —
     // the Mode 2 project must not have leaked into the G-code pipeline.
     expect(loadGcodeForViewer).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
   })
 
   it('switches from Mode 1 to Mode 2 when a Mode 2 project is opened', async () => {
@@ -162,9 +176,12 @@ describe('App shell', () => {
     fireEvent.change(input, { target: { files: [jcamFile(mode2Project(), 'shape.jcam')] } })
 
     await waitFor(() => {
-      expect(screen.getByTestId('mode2-placeholder')).toBeInTheDocument()
+      expect(screen.getByTestId('mode2-root')).toBeInTheDocument()
     })
     expect(screen.queryByText('Open G-code…')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText('Initializing engine…')).not.toBeInTheDocument()
+    })
   })
 
   it('shows an error in the header for an invalid project file', async () => {
