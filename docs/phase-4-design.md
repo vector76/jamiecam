@@ -91,6 +91,33 @@ Explicitly **out of scope** for the first Mode 2 ship:
 Each excluded operation will be added as a follow-up after profile-only
 is shipped and stable.
 
+### Simulation pathway: G-code through the existing dexel worker
+
+Step 5's "simulate via existing dexel engine" was an open question
+because the dexel engine consumes G-code, not toolpath motions. Two
+routes were considered:
+
+- **(a)** Emit GRBL G-code via the §7 emitter (Phase 4 task 6) and
+  feed it into the existing dexel worker — the same pipeline Mode 1
+  uses for the G-code viewer.
+- **(b)** Add a direct `ToolpathOutput` entry point to the dexel
+  engine, bypassing the emitter.
+
+**Decision: route (a).** Reusing the emitter + dexel pipeline keeps the
+Mode 2 preview path identical to the eventual exported program — what
+the user sees on screen is exactly what the machine will run. Route
+(b) would split into two simulation paths (toolpath-direct for
+preview, G-code for export) that could silently disagree on rounding,
+modal state, or feed-rate handling. The marginal speed win does not
+justify the divergence risk for a profile-only first ship.
+
+**Critical-path implication.** The Mode 2 *Simulate* button cannot
+render anything before the §7 GRBL emitter lands. Task 6 therefore
+moves onto the critical path for the first Mode 2 demo even though
+§10 lists it as a downstream consumer of task 4 (the planner). When
+sequencing work toward a usable Mode 2 UI, treat task 6 as a
+must-have, not a nice-to-have follow-up.
+
 ---
 
 ## 6. Working environment: machine setups and tools

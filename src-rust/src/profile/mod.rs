@@ -173,10 +173,22 @@ pub type ToolpathOutput = Vec<ToolpathMotion>;
 ///
 /// # Errors
 ///
-/// Returns [`AppError::InvalidInput`] when `depth_total`,
-/// `depth_per_pass`, or `tool.diameter` is not a positive, finite value
-/// (zero, negative, NaN, and ±∞ are all rejected). Empty or degenerate
-/// boundaries (<2 points open, <3 points closed) are silently skipped.
+/// Returns [`AppError::InvalidInput`] when:
+///
+/// - `depth_total`, `depth_per_pass`, or `tool.diameter` is not a
+///   positive, finite value (zero, negative, NaN, and ±∞ all rejected).
+/// - `input.boundaries` is empty — there is nothing to cut.
+/// - A closed boundary cut with [`CutSide::Inside`] is smaller than the
+///   tool diameter (the inward offset deletes it). The same boundary cut
+///   with [`CutSide::Outside`] succeeds, because outward offset always
+///   produces a path no matter how small the input.
+///
+/// Self-touching or self-intersecting boundaries are not an error — the
+/// [`crate::clipper::offset_region`] facade resolves them under an
+/// even-odd union before offsetting. Open polylines and closed polylines
+/// with fewer than the minimum vertex count (<2 open, <3 closed) are
+/// silently skipped; an input made up entirely of such degenerate
+/// entries behaves like an empty `boundaries` list and errors.
 pub fn generate_profile(input: &ProfileOperationInput) -> Result<ToolpathOutput, AppError> {
     // is_finite() rejects NaN and ±∞ together; the > 0.0 check then catches
     // zero and negatives. An infinite depth_total would loop forever in
@@ -194,6 +206,12 @@ pub fn generate_profile(input: &ProfileOperationInput) -> Result<ToolpathOutput,
     if !input.tool.diameter.is_finite() || input.tool.diameter <= 0.0 {
         return Err(AppError::InvalidInput(
             "tool diameter must be a positive, finite value".into(),
+        ));
+    }
+
+    if input.boundaries.is_empty() {
+        return Err(AppError::InvalidInput(
+            "at least one boundary is required to generate a profile toolpath".into(),
         ));
     }
 
@@ -222,7 +240,21 @@ pub fn generate_profile(input: &ProfileOperationInput) -> Result<ToolpathOutput,
             vec![CutPath::closed(boundary.points.clone())]
         } else {
             let region = Region::new(boundary.points.clone());
-            offset_region(&region, delta)
+            let offset = offset_region(&region, delta);
+            // For an inside cut, an empty offset means the inward radius
+            // ate the entire shape — the boundary is smaller than the
+            // tool can fit. Report it explicitly so the UI can surface a
+            // tool-size mismatch instead of a silent missing cut. Outside
+            // and on-line never hit this case (inflation always produces
+            // a result; on-line skips the offset entirely above).
+            if offset.is_empty() && input.cut_side == CutSide::Inside {
+                return Err(AppError::InvalidInput(format!(
+                    "boundary at ({:.3}, {:.3}) is smaller than tool diameter {:.3} mm; \
+                     inside cut would remove the entire shape",
+                    first.x, first.y, input.tool.diameter
+                )));
+            }
+            offset
                 .into_iter()
                 .flat_map(|r| {
                     let mut all = Vec::with_capacity(1 + r.holes.len());
@@ -236,6 +268,14 @@ pub fn generate_profile(input: &ProfileOperationInput) -> Result<ToolpathOutput,
             continue;
         }
         prepared.push(PreparedBoundary { sort_key, paths });
+    }
+
+    if prepared.is_empty() {
+        return Err(AppError::InvalidInput(
+            "all supplied boundaries were empty or degenerate; \
+             nothing to cut"
+                .into(),
+        ));
     }
 
     // total_cmp gives a total order over all f64 (including NaN), which
@@ -560,10 +600,28 @@ mod tests {
     }
 
     #[test]
-    fn generate_profile_with_no_boundaries_is_empty() {
+    fn generate_profile_with_no_boundaries_errors() {
         let input = base_input(Vec::new(), CutSide::Outside);
-        let out = generate_profile(&input).unwrap();
-        assert!(out.is_empty());
+        let err = generate_profile(&input).expect_err("empty boundaries must error");
+        assert!(
+            matches!(err, AppError::InvalidInput(ref s) if s.contains("boundary")),
+            "expected InvalidInput mentioning boundary, got {err:?}",
+        );
+    }
+
+    #[test]
+    fn generate_profile_with_only_degenerate_boundaries_errors() {
+        // A single closed polyline with only two vertices is silently
+        // skipped per the parser convention — but if the *whole* input
+        // reduces to nothing, the planner has no work and must error
+        // rather than return a misleading empty toolpath.
+        let degenerate = Polyline::closed(vec![Point2::new(0.0, 0.0), Point2::new(1.0, 0.0)]);
+        let input = base_input(vec![degenerate], CutSide::OnLine);
+        let err = generate_profile(&input).expect_err("all-degenerate boundaries must error");
+        assert!(
+            matches!(err, AppError::InvalidInput(ref s) if s.contains("boundaries")),
+            "expected InvalidInput mentioning boundaries, got {err:?}",
+        );
     }
 
     #[test]
@@ -828,22 +886,89 @@ mod tests {
     }
 
     #[test]
-    fn closed_polyline_under_three_vertices_is_skipped() {
+    fn closed_polyline_under_three_vertices_is_skipped_when_others_remain() {
+        // The two-vertex closed polyline is silently dropped (it's not a
+        // polygon), but the valid 10×10 square still produces a toolpath
+        // — a single bad polyline in a mixed list must not poison the
+        // whole operation.
         let degenerate = Polyline::closed(vec![Point2::new(0.0, 0.0), Point2::new(1.0, 0.0)]);
-        let input = base_input(vec![degenerate], CutSide::OnLine);
-        let motions = generate_profile(&input).unwrap();
-        assert!(motions.is_empty());
+        let valid = square_boundary(10.0, 10.0, 10.0);
+        let input = base_input(vec![degenerate, valid], CutSide::OnLine);
+        let motions = generate_profile(&input).expect("valid boundary must still cut");
+        let passes = split_passes(&motions, input.safe_z);
+        // Four step-down levels, one ring ⇒ four passes.
+        assert_eq!(passes.len(), 4);
     }
 
     #[test]
-    fn deflating_past_inradius_produces_no_motions_for_that_boundary() {
-        // 1×1 square deflated by tool radius 1.5875 ⇒ empty offset result.
+    fn inside_cut_on_boundary_smaller_than_tool_diameter_errors() {
+        // 1×1 square deflated by tool radius 1.5875 ⇒ empty offset
+        // result. With an inside cut this means the tool literally
+        // cannot fit; surface it as a typed error so the UI can prompt
+        // the user to pick a smaller bit or a different cut side.
         let small = square_boundary(0.0, 0.0, 1.0);
         let input = base_input(vec![small], CutSide::Inside);
-        let motions = generate_profile(&input).unwrap();
+        let err = generate_profile(&input).expect_err("too-small inside cut must error");
+        match err {
+            AppError::InvalidInput(msg) => {
+                assert!(
+                    msg.contains("tool diameter"),
+                    "message should mention tool diameter, got {msg:?}",
+                );
+                assert!(
+                    msg.contains("inside cut"),
+                    "message should mention the inside cut, got {msg:?}",
+                );
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn outside_cut_on_boundary_smaller_than_tool_diameter_succeeds() {
+        // Same 1×1 square as above, but cut on the outside. Outward
+        // offset always produces a path regardless of how small the
+        // input is — the tool simply traces a wider rectangle around it.
+        let small = square_boundary(0.0, 0.0, 1.0);
+        let input = base_input(vec![small], CutSide::Outside);
+        let motions =
+            generate_profile(&input).expect("outside cut on a tiny boundary must succeed");
         assert!(
-            motions.is_empty(),
-            "expected empty toolpath, got {motions:?}"
+            !motions.is_empty(),
+            "outside cut should still emit a toolpath",
+        );
+        let passes = split_passes(&motions, input.safe_z);
+        assert_eq!(
+            passes.len(),
+            4,
+            "expected one pass per step-down level, got {passes:?}",
+        );
+    }
+
+    #[test]
+    fn self_intersecting_boundary_is_cleaned_up_by_clipper() {
+        // Bowtie: two diagonals cross at (1, 1). The clipper facade
+        // resolves this with an even-odd union before offsetting, so the
+        // planner should emit a toolpath for both lobes rather than
+        // erroring or producing garbage geometry.
+        let bowtie = Polyline::closed(vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 2.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(0.0, 2.0),
+        ]);
+        let mut input = base_input(vec![bowtie], CutSide::Outside);
+        // One pass per level keeps the structural check simple.
+        input.depth_per_pass = 6.0;
+        let motions = generate_profile(&input).expect("self-touching input must succeed");
+        let passes = split_passes(&motions, input.safe_z);
+        // Cleanup splits the bowtie into two lobes; the outside offset
+        // re-merges them into a single region (the pinch closes), so we
+        // expect one pass at the single step-down level.
+        assert_eq!(
+            passes.len(),
+            1,
+            "outside-offset bowtie should merge to one region ⇒ one pass, got {passes:?}",
         );
     }
 }
