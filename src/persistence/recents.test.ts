@@ -12,11 +12,14 @@ import type { ProjectState } from './projectFile'
 function makeState(fileName: string, suffix = ''): ProjectState {
   return {
     fileName,
-    gcode: `G0 X0${suffix}\n`,
-    sim: {
-      stock: { origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 50, height: 10 },
-      toolDiameter: 6,
-      resolution: 0.5,
+    mode: 'gcode-viewer',
+    payload: {
+      gcode: `G0 X0${suffix}\n`,
+      sim: {
+        stock: { origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 50, height: 10 },
+        toolDiameter: 6,
+        resolution: 0.5,
+      },
     },
   }
 }
@@ -48,7 +51,10 @@ describe('recents', () => {
     const list = await listRecents()
     expect(list).toHaveLength(1)
     expect(list[0].savedAt).toBe(200)
-    expect(list[0].state.gcode).toBe('G0 X0-updated\n')
+    expect(list[0].state.mode).toBe('gcode-viewer')
+    if (list[0].state.mode === 'gcode-viewer') {
+      expect(list[0].state.payload.gcode).toBe('G0 X0-updated\n')
+    }
   })
 
   it(`prunes beyond MAX_RECENTS (${MAX_RECENTS})`, async () => {
@@ -82,7 +88,9 @@ describe('recents', () => {
 
   it('round-trips a full ProjectState', async () => {
     const state = makeState('x.nc')
-    state.sim.toolDiameter = 12.5
+    if (state.mode === 'gcode-viewer') {
+      state.payload.sim.toolDiameter = 12.5
+    }
     await upsertRecent(state, 42)
 
     const [recent] = await listRecents()

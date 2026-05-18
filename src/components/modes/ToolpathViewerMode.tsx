@@ -239,7 +239,11 @@ export function ToolpathViewerMode() {
       if (options.touchRecents !== false) {
         const built = paramsFromForm(nextForm)
         if (built.ok) {
-          await upsertRecent({ fileName: name, gcode: content, sim: built.value })
+          await upsertRecent({
+            fileName: name,
+            mode: 'gcode-viewer',
+            payload: { gcode: content, sim: built.value },
+          })
           await refreshRecents()
         }
       }
@@ -293,7 +297,11 @@ export function ToolpathViewerMode() {
       useViewportStore.getState().setSimulationMeshData(mesh)
       setSimStatus('ready')
       // Persist the now-valid sim params so they round-trip via Recent.
-      await upsertRecent({ fileName, gcode: gcodeContent, sim: built.value })
+      await upsertRecent({
+        fileName,
+        mode: 'gcode-viewer',
+        payload: { gcode: gcodeContent, sim: built.value },
+      })
       await refreshRecents()
     } catch (e) {
       const err = e as { message?: string; kind?: string }
@@ -310,7 +318,11 @@ export function ToolpathViewerMode() {
       setProjectError(built.error)
       return
     }
-    const state: ProjectState = { fileName, gcode: gcodeContent, sim: built.value }
+    const state: ProjectState = {
+      fileName,
+      mode: 'gcode-viewer',
+      payload: { gcode: gcodeContent, sim: built.value },
+    }
     const bytes = packJcamProject(state)
     const blob = new Blob([new Uint8Array(bytes)], { type: 'application/zip' })
     triggerDownload(blob, jcamFileName(fileName))
@@ -328,7 +340,11 @@ export function ToolpathViewerMode() {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
       const state = unpackJcamProject(bytes)
-      await loadFromText(state.fileName, state.gcode, { savedSim: state.sim })
+      if (state.mode !== 'gcode-viewer') {
+        setProjectError(`This build can't yet open '${state.mode}' projects.`)
+        return
+      }
+      await loadFromText(state.fileName, state.payload.gcode, { savedSim: state.payload.sim })
     } catch (err) {
       const msg = err instanceof JcamFormatError ? err.message : (err as Error).message
       setProjectError(msg || 'Failed to open project file')
@@ -338,8 +354,9 @@ export function ToolpathViewerMode() {
   async function handleRestoreRecent(record: RecentRecord) {
     // Don't re-insert into recents on restore — bumping the timestamp on
     // every click would be confusing UX.
-    await loadFromText(record.state.fileName, record.state.gcode, {
-      savedSim: record.state.sim,
+    if (record.state.mode !== 'gcode-viewer') return
+    await loadFromText(record.state.fileName, record.state.payload.gcode, {
+      savedSim: record.state.payload.sim,
       touchRecents: false,
     })
   }

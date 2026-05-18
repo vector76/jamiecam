@@ -300,11 +300,14 @@ describe('ToolpathViewerMode', () => {
     // (200×60×8 vs 100×50×10) so we can tell which one wins on restore.
     const saved: ProjectState = {
       fileName: 'archived.nc',
-      gcode: '; some other gcode\nG0 X0\n',
-      sim: {
-        stock: { origin: { x: 1, y: 2, z: 3 }, width: 200, depth: 60, height: 8 },
-        toolDiameter: 12,
-        resolution: 0.25,
+      mode: 'gcode-viewer',
+      payload: {
+        gcode: '; some other gcode\nG0 X0\n',
+        sim: {
+          stock: { origin: { x: 1, y: 2, z: 3 }, width: 200, depth: 60, height: 8 },
+          toolDiameter: 12,
+          resolution: 0.25,
+        },
       },
     }
     const bytes = packJcamProject(saved)
@@ -322,7 +325,8 @@ describe('ToolpathViewerMode', () => {
     expect((screen.getByLabelText('Tool Ø') as HTMLInputElement).value).toBe('12')
     expect((screen.getByLabelText('Resolution') as HTMLInputElement).value).toBe('0.25')
     expect((screen.getByLabelText('Origin Z') as HTMLInputElement).value).toBe('3')
-    expect(loadGcodeForViewer).toHaveBeenCalledWith(saved.gcode)
+    if (saved.mode !== 'gcode-viewer') throw new Error('fixture mode mismatch')
+    expect(loadGcodeForViewer).toHaveBeenCalledWith(saved.payload.gcode)
   })
 
   it('Open Project shows a clear error for a non-jcam file', async () => {
@@ -332,6 +336,24 @@ describe('ToolpathViewerMode', () => {
       target: { files: [new File(['hello'], 'junk.jcam', { type: 'application/zip' })] },
     })
     expect(await screen.findByRole('alert')).toHaveTextContent(/valid zip|JamieCam project/i)
+  })
+
+  it('Open Project rejects a 2d-profile project (G-code Viewer mode can\'t open it)', async () => {
+    const mode2: ProjectState = {
+      fileName: 'shape.svg',
+      mode: '2d-profile',
+      payload: { kind: '2d-profile' },
+    }
+    const jcamFile = new File([new Uint8Array(packJcamProject(mode2))], 'shape.jcam', {
+      type: 'application/zip',
+    })
+
+    render(<ToolpathViewerMode />)
+    const projectInput = screen.getByLabelText('Project file') as HTMLInputElement
+    fireEvent.change(projectInput, { target: { files: [jcamFile] } })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/2d-profile/)
+    expect(loadGcodeForViewer).not.toHaveBeenCalled()
   })
 
   it('Recent list appears after loading a file and restores it on click', async () => {
@@ -372,11 +394,14 @@ describe('ToolpathViewerMode', () => {
   it('seeded recents are visible on mount', async () => {
     await upsertRecent({
       fileName: 'seeded.nc',
-      gcode: 'G0\n',
-      sim: {
-        stock: { origin: { x: 0, y: 0, z: 0 }, width: 50, depth: 50, height: 5 },
-        toolDiameter: 3,
-        resolution: 0.5,
+      mode: 'gcode-viewer',
+      payload: {
+        gcode: 'G0\n',
+        sim: {
+          stock: { origin: { x: 0, y: 0, z: 0 }, width: 50, depth: 50, height: 5 },
+          toolDiameter: 3,
+          resolution: 0.5,
+        },
       },
     })
 
