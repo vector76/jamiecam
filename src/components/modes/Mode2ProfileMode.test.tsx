@@ -37,6 +37,7 @@ vi.mock('../../api/mode2', () => ({
   parseSvg: vi.fn(),
   parseDxf: vi.fn(),
   generateProfileToolpath: vi.fn(),
+  emitGrblGcode: vi.fn(),
 }))
 
 vi.mock('../../viewport2d/Canvas2DViewport', () => ({
@@ -44,7 +45,12 @@ vi.mock('../../viewport2d/Canvas2DViewport', () => ({
 }))
 
 import { prewarmWasm } from '../../api/gcodeViewer'
-import { generateProfileToolpath, parseDxf, parseSvg } from '../../api/mode2'
+import {
+  emitGrblGcode,
+  generateProfileToolpath,
+  parseDxf,
+  parseSvg,
+} from '../../api/mode2'
 
 const SQUARE: Polyline = {
   closed: true,
@@ -849,6 +855,108 @@ describe('Mode2ProfileMode', () => {
       await waitFor(() => {
         expect(screen.queryByRole('status')).not.toBeInTheDocument()
       })
+    })
+  })
+
+  describe('Export', () => {
+    const STOCK_TOOL = makeTool('t1', '1/8" end mill')
+    const READY_ENV: WorkingEnvironment = {
+      setups: [makeSetup('s1')],
+      tools: [STOCK_TOOL],
+      availability: [{ setupId: 's1', toolId: 't1' }],
+    }
+    const MOTIONS: ToolpathOutput = [
+      { kind: 'rapid', to: [0, 0, 5] },
+      { kind: 'linear', to: [10, 0, -1], feed: 800 },
+    ]
+
+    async function renderWithGeneratedToolpath() {
+      await seedEnv(READY_ENV)
+      await saveActiveSetupId('s1')
+      vi.mocked(parseSvg).mockResolvedValueOnce({ paths: [SQUARE], warnings: [] })
+      vi.mocked(generateProfileToolpath).mockResolvedValueOnce(MOTIONS)
+
+      render(<Mode2ProfileMode />)
+      const input = screen.getByLabelText('SVG or DXF artwork file') as HTMLInputElement
+      fireEvent.change(input, {
+        target: { files: [new File(['<svg/>'], 'p.svg', { type: 'image/svg+xml' })] },
+      })
+      await screen.findByLabelText('Path 1')
+      await waitFor(() => {
+        const sel = screen.getByLabelText('Tool') as HTMLSelectElement
+        expect(sel.value).toBe('t1')
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Generate toolpath' }))
+      await screen.findByText(/Generated 2 moves/)
+    }
+
+    it('disables the Export button until a toolpath has been generated', async () => {
+      render(<Mode2ProfileMode />)
+      const btn = (await screen.findByRole('button', {
+        name: 'Export G-code',
+      })) as HTMLButtonElement
+      expect(btn.disabled).toBe(true)
+      expect(
+        screen.getByText(/Generate a toolpath before exporting/),
+      ).toBeInTheDocument()
+      await waitForReady()
+    })
+
+    it('triggers a .nc download with the emitted G-code text', async () => {
+      vi.mocked(emitGrblGcode).mockResolvedValueOnce('G21\nG90\nG0 X0 Y0 Z5\nM2\n')
+
+      const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:fake')
+      const revokeObjectURL = vi.fn<(url: string) => void>()
+      vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+      const anchorClick = vi
+        .spyOn(HTMLAnchorElement.prototype, 'click')
+        .mockImplementation(() => {})
+
+      try {
+        await renderWithGeneratedToolpath()
+
+        const btn = screen.getByRole('button', {
+          name: 'Export G-code',
+        }) as HTMLButtonElement
+        expect(btn.disabled).toBe(false)
+        fireEvent.click(btn)
+
+        await waitFor(() => {
+          expect(emitGrblGcode).toHaveBeenCalledTimes(1)
+        })
+        const [toolpathArg, toolArg, stockArg] = vi.mocked(emitGrblGcode).mock.calls[0]
+        expect(toolpathArg).toEqual(MOTIONS)
+        expect(toolArg.id).toBe('t1')
+        expect(stockArg.width).toBe(300)
+
+        await waitFor(() => {
+          expect(createObjectURL).toHaveBeenCalledTimes(1)
+        })
+        const blob = createObjectURL.mock.calls[0][0]
+        expect(blob.type).toMatch(/^text\/plain/)
+        expect(blob.size).toBeGreaterThan(0)
+        const downloaded = await blob.text()
+        expect(downloaded).toBe('G21\nG90\nG0 X0 Y0 Z5\nM2\n')
+
+        expect(anchorClick).toHaveBeenCalledTimes(1)
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:fake')
+      } finally {
+        anchorClick.mockRestore()
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('surfaces an emitter AppError as a red alert', async () => {
+      vi.mocked(emitGrblGcode).mockRejectedValueOnce({
+        kind: 'InvalidInput',
+        message: 'non-finite coordinate in rapid',
+      } satisfies AppError)
+
+      await renderWithGeneratedToolpath()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export G-code' }))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(/non-finite coordinate/)
     })
   })
 })

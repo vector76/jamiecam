@@ -26,7 +26,12 @@ import { SidebarSection } from '@/components/ui/sidebar-section'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { prewarmWasm } from '../../api/gcodeViewer'
-import { generateProfileToolpath, parseDxf, parseSvg } from '../../api/mode2'
+import {
+  emitGrblGcode,
+  generateProfileToolpath,
+  parseDxf,
+  parseSvg,
+} from '../../api/mode2'
 import { useViewport2DStore, type Extent2D } from '../../store/viewport2dStore'
 import { WorkingEnvironmentModal } from '../working-env/WorkingEnvironmentModal'
 import {
@@ -49,6 +54,7 @@ import type { ProjectState } from '../../persistence/projectFile'
 type EngineStatus = 'initializing' | 'ready' | 'failed'
 type ImportStatus = 'idle' | 'importing' | 'imported' | 'error'
 type GenerateStatus = 'idle' | 'generating' | 'generated' | 'error'
+type ExportStatus = 'idle' | 'exporting' | 'error'
 
 interface SampleEntry {
   label: string
@@ -132,6 +138,9 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
   // import lands or a regenerate fails, since the prior result would
   // then refer to artwork or parameters the UI no longer shows.
   const [toolpath, setToolpath] = useState<ToolpathOutput | null>(null)
+
+  const [exportStatus, setExportStatus] = useState<ExportStatus>('idle')
+  const [exportError, setExportError] = useState<string | null>(null)
 
   // Subscribe to the viewport transform so pan/zoom re-runs the redraw
   // effect below — Canvas2DViewport's imperative API does not redraw on
@@ -245,6 +254,8 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     setToolpath(null)
     setGenerateStatus('idle')
     setGenerateError(null)
+    setExportStatus('idle')
+    setExportError(null)
     try {
       const result =
         format === 'svg' ? await parseSvg(bytes) : await parseDxf(bytes)
@@ -348,6 +359,21 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
     [env.tools, operation.toolId],
   )
 
+  const activeSetup = useMemo(
+    () =>
+      activeSetupId === null
+        ? null
+        : env.setups.find((s) => s.id === activeSetupId) ?? null,
+    [env.setups, activeSetupId],
+  )
+
+  // Export needs the toolpath itself plus a tool (for the @TOOL header)
+  // and stock dimensions (for the @STOCK header). Mode 2 doesn't yet
+  // carry a separate stock model, so the active setup's workspace box
+  // stands in — that's the volume the planner is implicitly aimed at.
+  const exportBlocked =
+    toolpath === null || selectedTool === null || activeSetup === null
+
   // The button only makes sense once we have something to plan with —
   // at least one selected path and a tool resolved from the active
   // setup's availability. Anything missing is reported below the button
@@ -383,6 +409,20 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
       setToolpath(null)
       setGenerateStatus('error')
       setGenerateError(formatAppErrorMessage(e))
+    }
+  }
+
+  async function handleExport() {
+    if (toolpath === null || selectedTool === null || activeSetup === null) return
+    setExportStatus('exporting')
+    setExportError(null)
+    try {
+      const gcode = await emitGrblGcode(toolpath, selectedTool, activeSetup.workspace)
+      triggerTextDownload(gcode, gcodeFileName(sourceFileName))
+      setExportStatus('idle')
+    } catch (e) {
+      setExportStatus('error')
+      setExportError(formatAppErrorMessage(e))
     }
   }
 
@@ -660,9 +700,27 @@ export function Mode2ProfileMode(_props: Mode2ProfileModeProps = {}) {
             </SidebarSection>
 
             <SidebarSection title="Export">
-              <p className="text-xs text-muted-foreground">
-                G-code export — coming soon.
-              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="sm"
+                  className="w-full"
+                  aria-label="Export G-code"
+                  onClick={() => void handleExport()}
+                  disabled={exportBlocked || exportStatus === 'exporting'}
+                >
+                  {exportStatus === 'exporting' ? 'Exporting…' : 'Export G-code'}
+                </Button>
+                {toolpath === null && (
+                  <p className="text-xs text-muted-foreground">
+                    Generate a toolpath before exporting.
+                  </p>
+                )}
+                {exportError && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {exportError}
+                  </p>
+                )}
+              </div>
             </SidebarSection>
 
           </ScrollArea>
@@ -700,6 +758,25 @@ function NumberField({ label, ariaLabel, value, step, min, onChange }: NumberFie
       />
     </label>
   )
+}
+
+function triggerTextDownload(text: string, fileName: string): void {
+  const blob = new Blob([text], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function gcodeFileName(sourceName: string | null): string {
+  if (!sourceName) return 'toolpath.nc'
+  const dot = sourceName.lastIndexOf('.')
+  const stem = dot > 0 ? sourceName.slice(0, dot) : sourceName
+  return `${stem}.nc`
 }
 
 function detectFormat(name: string): 'svg' | 'dxf' | null {
