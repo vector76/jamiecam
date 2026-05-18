@@ -101,6 +101,7 @@ export type AppError =
   | { kind: 'ParseFailure'; message: ParseFailureDetail }
   | { kind: 'MissingSetup'; message: { id: string } }
   | { kind: 'MissingTool'; message: { id: string } }
+  | { kind: 'UnknownProjectMode'; message: { mode: string } }
   | { kind: 'Unknown'; message: string }
   | { kind: 'WorkerError'; message: string }
   | { kind: 'Disposed'; message: string }

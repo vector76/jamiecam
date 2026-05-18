@@ -25,6 +25,7 @@
 
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 import type {
+  AppError,
   CutSide,
   ParseWarning,
   Polyline,
@@ -169,9 +170,19 @@ function manifestPayloadFor(state: ProjectState): ManifestPayload {
 }
 
 export class JcamFormatError extends Error {
-  constructor(message: string) {
+  /**
+   * Optional typed `AppError` payload for callers that pattern-match on
+   * `kind` (e.g. the shell wants to render unknown-mode failures
+   * differently from a generic format error). Mirrors how Rust-side
+   * `AppError`s reach the UI through the wasm bridge: callers that don't
+   * care can still read `.message` for a human-readable string.
+   */
+  readonly appError?: AppError
+
+  constructor(message: string, appError?: AppError) {
     super(message)
     this.name = 'JcamFormatError'
+    this.appError = appError
   }
 }
 
@@ -247,7 +258,10 @@ export function unpackJcamProject(bytes: Uint8Array): ProjectState {
       }
     }
     default:
-      throw new JcamFormatError(`Unknown project mode: ${manifest.mode}`)
+      throw new JcamFormatError(`Unknown project mode: ${manifest.mode}`, {
+        kind: 'UnknownProjectMode',
+        message: { mode: manifest.mode },
+      })
   }
 }
 

@@ -7,6 +7,7 @@ import {
   MAX_RECENTS,
   type RecentRecord,
 } from './recents'
+import { getDB, RECENTS_STORE } from './db'
 import type { ProjectState } from './projectFile'
 
 function makeState(fileName: string, suffix = ''): ProjectState {
@@ -84,6 +85,60 @@ describe('recents', () => {
 
     const list = await listRecents()
     expect(list.map((r) => r.fileName)).toEqual(['b.nc'])
+  })
+
+  it('migrates pre-mode RecentRecord state into the discriminated ProjectState', async () => {
+    // Pre-mode shape: state was a flat { fileName, gcode, sim } object,
+    // matching the v1 .jcam manifest. Write one directly so we exercise
+    // the migration path in listRecents().
+    const legacyRow = {
+      fileName: 'legacy.nc',
+      savedAt: 500,
+      state: {
+        fileName: 'legacy.nc',
+        gcode: '; legacy\nG0 X0\n',
+        sim: {
+          stock: { origin: { x: 0, y: 0, z: 0 }, width: 100, depth: 50, height: 10 },
+          toolDiameter: 6,
+          resolution: 0.5,
+        },
+      },
+    }
+    const db = await getDB()
+    await db.put(RECENTS_STORE, legacyRow)
+
+    const [recent] = await listRecents()
+    expect(recent.fileName).toBe('legacy.nc')
+    expect(recent.savedAt).toBe(500)
+    expect(recent.state.mode).toBe('gcode-viewer')
+    if (recent.state.mode === 'gcode-viewer') {
+      expect(recent.state.payload.gcode).toBe('; legacy\nG0 X0\n')
+      expect(recent.state.payload.sim.toolDiameter).toBe(6)
+    }
+  })
+
+  it('lists both legacy and current-shape records together', async () => {
+    const legacyRow = {
+      fileName: 'old.nc',
+      savedAt: 100,
+      state: {
+        fileName: 'old.nc',
+        gcode: 'G0 X0\n',
+        sim: {
+          stock: { origin: { x: 0, y: 0, z: 0 }, width: 50, depth: 50, height: 10 },
+          toolDiameter: 3,
+          resolution: 0.5,
+        },
+      },
+    }
+    const db = await getDB()
+    await db.put(RECENTS_STORE, legacyRow)
+    await upsertRecent(makeState('new.nc'), 200)
+
+    const list = await listRecents()
+    expect(list.map((r) => r.fileName)).toEqual(['new.nc', 'old.nc'])
+    // Both records expose the discriminated shape after migration.
+    expect(list.every((r) => r.state.mode === 'gcode-viewer')).toBe(true)
   })
 
   it('round-trips a full ProjectState', async () => {

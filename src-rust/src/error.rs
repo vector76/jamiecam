@@ -27,6 +27,9 @@ pub enum AppError {
 
     #[error("missing tool: {id}")]
     MissingTool { id: String },
+
+    #[error("unknown project mode: {mode}")]
+    UnknownProjectMode { mode: String },
 }
 
 /// Detail payload for [`AppError::ParseFailure`]. Used when a parser cannot
@@ -141,6 +144,26 @@ mod tests {
         let json = serde_json::to_string(&err).unwrap();
         let back: AppError = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, AppError::MissingTool { id } if id == "xyz"));
+    }
+
+    #[test]
+    fn unknown_project_mode_serializes_with_mode_payload() {
+        let err = AppError::UnknownProjectMode {
+            mode: "flux-capacitor".into(),
+        };
+        let value = serde_json::to_value(&err).unwrap();
+        assert_eq!(value["kind"], "UnknownProjectMode");
+        assert_eq!(value["message"]["mode"], "flux-capacitor");
+    }
+
+    #[test]
+    fn unknown_project_mode_round_trips_via_json() {
+        let err = AppError::UnknownProjectMode {
+            mode: "flux-capacitor".into(),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        let back: AppError = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, AppError::UnknownProjectMode { mode } if mode == "flux-capacitor"),);
     }
 
     #[test]

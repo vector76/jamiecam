@@ -295,6 +295,31 @@ describe('packJcamProject / unpackJcamProject', () => {
     expect(() => unpackJcamProject(bad)).toThrow(/Unknown project mode/)
   })
 
+  it('attaches a typed UnknownProjectMode AppError on the thrown JcamFormatError', () => {
+    const bad = zipSync({
+      'project.json': strToU8(
+        JSON.stringify({
+          format: 'jamiecam-project',
+          version: 2,
+          fileName: 'x.nc',
+          mode: 'flux-capacitor',
+          payload: {},
+        }),
+      ),
+    })
+    try {
+      unpackJcamProject(bad)
+      throw new Error('expected unpackJcamProject to throw')
+    } catch (err) {
+      expect(err).toBeInstanceOf(JcamFormatError)
+      const jcamErr = err as JcamFormatError
+      expect(jcamErr.appError).toEqual({
+        kind: 'UnknownProjectMode',
+        message: { mode: 'flux-capacitor' },
+      })
+    }
+  })
+
   describe('legacy v1 reader', () => {
     const V1_SIM = SAMPLE.payload.sim
     const V1_GCODE = '; legacy v1 file\nG0 X0 Y0\nG1 Z-1 F200\n'
