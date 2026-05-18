@@ -192,6 +192,24 @@ export interface Region {
 }
 
 /**
+ * Result of parsing an SVG document into 2D polylines. Mirrors
+ * `ParseSvgResult` in `src-rust/src/wasm.rs`.
+ */
+export interface ParseSvgResult {
+  paths: Polyline[]
+  warnings: ParseWarning[]
+}
+
+/**
+ * Result of parsing a DXF document into 2D polylines. Mirrors
+ * `ParseDxfResult` in `src-rust/src/wasm.rs`.
+ */
+export interface ParseDxfResult {
+  paths: Polyline[]
+  warnings: ParseWarning[]
+}
+
+/**
  * Profile-cut operation: input descriptor and toolpath output.
  *
  * Mirrors `src-rust/src/profile/mod.rs`. Per phase-4 design §5 the first
