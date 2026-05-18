@@ -4,6 +4,7 @@
 //! simulation, plus a small wasm-bindgen surface that the browser frontend
 //! calls into.
 
+pub mod clipper;
 pub mod dexel;
 pub mod error;
 pub mod gcode_parser;
